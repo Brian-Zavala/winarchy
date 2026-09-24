@@ -1,0 +1,34 @@
+{
+  "_help": "Defaults. Put only the keys you change in %USERPROFILE%\\.omarchy-win\\config.json, then run: omarchy-win apply. Reference: docs/config.md",
+  "clock": "auto",
+  "units": "auto",
+  "workspaces": "auto",
+  "gap": 10,
+  "hideTaskbar": true,
+  "takeOverWinSpace": true,
+  "launchers": true,
+  "apps": {
+    "terminal": "auto",
+    "browser": "auto",
+    "editor": "auto",
+    "files": "explorer.exe"
+  },
+  "backgroundDirs": ["~\\Pictures\\Wallpapers"],
+  "themeTargets": {
+    "bar": true,
+    "glazewm": true,
+    "terminal": true,
+    "flow": true,
+    "accent": true,
+    "neovim": "auto",
+    "vscode": true,
+    "claude": true,
+    "browser": true,
+    "btop": true
+  },
+  "screenshotAutoCopy": false,
+  "syncAtLogin": true,
+  "omarchyRepo": "omacom/omarchy",
+  "omarchyTag": "v4.0.4",
+  "zebarClientVersion": "3.0.3"
+}

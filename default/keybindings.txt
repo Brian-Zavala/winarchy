@@ -1,0 +1,83 @@
+OMARCHY-STYLE KEYBINDINGS (omarchy-win)            Super = Windows key
+=====================================================================
+
+MENUS
+  Super + Space                 App launcher (Flow Launcher)
+  Super + Alt + Space           Omarchy menu (also: left click the bar logo)
+  Super + Escape                System menu (lock, suspend, restart, shutdown)
+  Super + K                     Keybindings (this list)
+  Super + Ctrl + Space          Background picker
+  Super + Ctrl + Shift + Space  Theme picker (recolors everything + background)
+  Super + Ctrl + C              Capture menu
+  Super + Ctrl + O              Toggle menu
+  Super + Ctrl + H              Setup (hardware) menu
+
+WORKSPACES   (1-0 are split across your monitors, left to right)
+  Super + 1..0                  Go to workspace
+  Super + Shift + 1..0          Move window to workspace (and follow)
+  Super + Shift + Alt + 1..0    Move window to workspace silently
+  Super + Tab / Shift + Tab     Next / previous workspace
+  Super + Ctrl + Tab            Previous (last used) workspace
+  Super + scroll wheel          Next / previous workspace
+  Super + S  or  Super + `      Scratchpad workspace
+  Super + Alt + S / Shift + `   Send window to scratchpad
+  Super + Shift + Alt + Arrows  Move whole workspace to other monitor
+  Ctrl + Alt + Tab              Focus next monitor (+ Shift: previous)
+
+WINDOWS
+  Super + W  or  Super + Q      Close window
+  Super + Arrows                Move focus
+  Super + Shift + Arrows        Swap / move window (crosses monitors)
+  Super + T                     Toggle floating / tiling
+  Super + F                     Fullscreen
+  Super + Alt + F               Full width (keeps bar + gaps)
+  Super + O                     Pop out (float + always on top)
+  Super + J                     Flip layout: side-by-side <-> stacked
+  Super + - / =                 Shrink / grow width   (100px)
+  Super + Shift + - / =         Shrink / grow height
+  + Alt  (fine, 25px)           + Ctrl  (coarse, 300px)
+  Super + Left drag             Move window
+  Super + Right drag            Resize window
+  Super + Backspace             Toggle window transparency
+  Super + Shift + Backspace     Toggle window gaps
+  Super + Shift + Space         Toggle top bar
+
+{{ apps }}
+
+CAPTURE
+  Print                         Screenshot (region, Snipping Tool)
+  Super + Print                 Full screenshot saved to Pictures\Screenshots
+  Alt + Print                   Screen recording (Snipping Tool)
+  Super + Ctrl + Print          Color picker (click copies #rrggbb)
+
+UTILITIES
+  Super + C / V / X / A         Copy / paste / cut / select all
+  Super + Ctrl + V              Clipboard history
+  Super + Ctrl + E              Emoji picker
+  Shift + F9  or Super+Ctrl+X   Voice dictation (talk -> types; again to stop)
+  Super + Ctrl + I              Stay awake (coffee icon in the bar)
+  Super + Ctrl + Q              Calculator
+  Super + Ctrl + T              Activity (Task Manager)
+  Super + Ctrl + A              Audio panel (output device + volumes; again: close)
+  Super + Ctrl + B              Bluetooth panel (devices, on/off; again: close)
+  Super + Ctrl + W              Network settings
+  Super + Ctrl + D / P          Display / power settings
+  Super + Ctrl + Alt + D        Calendar
+  Super + Shift + Alt + ,       Notification history
+  Super + Ctrl + Z              Zoom in (+ Alt: reset)
+  Super + Ctrl + L              Lock  (Win + L also locks)
+
+SYSTEM
+  Bar logo: left / right click  Omarchy menu / terminal
+  Bar clock: left / right click Calendar / date format
+  Bar audio icon                Click: audio panel, right click: mute, scroll: volume
+  Bar bluetooth icon            Click: Bluetooth panel
+  Ctrl + Esc                    Windows Start menu
+  Super + Shift + Alt + R       Reload GlazeWM config
+  Super + Shift + Alt + P       Pause / resume GlazeWM (escape hatch)
+
+GO BACK TO NORMAL WINDOWS
+  Omarchy menu > System         Back to normal Windows
+  pwsh -File revert.ps1         Full revert (in %USERPROFILE%\.omarchy-win)
+  revert.ps1 -KeepApps          Disable only, keep apps installed
+  revert.ps1 -DryRun            Preview what would happen

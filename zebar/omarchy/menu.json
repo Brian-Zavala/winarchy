@@ -1,0 +1,110 @@
+{
+  "root": {
+    "title": "Go",
+    "items": [
+      { "label": "Apps", "icon": "\uf00a", "action": ["launcher"] },
+      { "label": "Learn", "icon": "\uf19d", "route": "learn" },
+      { "label": "Trigger", "icon": "\uf0e7", "route": "trigger" },
+      { "label": "Style", "icon": "\uf1fc", "route": "style" },
+      { "label": "Setup", "icon": "\uf013", "route": "setup" },
+      { "label": "Update", "icon": "\uf021", "route": "update" },
+      { "label": "About", "icon": "\uf05a", "action": ["run", "winver.exe"] },
+      { "label": "System", "icon": "\uf011", "route": "system" }
+    ]
+  },
+  "learn": {
+    "title": "Learn",
+    "items": [
+      { "label": "Keybindings", "icon": "\uf11c", "route": "keys" },
+      { "label": "Omarchy", "icon": "\uf0ac", "action": ["url", "https://omarchy.org/manual/"] },
+      { "label": "GlazeWM", "icon": "\uf0ac", "action": ["url", "https://github.com/glzr-io/glazewm#readme"] },
+      { "label": "Zebar", "icon": "\uf0ac", "action": ["url", "https://github.com/glzr-io/zebar#readme"] },
+      { "label": "Neovim", "icon": "\uf0ac", "action": ["url", "https://www.lazyvim.org/keymaps"] },
+      { "label": "PowerShell", "icon": "\uf0ac", "action": ["url", "https://learn.microsoft.com/powershell/"] }
+    ]
+  },
+  "trigger": {
+    "title": "Trigger",
+    "items": [
+      { "label": "Capture", "icon": "\uf030", "route": "capture" },
+      { "label": "Emoji", "icon": "\uf118", "action": ["send", "#."] },
+      { "label": "Toggle", "icon": "\uf205", "route": "toggle" },
+      { "label": "Calculator", "icon": "\uf1ec", "action": ["run", "calc.exe"] },
+      { "label": "Activity", "icon": "\uf0e4", "action": ["run", "taskmgr.exe"] },
+      { "label": "Clipboard", "icon": "\uf0ea", "action": ["send", "#v"] }
+    ]
+  },
+  "capture": {
+    "title": "Capture",
+    "items": [
+      { "label": "Screenshot", "icon": "\uf030", "action": ["send", "#+s"] },
+      { "label": "Screenrecord", "icon": "\uf03d", "action": ["send", "#+r"] },
+      { "label": "Color", "icon": "\uf1fb", "action": ["wm", "colorpicker"] }
+    ]
+  },
+  "toggle": {
+    "title": "Toggle",
+    "items": [
+      { "label": "Stay Awake", "icon": "\uf0f4", "action": ["wm", "awake"] },
+      { "label": "Top Bar", "icon": "\uf2d0", "action": ["wm", "bar"] },
+      { "label": "Window Gaps", "icon": "\uf0b2", "action": ["wm", "gaps"] },
+      { "label": "Window Transparency", "icon": "\uf042", "action": ["wm", "transparency"] },
+      { "label": "Nightlight", "icon": "\uf186", "action": ["settings", "ms-settings:nightlight"] },
+      { "label": "Notifications", "icon": "\uf0f3", "action": ["settings", "ms-settings:notifications"] }
+    ]
+  },
+  "style": {
+    "title": "Style",
+    "items": [
+      { "label": "Theme", "icon": "\uf1fc", "route": "theme" },
+      { "label": "Background", "icon": "\uf03e", "route": "background" },
+      { "label": "Next Background", "icon": "\uf03e", "action": ["bg-next"] },
+      { "label": "Top Bar (your CSS)", "icon": "", "action": ["edit", "bar-css"] },
+      { "label": "GlazeWM", "icon": "", "action": ["edit", "glaze-config"] }
+    ]
+  },
+  "setup": {
+    "title": "Setup",
+    "items": [
+      { "label": "Monitors", "icon": "\uf108", "action": ["settings", "ms-settings:display"] },
+      { "label": "Audio", "icon": "\uf028", "action": ["settings", "ms-settings:sound"] },
+      { "label": "Bluetooth", "icon": "\uf293", "action": ["settings", "ms-settings:bluetooth"] },
+      { "label": "Network", "icon": "\uf1eb", "action": ["settings", "ms-settings:network"] },
+      { "label": "Power", "icon": "\uf240", "action": ["settings", "ms-settings:powersleep"] },
+      { "label": "Input", "icon": "\uf11c", "action": ["settings", "ms-settings:typing"] },
+      { "label": "Settings", "icon": "", "action": ["edit", "config"] },
+      { "label": "Keybindings", "icon": "", "action": ["edit", "keybindings"] },
+      { "label": "Launchers", "icon": "", "action": ["edit", "launchers"] },
+      { "label": "GlazeWM", "icon": "", "action": ["edit", "glaze-config"] }
+    ]
+  },
+  "update": {
+    "title": "Update",
+    "items": [
+      { "label": "Themes & Backgrounds", "icon": "\uf019", "action": ["sync"] },
+      { "label": "Update omarchy-win & apps", "icon": "\uf021", "action": ["upgrade"] },
+      { "label": "Apply settings", "icon": "\uf013", "action": ["apply"] },
+      { "label": "Doctor", "icon": "\uf0f1", "action": ["doctor"] },
+      { "label": "Reload GlazeWM", "icon": "", "action": ["send", "#+!r"] }
+    ]
+  },
+  "system": {
+    "title": "System",
+    "items": [
+      { "label": "Lock", "icon": "\uf023", "action": ["lock"] },
+      { "label": "Suspend", "icon": "\uf186", "action": ["sleep"] },
+      { "label": "Logout", "icon": "\uf08b", "action": ["logout"] },
+      { "label": "Restart", "icon": "\uf01e", "action": ["restart"] },
+      { "label": "Shutdown", "icon": "\uf011", "action": ["shutdown"] },
+      { "label": "Start Menu", "icon": "\uf17a", "action": ["start"] },
+      { "label": "Back to normal Windows", "icon": "\uf0e2", "route": "revert" }
+    ]
+  },
+  "revert": {
+    "title": "Revert everything?",
+    "items": [
+      { "label": "Cancel", "icon": "\uf00d", "back": true },
+      { "label": "Yes, revert to normal Windows", "icon": "\uf0e2", "action": ["revert"] }
+    ]
+  }
+}

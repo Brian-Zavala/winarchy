@@ -1,0 +1,6 @@
+# Machine-specific / downloaded at install time (see NOTICE)
+zebar/omarchy/zebar.mjs
+zebar/omarchy/env.js
+zebar/omarchy/zpack.json
+*.part
+*.tmp

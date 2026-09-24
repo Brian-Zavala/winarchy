@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" type="text/css" href="./bar.css" />
+    <link rel="stylesheet" type="text/css" href="./theme.css" id="theme" />
+    <link rel="stylesheet" type="text/css" href="./user.css" id="user" />
+  </head>
+  <body>
+    <div id="bar">
+      <div class="left">
+        <span class="logo" id="logo" title="Omarchy menu (right click: terminal)"></span>
+        <div id="workspaces"></div>
+      </div>
+      <div class="center">
+        <span class="indicator hidden" id="awake" title="Stay awake is on (Super+Ctrl+I)"></span>
+        <span id="clock" title="Left: calendar, right: date format"></span>
+      </div>
+      <div class="right">
+        <div class="tray" id="tray"></div>
+        <span class="module hidden" id="bluetooth"></span>
+        <span class="module" id="network"></span>
+        <span class="module" id="audio"></span>
+        <span class="module" id="cpu"></span>
+        <span class="module hidden" id="battery"></span>
+      </div>
+    </div>
+
+    <script type="module">
+      // Omarchy-style bar (mirrors Omarchy's top bar: logo + workspaces left,
+      // indicators + clock centered, tray + status icons right).
+      // zebar.mjs is a vendored copy of zebar@3 so the bar draws even offline.
+      import * as zebar from './zebar.mjs';
+      // Machine paths + settings, written by `omarchy-win apply`.
+      import { AHK, MENU, CLOCK_24H } from './env.js';
+
+      const ICONS = {
+        logo: '\uE900',             // Omarchy logo (omarchy.ttf)
+        activeWs: '\u{F14FB}',      // Omarchy's active workspace glyph
+        awake: '\uF0F4',            // coffee
+        cpu: '\u{F035B}',
+        ethernet: '\u{F0002}',
+        wifi: ['\u{F092F}', '\u{F091F}', '\u{F0922}', '\u{F0925}', '\u{F0928}'],
+        offline: '\u{F092E}',
+        vol: ['\u{F057F}', '\u{F0580}', '\u{F057E}'],
+        mute: '\u{F075F}',
+        btOn: '\u{F00AF}',
+        btOff: '\u{F00B2}',
+        battery: ['\u{F008E}', '\u{F007A}', '\u{F007C}', '\u{F007E}', '\u{F0080}', '\u{F0079}'],
+        charging: '\u{F0084}',
+      };
+      // Omarchy: "dddd HH:mm", alternate "d MMMM 'W'ww yyyy" (12-hour here by request).
+      const CLOCK_FORMATS = [CLOCK_24H ? 'EEEE HH:mm' : 'EEEE h:mm a', "d MMMM 'W'WW yyyy"];
+      let clockFormat = 0;
+
+      const providers = zebar.createProviderGroup({
+        glazewm: { type: 'glazewm' },
+        network: { type: 'network', refreshInterval: 5000 },
+        audio: { type: 'audio' },
+        cpu: { type: 'cpu', refreshInterval: 5000 },
+        battery: { type: 'battery', refreshInterval: 30000 },
+        systray: { type: 'systray' },
+      });
+
+      const $ = id => document.getElementById(id);
+      $('logo').textContent = ICONS.logo;
+      $('awake').textContent = ICONS.awake;
+
+      const act = (...args) => zebar.shellExec(AHK, [MENU, ...args]).catch(e => console.error(e));
+
+      function wsOrder(ws) {
+        const n = Number(ws.name);
+        return Number.isNaN(n) ? 99 : n;
+      }
+
+      function renderWorkspaces(glaze) {
+        const el = $('workspaces');
+        if (!glaze) { el.replaceChildren(); return; }
+        const list = [...glaze.currentWorkspaces]
+          .filter(ws => ws.name !== 'scratch' || ws.isDisplayed)
+          .sort((a, b) => wsOrder(a) - wsOrder(b));
+        el.replaceChildren(...list.map(ws => {
+          const b = document.createElement('button');
+          b.className = 'workspace';
+          if (!ws.children?.length && !ws.isDisplayed) b.classList.add('empty');
+          if (ws.hasFocus) b.classList.add('focused');
+          b.textContent = ws.isDisplayed ? ICONS.activeWs : (ws.displayName ?? ws.name);
+          b.title = `Workspace ${ws.displayName ?? ws.name}`;
+          b.onclick = () => glaze.runCommand(`focus --workspace ${ws.name}`);
+          return b;
+        }));
+        $('logo').classList.toggle('paused', !!glaze.isPaused);
+      }
+
+      function renderTray(tray) {
+        const el = $('tray');
+        if (!tray) { el.replaceChildren(); return; }
+        el.replaceChildren(...tray.icons.map(icon => {
+          const img = document.createElement('img');
+          img.src = icon.iconUrl;
+          img.title = icon.tooltip;
+          img.onclick = e => { e.preventDefault(); tray.onLeftClick(icon.id); };
+          img.oncontextmenu = e => { e.preventDefault(); tray.onRightClick(icon.id); };
+          img.onauxclick = e => { if (e.button === 1) tray.onMiddleClick(icon.id); };
+          return img;
+        }));
+      }
+
+      function renderNetwork(net) {
+        const el = $('network');
+        const iface = net?.defaultInterface;
+        if (!iface) { el.textContent = ICONS.offline; el.title = 'Disconnected'; return; }
+        if (iface.type === 'wifi') {
+          const s = net.defaultGateway?.signalStrength ?? 0;
+          el.textContent = ICONS.wifi[Math.min(4, Math.floor(s / 20))];
+          el.title = `${net.defaultGateway?.ssid ?? 'Wi-Fi'} (${s}%)`;
+        } else {
+          el.textContent = ICONS.ethernet;
+          el.title = iface.friendlyName ?? iface.name;
+        }
+      }
+
+      function renderAudio(audio) {
+        const el = $('audio');
+        const dev = audio?.defaultPlaybackDevice;
+        if (!dev) { el.textContent = ''; return; }
+        el.textContent = dev.isMuted ? ICONS.mute : ICONS.vol[dev.volume < 34 ? 0 : dev.volume < 67 ? 1 : 2];
+        el.title = `${dev.name}: ${dev.isMuted ? 'muted' : Math.round(dev.volume) + '%'} (click: panel, right click: mute, scroll: volume)`;
+      }
+
+      function renderBluetooth(bt) {
+        const el = $('bluetooth');
+        el.classList.toggle('hidden', !bt?.present);
+        if (!bt?.present) return;
+        el.textContent = bt.on ? ICONS.btOn : ICONS.btOff;
+        el.classList.toggle('muted', !bt.on);
+        el.title = `Bluetooth ${bt.on ? 'on' : 'off'} (click: panel)`;
+      }
+
+      function renderCpu(cpu) {
+        $('cpu').textContent = ICONS.cpu;
+        $('cpu').title = cpu ? `CPU ${Math.round(cpu.usage)}%` : 'CPU';
+      }
+
+      function renderBattery(bat) {
+        const el = $('battery');
+        if (!bat || bat.state === 'unknown') { el.classList.add('hidden'); return; }
+        el.classList.remove('hidden');
+        el.textContent = bat.isCharging
+          ? ICONS.charging
+          : ICONS.battery[Math.min(5, Math.floor(bat.chargePercent / 20))];
+        el.title = `Battery ${Math.round(bat.chargePercent)}%`;
+      }
+
+      function render() {
+        const o = providers.outputMap;
+        renderWorkspaces(o.glazewm);
+        renderTray(o.systray);
+        renderNetwork(o.network);
+        renderAudio(o.audio);
+        renderCpu(o.cpu);
+        renderBattery(o.battery);
+      }
+
+      // Logo: left click = Omarchy menu, right click = terminal (as in Omarchy).
+      $('logo').onclick = () => act('open', 'root');
+      $('logo').oncontextmenu = e => { e.preventDefault(); act('terminal'); };
+
+      // Clock: left click = calendar, right click = alternate format.
+      $('clock').onclick = () => act('calendar');
+      $('clock').oncontextmenu = e => {
+        e.preventDefault();
+        clockFormat = (clockFormat + 1) % CLOCK_FORMATS.length;
+        startClock();
+      };
+      let clock = null;
+      function startClock() {
+        clock?.stop();
+        clock = zebar.createProvider({ type: 'date', formatting: CLOCK_FORMATS[clockFormat] });
+        clock.onOutput(d => { $('clock').textContent = d.formatted; });
+      }
+      startClock();
+
+      // Click actions (Omarchy opens btop / audio panel; closest Windows equivalents).
+      $('cpu').onclick = () => zebar.shellExec('taskmgr').catch(() => {});
+      $('network').onclick = () => zebar.shellExec('explorer', 'ms-settings:network').catch(() => {});
+      // Audio / Bluetooth: left click toggles Windows' quick panel (as Super+Ctrl+A / B);
+      // audio right click mutes, scroll changes volume.
+      $('audio').onclick = () => act('panel', 'audio');
+      $('audio').oncontextmenu = e => {
+        e.preventDefault();
+        const dev = providers.outputMap.audio?.defaultPlaybackDevice;
+        if (dev) providers.outputMap.audio.setMute(!dev.isMuted);
+      };
+      $('bluetooth').onclick = () => act('panel', 'bluetooth');
+      $('audio').onwheel = e => {
+        const audio = providers.outputMap.audio;
+        const dev = audio?.defaultPlaybackDevice;
+        if (!dev) return;
+        const v = Math.max(0, Math.min(100, dev.volume + (e.deltaY < 0 ? 5 : -5)));
+        audio.setVolume(v);
+      };
+
+      // status.json (theme version) and indicators.json (stay awake) are written by
+      // omarchy.ps1 / omarchy-wm.ahk. A new theme swaps theme.css without restarting Zebar.
+      let themeVersion = null;
+      async function poll() {
+        const get = f => fetch(`./${f}?t=${Date.now()}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
+        const [status, ind, bt] = await Promise.all([get('status.json'), get('indicators.json'), get('bluetooth.json')]);
+        if (status?.themeVersion && status.themeVersion !== themeVersion) {
+          if (themeVersion !== null) $('theme').href = `./theme.css?v=${status.themeVersion}`;
+          themeVersion = status.themeVersion;
+        }
+        $('awake').classList.toggle('hidden', !ind?.awake);
+        renderBluetooth(bt);
+      }
+      setInterval(poll, 2000);
+      poll();
+
+      providers.onOutput(render);
+      render();
+    </script>
+  </body>
+</html>

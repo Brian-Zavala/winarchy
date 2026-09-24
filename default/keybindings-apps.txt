@@ -1,0 +1,11 @@
+APPS  (omarchy-win launchers; set "launchers": false in config.json to use your own)
+  Super + Return                Terminal
+  Super + Shift + Return / B    Browser (your default)
+  Super + Shift + Alt + B       Private browser window
+  Super + Shift + F             File manager
+  Super + Shift + N             Editor (Neovim if installed)
+  Super + Shift + M             Spotify
+  Super + Shift + /             1Password
+  Super + Shift + O             Obsidian
+  Super + Shift + G             Signal
+  Super + Shift + Y             YouTube
