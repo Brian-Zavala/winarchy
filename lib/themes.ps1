@@ -77,7 +77,7 @@ function Invoke-Sync([switch]$Offline) {
 # index.json feeds the theme and background pickers.
 function Update-Index {
     New-Item -ItemType Directory -Force $Thumbs | Out-Null
-    $themes = foreach ($dir in Get-ChildItem $Themes -Directory | Where-Object Name -NotLike '_*' | Sort-Object Name) {
+    $themeList = foreach ($dir in Get-ChildItem $Themes -Directory | Where-Object Name -NotLike '_*' | Sort-Object Name) {
         if (-not (Test-Path (Join-Path $dir.FullName 'colors.toml'))) { continue }
         $c = Read-Colors $dir.Name
         $preview = Join-Path $dir.FullName 'preview.png'
@@ -114,10 +114,10 @@ function Update-Index {
     }
     if ($mine) { $groups.Add([ordered]@{ id = 'mine'; label = 'Mine'; items = @($mine) }) }
 
-    $index = [ordered]@{ generated = (Get-Date).ToString('s'); themes = @($themes); groups = @($groups) }
+    $index = [ordered]@{ generated = (Get-Date).ToString('s'); themes = @($themeList); groups = @($groups) }
     Write-Utf8 (Join-Path $Pack 'index.json') ($index | ConvertTo-Json -Depth 6 -Compress)
     Write-Status (Read-State)
-    Log "index: $(@($themes).Count) themes, $(($groups | ForEach-Object { $_.items.Count } | Measure-Object -Sum).Sum) backgrounds in $($groups.Count) groups"
+    Log "index: $(@($themeList).Count) themes, $(($groups | ForEach-Object { $_.items.Count } | Measure-Object -Sum).Sum) backgrounds in $($groups.Count) groups"
 }
 
 # --- backgrounds ------------------------------------------------------------------
@@ -311,6 +311,10 @@ function Get-ThemeTargets {
         terminal = @{ label = 'Windows Terminal'; run = { param($t, $c) Set-TerminalTheme $c } }
         accent   = @{ label = 'Windows accent'; run = { param($t, $c) Set-WindowsAccent $c } }
         neovim   = @{ label = 'Neovim'; run = { param($t, $c) Set-NeovimTheme $t $c } }
+        vscode   = @{ label = 'VS Code'; run = { param($t, $c) Set-VSCodeTheme $t $c } }
+        claude   = @{ label = 'Claude Code'; run = { param($t, $c) Set-ClaudeTheme $c } }
+        browser  = @{ label = 'Browser toolbar'; run = { param($t, $c) Set-BrowserTheme $t $c } }
+        btop     = @{ label = 'btop'; run = { param($t, $c) Set-BtopTheme $t $c } }
         flow     = @{ label = 'Flow Launcher'; run = { param($t, $c) Set-FlowTheme $c } }
     }
 }

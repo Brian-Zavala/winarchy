@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <link rel="stylesheet" type="text/css" href="./bar.css" />
     <link rel="stylesheet" type="text/css" href="./theme.css" id="theme" />
+    <link rel="stylesheet" type="text/css" href="./font.css" id="font" />
     <link rel="stylesheet" type="text/css" href="./user.css" id="user" />
   </head>
   <body>
@@ -13,8 +14,12 @@
         <div id="workspaces"></div>
       </div>
       <div class="center">
-        <span class="indicator hidden" id="awake" title="Stay awake is on (Super+Ctrl+I)"></span>
+        <span class="indicator hidden" id="dnd" title="Do not disturb is on (Super+Ctrl+, / click)"></span>
+        <span class="indicator hidden" id="nightlight" title="Nightlight is on (Super+Ctrl+N / click)"></span>
+        <span class="indicator hidden" id="awake" title="Stay awake is on (Super+Ctrl+I / click)"></span>
         <span id="clock" title="Left: calendar, right: date format"></span>
+        <span class="module hidden" id="weather"></span>
+        <span class="module update hidden" id="update"></span>
       </div>
       <div class="right">
         <div class="tray" id="tray"></div>
@@ -38,6 +43,9 @@
         logo: '\uE900',             // Omarchy logo (omarchy.ttf)
         activeWs: '\u{F14FB}',      // Omarchy's active workspace glyph
         awake: '\uF0F4',            // coffee
+        nightlight: '\u{F0594}',    // moon
+        dnd: '\u{F009B}',           // bell off
+        update: '\uF0AB',           // arrow-circle-down (Omarchy system-update)
         cpu: '\u{F035B}',
         ethernet: '\u{F0002}',
         wifi: ['\u{F092F}', '\u{F091F}', '\u{F0922}', '\u{F0925}', '\u{F0928}'],
@@ -65,6 +73,15 @@
       const $ = id => document.getElementById(id);
       $('logo').textContent = ICONS.logo;
       $('awake').textContent = ICONS.awake;
+      $('nightlight').textContent = ICONS.nightlight;
+      $('dnd').textContent = ICONS.dnd;
+      $('update').textContent = ICONS.update;
+      // Indicators toggle off on click (Omarchy); weather/update open details.
+      $('awake').onclick = () => act('wm', 'awake');
+      $('nightlight').onclick = () => act('wm', 'nightlight');
+      $('dnd').onclick = () => act('wm', 'dnd');
+      $('weather').onclick = () => act('wm', 'weather');
+      $('update').onclick = () => act('upgrade');
 
       const act = (...args) => zebar.shellExec(AHK, [MENU, ...args]).catch(e => console.error(e));
 
@@ -128,6 +145,27 @@
         el.title = `${dev.name}: ${dev.isMuted ? 'muted' : Math.round(dev.volume) + '%'} (click: panel, right click: mute, scroll: volume)`;
       }
 
+      // Open-Meteo WMO codes -> Nerd Font weather glyphs (day / night).
+      function weatherIcon(code, day) {
+        if (code === 0 || code === 1) return day ? '\u{F0599}' : '\u{F0594}';   // sunny / clear night
+        if (code === 2) return day ? '\u{F0595}' : '\u{F0F31}';                 // partly cloudy
+        if (code === 3) return '\u{F0590}';                                      // cloudy
+        if (code === 45 || code === 48) return '\u{F0591}';                      // fog
+        if (code >= 51 && code <= 67) return '\u{F0597}';                        // rain
+        if (code >= 71 && code <= 77) return '\u{F0598}';                        // snow
+        if (code >= 80 && code <= 82) return '\u{F0596}';                        // pouring
+        if (code === 85 || code === 86) return '\u{F0F36}';                      // snowy rain
+        if (code >= 95) return '\u{F0593}';                                      // lightning
+        return '\u{F0590}';
+      }
+      function renderWeather(w) {
+        const el = $('weather');
+        el.classList.toggle('hidden', !w || w.temp === undefined);
+        if (!w || w.temp === undefined) return;
+        el.textContent = `${weatherIcon(w.code, w.isDay)} ${w.temp}°`;
+        el.title = w.text;
+      }
+
       function renderBluetooth(bt) {
         const el = $('bluetooth');
         el.classList.toggle('hidden', !bt?.present);
@@ -182,7 +220,8 @@
       startClock();
 
       // Click actions (Omarchy opens btop / audio panel; closest Windows equivalents).
-      $('cpu').onclick = () => zebar.shellExec('taskmgr').catch(() => {});
+      $('cpu').onclick = () => act('activity');   // btop (Omarchy's Activity)
+      $('cpu').oncontextmenu = e => { e.preventDefault(); zebar.shellExec('taskmgr').catch(() => {}); };
       $('network').onclick = () => zebar.shellExec('explorer', 'ms-settings:network').catch(() => {});
       // Audio / Bluetooth: left click toggles Windows' quick panel (as Super+Ctrl+A / B);
       // audio right click mutes, scroll changes volume.
@@ -206,13 +245,24 @@
       let themeVersion = null;
       async function poll() {
         const get = f => fetch(`./${f}?t=${Date.now()}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
-        const [status, ind, bt] = await Promise.all([get('status.json'), get('indicators.json'), get('bluetooth.json')]);
+        const [status, ind, bt, weather, updates] = await Promise.all(
+          ['status.json', 'indicators.json', 'bluetooth.json', 'weather.json', 'updates.json'].map(get));
         if (status?.themeVersion && status.themeVersion !== themeVersion) {
-          if (themeVersion !== null) $('theme').href = `./theme.css?v=${status.themeVersion}`;
+          if (themeVersion !== null) {
+            $('theme').href = `./theme.css?v=${status.themeVersion}`;
+            $('font').href = `./font.css?v=${status.themeVersion}`;
+          }
           themeVersion = status.themeVersion;
         }
         $('awake').classList.toggle('hidden', !ind?.awake);
+        $('nightlight').classList.toggle('hidden', !ind?.nightlight);
+        $('dnd').classList.toggle('hidden', !ind?.dnd);
         renderBluetooth(bt);
+        renderWeather(weather);
+        const ups = updates?.items ?? [];
+        $('update').classList.toggle('hidden', !ups.length);
+        $('update').title = ups.length
+          ? `Updates (click to update):\n${ups.map(u => `${u.name}: ${u.from} -> ${u.to}`).join('\n')}` : '';
       }
       setInterval(poll, 2000);
       poll();

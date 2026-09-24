@@ -33,11 +33,15 @@ switch verb {
     case "run": Run(arg (A_Args.Length > 2 ? " " A_Args[3] : ""))
     case "url", "settings": Run arg
     case "edit": EditFile(arg)
-    case "bg-set", "theme-set", "bg-next", "sync", "apply":
+    case "bg-set", "theme-set", "bg-next", "sync", "apply", "font-set", "font-install", "update-check", "weather":
         OmarchyCmd(verb, arg)
+    case "activity": SignalWm("activity")
+    case "browser-setup": RunInTerminal("Browser toolbar color", '"' Env("pwsh", "pwsh") '" -NoProfile -ExecutionPolicy Bypass -File "' Env("code") '\bin\omarchy-win.ps1" browser-setup')
     case "doctor": RunInTerminal("omarchy-win doctor", '"' Env("pwsh", "pwsh") '" -NoExit -NoProfile -ExecutionPolicy Bypass -File "' Env("code") '\bin\omarchy-win.ps1" doctor')
     case "wm": SignalWm(arg)
     case "panel": SignalWm("panel-" arg)
+    case "about": Run 'wt.exe -w new --size 112,38 -p "Omarchy About"'
+    case "branding-reset": ResetBranding(arg)
     case "log": FileAppend FormatTime(, "HH:mm:ss") " [menu] " arg "`n", Env("log", A_Temp "\omarchy-win.log"), "UTF-8"
     case "lock": DllCall("LockWorkStation")
     case "sleep": DllCall("PowrProf\SetSuspendState", "int", 0, "int", 0, "int", 0)
@@ -58,6 +62,8 @@ EditFile(target) {
         case "config": file := data "\config.json"
         case "keybindings": file := Env("code") "\ahk\omarchy-wm.ahk"
         case "launchers": file := Env("launchers", "1") = "1" ? Env("code") "\ahk\launchers.ahk" : startup
+        case "screensaver-text": file := data "\branding\screensaver.txt"
+        case "about-text": file := data "\branding\about.txt"
         default: file := target
     }
     if !FileExist(file) && target = "config" {
@@ -72,10 +78,17 @@ EditFile(target) {
         Run '"' editor '" "' file '"'
 }
 
+; Style > Screensaver/About > Restore default (Omarchy's logo.txt / icon.txt).
+ResetBranding(which) {
+    src := Env("data") "\themes\_templates\" (which = "about" ? "icon.txt" : "logo.txt")
+    try FileCopy src, Env("data") "\branding\" which ".txt", true
+}
+
 ; Commands that need state held by the running omarchy-wm.ahk (bar/awake toggles...).
 SignalWm(name) {
     static ids := Map("bar", 1, "gaps", 2, "awake", 3, "transparency", 4, "colorpicker", 5,
-        "panel-audio", 6, "panel-bluetooth", 7)
+        "panel-audio", 6, "panel-bluetooth", 7, "screensaver", 8, "screensaver-toggle", 9,
+        "ocr", 10, "nightlight", 11, "dnd", 12, "weather", 13, "activity", 14)
     DetectHiddenWindows true
     if ids.Has(name) && (hwnd := WinExist("omarchy-wm.ahk ahk_class AutoHotkey"))
         PostMessage 0x5555, ids[name], 0, , hwnd

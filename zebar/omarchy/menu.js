@@ -21,6 +21,7 @@ const [start, menus] = await Promise.all([get('route.json'), get('menu.json')]);
 let index = null;    // index.json: themes + background groups (pickers only)
 let status = null;   // status.json: current theme + background
 let keys = null;     // parsed keybindings.txt
+let fonts = null;    // fonts.json: installed monospace fonts (font route)
 
 const stack = [];
 let route = null;
@@ -57,6 +58,8 @@ async function go(name, push = true) {
     if (name === 'background') setupGroups();
   } else if (name === 'keys' && !keys) {
     keys = parseKeys((await get('keybindings.txt', 'text')) ?? '');
+  } else if (name === 'font') {
+    [fonts, status] = await Promise.all([get('fonts.json'), get('status.json')]);
   }
   render(true);
 }
@@ -122,6 +125,14 @@ function currentItems() {
       ...i, current: same(i.path, status?.background), action: ['bg-set', i.path],
     }));
   }
+  if (route === 'font') {
+    // Installed monospace fonts (omarchy-win font-list), Nerd Fonts first.
+    const list = (fonts?.fonts ?? []).filter(f => matches(f.name, q)).map(f => ({
+      label: f.name, icon: f.nerd ? '' : '', current: f.name === status?.font, action: ['font-set', f.name],
+    }));
+    const more = { label: 'Install a Nerd Font…', icon: '', route: 'font-install' };
+    return matches(more.label, q) ? [...list, more] : list;
+  }
   const m = menus?.[route];
   return (m?.items ?? []).filter(i => matches(i.label, q));
 }
@@ -166,6 +177,7 @@ function renderList() {
     } else {
       row.append(span('icon', it.icon ?? ''), span('label', it.label));
       if (it.route) row.append(span('hint', '\uf105'));
+      else if (it.current) row.append(span('hint', '\uf00c'));
     }
     if (i === sel) row.classList.add('selected');
     row.onmousemove = () => { if (sel !== i) { sel = i; highlight(); } };
@@ -278,5 +290,5 @@ window.addEventListener('keydown', e => {
 $('search').addEventListener('input', () => { sel = 0; render(); });
 $('search').addEventListener('blur', () => setTimeout(() => !closing && $('search').focus(), 0));
 
-await go(start?.route && (menus?.[start.route] || ['background', 'theme', 'keys'].includes(start.route)) ? start.route : 'root', false);
+await go(start?.route && (menus?.[start.route] || ['background', 'theme', 'keys', 'font'].includes(start.route)) ? start.route : 'root', false);
 $('search').focus();

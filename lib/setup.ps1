@@ -67,6 +67,38 @@ function Install-Apps {
     }
 }
 
+# About (fastfetch), Activity (btop) and the screensaver's effects engine (ttfx).
+function Install-Extras {
+    Write-Step 'Extras (About, Activity, screensaver effects)'
+    foreach ($x in @(
+            @{ id = 'Fastfetch-cli.Fastfetch'; name = 'fastfetch'; have = { Get-Command fastfetch.exe -ErrorAction SilentlyContinue } },
+            @{ id = 'aristocratos.btop4win'; name = 'btop'; have = { (Update-Paths).btopDir } })) {
+        if (& $x.have) { Save-Winget $x.id $true; Write-Ok "$($x.name): installed"; continue }
+        Save-Winget $x.id $false
+        Install-WingetPackage $x.id $x.name $null
+    }
+    $p = Update-Paths
+    if ($p.ttfx) { Write-Ok "ttfx: $($p.ttfx)"; return }
+    # ttfx (Omarchy's Rust port of terminaltexteffects): a prebuilt Windows binary from the
+    # omarchy-win release if one is published, else built with cargo when Rust is present.
+    $url = (Get-Config).ttfxUrl
+    $dest = Join-Path $Data 'bin\ttfx.exe'
+    if ($url) {
+        try {
+            New-Item -ItemType Directory -Force (Split-Path $dest) | Out-Null
+            Invoke-WebRequest $url -OutFile $dest -TimeoutSec 120
+            Write-Ok "ttfx: downloaded to $dest"; return
+        } catch { Write-Ok "ttfx download failed ($($_.Exception.Message))" }
+    }
+    if (Get-Command cargo -ErrorAction SilentlyContinue) {
+        Write-Ok 'building ttfx with cargo (a few minutes)...'
+        [void](Add-JournalEntry @{ kind = 'cargo'; key = 'cargo|ttfx'; crate = 'ttfx' })
+        cargo install --git https://github.com/omacom/ttfx --tag v0.3.3 --locked 2>&1 | Select-Object -Last 2 | Out-Host
+    } else {
+        Write-Ok 'ttfx not available: the screensaver shows the still logo (install Rust, then: omarchy-win extras)'
+    }
+}
+
 # The few questions whose answer depends on the person, not the machine.
 function Get-InstallAnswers($p) {
     Write-Step 'A few choices (Enter = recommended)'
@@ -138,6 +170,7 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     Save-Dir (Join-Path $env:USERPROFILE '.glzr')
     Install-Prerequisites
     Install-Apps
+    Install-Extras
     $p = Update-Paths
 
     $cfg = Get-InstallAnswers $p

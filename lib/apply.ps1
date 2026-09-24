@@ -81,6 +81,7 @@ function Write-AhkIni($p, $cfg) {
             glazewm = $p.glazewm; glazewmCli = $p.glazewmCli; zebar = $p.zebar; flow = $p.flow
             terminal = $terminal; wt = $p.wt; editor = $editor; files = $cfg.apps.files
             browser = $browser; browserPrivate = $p.browserPrivate
+            btop = $(if ($p.btopDir) { Join-Path $p.btopDir 'btop4win.exe' })
         }
         config = [ordered]@{
             flowHotkey = $p.flowHotkey
@@ -89,6 +90,10 @@ function Write-AhkIni($p, $cfg) {
             hideTaskbar = [int][bool]$cfg.hideTaskbar
             gap = [int]$cfg.gap
             syncAtLogin = [int][bool]$cfg.syncAtLogin
+            screensaver = [int][bool]($cfg.screensaver.enabled -and $p.wt)
+            screensaverIdle = [int]$cfg.screensaver.idleSeconds
+            screensaverProfile = 'Omarchy Screensaver'
+            weather = [int]($cfg.weather -ne $false)
         }
     }
     $text = foreach ($section in $ini.Keys) {
@@ -144,8 +149,8 @@ function Get-ZpackJson($p) {
 # The APPS section of the keybindings viewer follows whichever launchers are active.
 function Get-KeybindingsText($cfg) {
     $txt = Get-Content -Raw (Join-Path $Code 'default\keybindings.txt')
-    $apps = Join-Path $Data 'keybindings-apps.txt'
-    $section = if (-not $cfg.launchers -and (Test-Path $apps)) { Get-Content -Raw $apps } else { Get-Content -Raw (Join-Path $Code 'default\keybindings-apps.txt') }
+    $appsFile = Join-Path $Data 'keybindings-apps.txt'
+    $section = if (-not $cfg.launchers -and (Test-Path $appsFile)) { Get-Content -Raw $appsFile } else { Get-Content -Raw (Join-Path $Code 'default\keybindings-apps.txt') }
     $txt.Replace('{{ apps }}', $section.TrimEnd())
 }
 
@@ -214,6 +219,69 @@ function Set-Autostart($p, $cfg) {
     }
 }
 
+# --- Windows Terminal profiles for the screensaver and About -------------------------
+$ScreensaverProfile = '{5f6a2c1e-7a39-4b1f-9e0d-0a1c2e3f4b51}'
+$AboutProfile = '{5f6a2c1e-7a39-4b1f-9e0d-0a1c2e3f4b52}'
+
+function Set-TerminalProfiles($p) {
+    $file = $p.wtSettings
+    if (-not $file -or -not (Test-Path $file)) { return }
+    $wt = Read-Json $file
+    if (-not $wt) { return }
+    [void](Get-TerminalDefaults $wt)
+    if (-not $wt.profiles.list) { $wt.profiles | Add-Member -Force -NotePropertyName list -NotePropertyValue @() }
+    $font = Get-FontFamily
+    $pwsh = $p.pwsh
+    $want = @(
+        [ordered]@{
+            guid = $ScreensaverProfile; name = 'Omarchy Screensaver'; hidden = $true
+            commandline = "`"$pwsh`" -NoProfile -ExecutionPolicy Bypass -File `"$Code\lib\screensaver.ps1`" -Text `"$Data\branding\screensaver.txt`" -Ttfx `"$($p.ttfx)`""
+            tabTitle = 'Omarchy Screensaver'; suppressApplicationTitle = $true
+            background = '#000000'; opacity = 100; useAcrylic = $false; padding = '0'
+            font = [ordered]@{ face = $font; size = 18 }; cursorColor = '#000000'; cursorShape = 'vintage'
+            scrollbarState = 'hidden'; bellStyle = 'none'; closeOnExit = 'always'; startingDirectory = $Data
+        },
+        [ordered]@{
+            guid = $AboutProfile; name = 'Omarchy About'; hidden = $true
+            commandline = "`"$pwsh`" -NoProfile -ExecutionPolicy Bypass -File `"$Code\lib\about.ps1`""
+            tabTitle = 'Omarchy About'; suppressApplicationTitle = $true
+            padding = '14'; scrollbarState = 'hidden'; bellStyle = 'none'; closeOnExit = 'always'; startingDirectory = $Data
+        }
+    )
+    $list = @($wt.profiles.list | Where-Object { $_.guid -notin $ScreensaverProfile, $AboutProfile })
+    foreach ($w in $want) { Save-JsonItem $file 'profiles.list' $w.name }
+    $wt.profiles.list = @($list) + $want
+    Write-Json $file $wt
+}
+
+# Omarchy's branding text (Style > Screensaver / About edit these).
+function Initialize-Branding {
+    $dir = Join-Path $Data 'branding'
+    New-Item -ItemType Directory -Force $dir | Out-Null
+    foreach ($pair in @(@('screensaver.txt', 'logo.txt'), @('about.txt', 'icon.txt'))) {
+        $dst = Join-Path $dir $pair[0]
+        $src = Join-Path $Themes "_templates\$($pair[1])"
+        if (-not (Test-Path $dst) -and (Test-Path $src)) { Copy-Item $src $dst }
+    }
+}
+
+# The Omarchy screensaver replaces Windows' own (restored on uninstall).
+function Set-WindowsScreensaver($cfg) {
+    if (-not $cfg.screensaver.enabled) { return }
+    $key = 'HKCU:\Control Panel\Desktop'
+    $d = Get-ItemProperty $key
+    if ($d.ScreenSaveActive -eq '0' -and -not $d.'SCRNSAVE.EXE') { return }
+    Save-Reg $key 'ScreenSaveActive'
+    Save-Reg $key 'SCRNSAVE.EXE'
+    # SPI_SETSCREENSAVEACTIVE is refused on some builds (error 329), so switch it off in the
+    # registry and drop the .scr path: Windows reads that when the screensaver would start.
+    Set-ItemProperty $key -Name ScreenSaveActive -Value '0'
+    Remove-ItemProperty $key -Name 'SCRNSAVE.EXE' -ErrorAction SilentlyContinue
+    Initialize-Native
+    [void][OmarchyWin.Native]::SystemParametersInfoInt(0x11, 0, [IntPtr]::Zero, 3)
+    Log 'Windows screensaver turned off (the Omarchy one takes over)'
+}
+
 # --- restart what changed ---------------------------------------------------------
 # AutoHotkey scripts of this project (never the user's own scripts elsewhere).
 function Get-OmarchyAhk {
@@ -244,9 +312,14 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart) {
         & $p.glazewmCli command wm-reload-config | Out-Null
     }
     if ($MonitorsOnly) { return }
+    Initialize-Branding
     Write-AhkIni $p $cfg
     Write-ZebarPack $p $cfg
     Set-Autostart $p $cfg
+    try { Set-TerminalProfiles $p } catch { Log "terminal profiles FAILED: $($_.Exception.Message)" }
+    Set-WindowsScreensaver $cfg
+    if (-not (Test-Path (Join-Path $Pack 'font.css'))) { Write-FontCss }
+    try { [void](Update-FontList) } catch { Log "font list FAILED: $($_.Exception.Message)" }
     if (-not (Test-Path (Join-Path $Pack 'theme.css'))) {
         try { Set-BarTheme (Read-Colors (Read-State).theme) } catch { Log "no theme yet: $($_.Exception.Message)" }
     }

@@ -13,6 +13,10 @@
   omarchy-win theme <name> | theme list   switch theme (bar, borders, terminal, Flow, accent, ...)
   omarchy-win bg <path> | bg next         set the background (and lock screen)
   omarchy-win sync [-Offline]             download Omarchy themes + backgrounds, rebuild pickers
+  omarchy-win font [<family> | list]      terminal, bar, menus and launcher font
+  omarchy-win font-install <Name>         install a Nerd Font (CascadiaMono, Meslo, FiraCode, ...)
+  omarchy-win browser-setup               tint Chrome/Brave's toolbar with the theme (one admin prompt)
+  omarchy-win weather | update-check      refresh the bar's weather / update indicator
   omarchy-win config                      open your settings file
   omarchy-win keys                        print the keybindings
   omarchy-win status | version | help
@@ -31,11 +35,13 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\lib\detect.ps1"
 . "$PSScriptRoot\..\lib\render.ps1"
 . "$PSScriptRoot\..\lib\themes.ps1"
+. "$PSScriptRoot\..\lib\targets.ps1"
 . "$PSScriptRoot\..\lib\journal.ps1"
 . "$PSScriptRoot\..\lib\apply.ps1"
 . "$PSScriptRoot\..\lib\setup.ps1"
 . "$PSScriptRoot\..\lib\uninstall.ps1"
 . "$PSScriptRoot\..\lib\doctor.ps1"
+. "$PSScriptRoot\..\lib\extras.ps1"
 
 $version = (Get-Content -Raw (Join-Path $Code 'VERSION') -ErrorAction SilentlyContinue)?.Trim()
 
@@ -60,6 +66,18 @@ switch ($Verb) {
         if ($Arg -eq 'next') { Use-Lock { Invoke-BackgroundNext } } else { Use-Lock { Set-Background $Arg (Read-State) } }
     }
     'bg-next' { Use-Lock { Invoke-BackgroundNext } }
+    'browser-setup' { Enable-BrowserPolicy }
+    'extras' { Install-Extras; Use-Lock { Invoke-Apply } }
+    'weather' { Update-Weather }
+    'update-check' { Invoke-UpdateCheck }
+    { $_ -in 'font', 'font-set' } {
+        if (-not $Arg -or $Arg -eq 'list') { Update-FontList | ForEach-Object { "$(if ($_.name -eq (Get-FontFamily)) { '*' } else { ' ' }) $($_.name)" } }
+        else { Use-Lock { Invoke-FontSet $Arg } }
+    }
+    'font-install' {
+        if (-not $Arg) { "fonts: $($NerdFonts.Keys -join ', ')"; return }
+        Use-Lock { $family = Install-NerdFont $Arg; [void](Update-FontList); Invoke-FontSet $family }
+    }
     'config' {
         if (-not (Test-Path $ConfigFile)) { Write-Json $ConfigFile ([ordered]@{ _help = 'Only the settings you change. See docs/config.md, then run: omarchy-win apply' }) }
         $p = Get-Paths

@@ -62,8 +62,8 @@ function Invoke-Doctor([switch]$Fix) {
     & $check "workspaces fit $(@($p.monitors).Count) monitor(s)" ($null -eq $maxBound -or $maxBound -lt [Math]::Max(1, @($p.monitors).Count)) 'omarchy-win apply -MonitorsOnly'
 
     Write-Host "`nThemes"
-    $themes = @(Get-ChildItem $Themes -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName 'colors.toml') })
-    & $check "$($themes.Count) themes downloaded" ($themes.Count -gt 0) 'omarchy-win sync'
+    $themeDirs = @(Get-ChildItem $Themes -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName 'colors.toml') })
+    & $check "$($themeDirs.Count) themes downloaded" ($themeDirs.Count -gt 0) 'omarchy-win sync'
     & $check "current theme: $((Read-State).theme)" (Test-Path (Join-Path $Themes "$((Read-State).theme)\colors.toml")) 'omarchy-win theme tokyo-night'
 
     Write-Host "`nRecent errors (today's log)"

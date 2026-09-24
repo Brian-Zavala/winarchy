@@ -20,7 +20,7 @@ html, body {
   overflow: hidden;
   background: var(--bg);
   color: var(--fg);
-  font-family: 'JetBrainsMono NF', 'JetBrainsMono Nerd Font', 'JetBrainsMono Nerd Font Mono', monospace;
+  font-family: var(--font, 'JetBrainsMono NF'), 'JetBrainsMono NF', 'JetBrainsMono Nerd Font', monospace;
   font-size: 12px;
   user-select: none;
   cursor: default;
@@ -69,3 +69,7 @@ html, body {
 .muted { opacity: 0.5; }
 .hidden { display: none; }
 .paused { color: var(--alert); }
+
+.indicator { cursor: pointer; }
+.update { color: var(--accent); }
+#weather { cursor: pointer; }

@@ -91,6 +91,14 @@ function Save-JsonProperty([string]$path, [string]$pointer) {
     [void](Add-JournalEntry @{ kind = 'json'; key = $key; path = $path; pointer = $pointer; existed = $existed; value = $value })
 }
 
+# A string key in a JSONC file (VS Code settings: comments must survive).
+function Save-JsoncProperty([string]$path, [string]$key) {
+    $jkey = "jsonc|$path|$key"
+    if (Test-Journaled $jkey) { return }
+    $v = Get-JsoncString $path $key
+    [void](Add-JournalEntry @{ kind = 'jsonc'; key = $jkey; path = $path; name = $key; existed = ($null -ne $v); value = $v })
+}
+
 # An item we add to a JSON array (WT scheme/theme/profile named "Omarchy..."): removed on uninstall.
 function Save-JsonItem([string]$path, [string]$array, [string]$name) {
     [void](Add-JournalEntry @{ kind = 'jsonItem'; key = "jsonItem|$path|$array|$name"; path = $path; array = $array; name = $name })
@@ -206,6 +214,14 @@ function Restore-JournalEntry($e, [string]$dir) {
             $obj = Read-Json $e.path
             if ($obj) { Set-JsonPointer $obj $e.pointer $e.value (-not $e.existed); Write-Json $e.path $obj }
         }
+        'jsonc' {
+            if ($e.existed) { Set-JsoncString $e.path $e.name $e.value }
+            elseif (Test-Path $e.path) {
+                $t = Get-Content -Raw $e.path
+                $new = [regex]::Replace($t, '(?m)^\s*"' + [regex]::Escape($e.name) + '"\s*:\s*"(?:[^"\\]|\\.)*"\s*,?\s*\r?\n', '', 1)
+                if ($new -ne $t) { Write-Utf8 $e.path $new }
+            }
+        }
         'jsonItem' {
             $obj = Read-Json $e.path
             if ($obj) {
@@ -242,6 +258,9 @@ function Restore-JournalEntry($e, [string]$dir) {
             $new = ($cur -split ';' | Where-Object { $_ -and $_.TrimEnd('\') -ne $e.dir.TrimEnd('\') }) -join ';'
             [Environment]::SetEnvironmentVariable('Path', $new, 'User')
         }
+        'browsertask' { Disable-BrowserPolicy }
+        'cargo' { if (Get-Command cargo -ErrorAction SilentlyContinue) { cargo uninstall $e.crate 2>&1 | Out-Host } }
+        'file-if-ours' { if (Test-Path -LiteralPath $e.path) { Remove-Item -LiteralPath $e.path -Force -ErrorAction SilentlyContinue } }
         'screensaver' {
             Initialize-Native
             [void][OmarchyWin.Native]::SystemParametersInfoInt(0x11, [uint32]($e.active -eq '1'), [IntPtr]::Zero, 3)   # SPI_SETSCREENSAVEACTIVE

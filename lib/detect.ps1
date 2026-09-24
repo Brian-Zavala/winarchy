@@ -141,6 +141,11 @@ function Update-Paths {
         nvimOmarchy    = (Test-Path (Join-Path $nvimConfig 'lua\plugins\theme.lua'))
         vscode        = Find-Command code
         vscodeSettings = Join-Path $env:APPDATA 'Code\User\settings.json'
+        btopDir        = Split-Path (Find-First @(
+                            (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\aristocratos.btop4win_*\btop4win\btop4win.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName,
+                            (Find-Command btop4win.exe))) -ErrorAction SilentlyContinue
+        fastfetch      = Find-Command fastfetch.exe
+        ttfx           = Find-First @((Join-Path $env:USERPROFILE '.cargo\bin\ttfx.exe'), (Join-Path $Data 'bin\ttfx.exe'), (Find-Command ttfx.exe), (Find-Command tte.exe))
         browser        = $browser.exe
         browserName    = $browser.name
         browserPrivate = $browser.private

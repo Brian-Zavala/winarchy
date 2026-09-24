@@ -17,7 +17,7 @@ html, body {
   overflow: hidden;
   background: transparent;
   color: var(--fg);
-  font-family: 'JetBrainsMono NF', 'JetBrainsMono Nerd Font', monospace;
+  font-family: var(--font, 'JetBrainsMono NF'), 'JetBrainsMono NF', 'JetBrainsMono Nerd Font', monospace;
   font-size: 14px;
   user-select: none;
   cursor: default;

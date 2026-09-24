@@ -72,6 +72,14 @@ OnMessage 0x007E, (*) => SetTimer(OnDisplayChange, -3000)    ; WM_DISPLAYCHANGE
 ; Commands from menu.ahk (menu widget actions that need this script's state).
 OnMessage 0x5555, OnMenuCommand
 WriteIndicators()
+SetTimer WriteIndicators, 5000     ; nightlight / do-not-disturb also change from Quick Settings
+; Weather for the bar (every 15 min) and the update indicator (2 min after start, then 6 h).
+if Env("weather", "1") = "1" {
+    SetTimer () => OmarchyCmd("weather"), -20000
+    SetTimer () => OmarchyCmd("weather"), 900000
+}
+SetTimer () => OmarchyCmd("update-check"), -120000
+SetTimer () => OmarchyCmd("update-check"), 21600000
 ; Bluetooth on/off for the bar icon (bluetooth.ps1 writes bluetooth.json).
 SetTimer BluetoothStatus, 30000
 BluetoothStatus()
@@ -81,6 +89,260 @@ if Env("syncAtLogin", "1") = "1"
 ; Project app launchers (Super+Return terminal, ...) unless you use your own.
 if Env("launchers", "1") = "1"
     try Run('"' A_AhkPath '" "' A_ScriptDir '\launchers.ahk"')
+
+; --- Screensaver (Omarchy: effects after 2.5 min idle; any input ends it) -----
+SsFlag := Env("data") "\generated\screensaver-off"
+SsActive := false, SsStart := 0, SsIdleBase := 0
+SsEnabled := Env("screensaver", "0") = "1" && !FileExist(SsFlag)
+SystemCursor(true)            ; in case a previous run died with the cursor hidden
+OnExit ScreensaverStop
+if Env("screensaver", "0") = "1"
+    SetTimer ScreensaverIdle, 5000
+
+ScreensaverIdle() {
+    global SsActive, SsEnabled
+    if SsActive || !SsEnabled || A_TimeIdlePhysical < Env("screensaverIdle", 150) * 1000
+        return
+    ; Not while something keeps the display on (video, presentation, Stay Awake),
+    ; the session is locked, or a fullscreen app is in front.
+    if DisplayRequired() || !InputDesktopActive()
+        return
+    PerMonitorDpi()
+    if (fg := WinExist("A")) && IsFullscreenWindow(fg)
+        return
+    ScreensaverStart()
+}
+
+ScreensaverStart() {
+    global SsActive, SsStart, SsIdleBase
+    if SsActive
+        return
+    SsActive := true, SsStart := A_TickCount, SsIdleBase := A_TimeIdlePhysical
+    PerMonitorDpi()
+    loop MonitorGetCount() {
+        MonitorGet A_Index, &l, &t
+        try Run('wt.exe -w new --pos ' (l + 40) ',' (t + 40) ' --fullscreen -p "' Env("screensaverProfile", "Omarchy Screensaver") '"', , "Hide")
+    }
+    SystemCursor(false)
+    SetTimer ScreensaverWatch, 100
+}
+
+ScreensaverWatch() {
+    global SsStart, SsIdleBase
+    elapsed := A_TickCount - SsStart
+    if elapsed < 1500
+        return
+    ; Physical input since the start resets the idle counter. Also stop if the
+    ; windows are gone (a key press inside one ends its script).
+    if A_TimeIdlePhysical + 300 < SsIdleBase + elapsed
+        || (elapsed > 8000 && !WinExist("Omarchy Screensaver ahk_exe WindowsTerminal.exe"))
+        ScreensaverStop()
+}
+
+ScreensaverStop(*) {
+    global SsActive
+    if !SsActive
+        return
+    SsActive := false
+    SetTimer ScreensaverWatch, 0
+    for hwnd in WinGetList("Omarchy Screensaver ahk_exe WindowsTerminal.exe")
+        try PostMessage 0x10, 0, 0, , hwnd
+    SystemCursor(true)
+}
+
+ToggleScreensaver() {
+    global SsEnabled, SsFlag
+    SsEnabled := !SsEnabled
+    if SsEnabled {
+        try FileDelete SsFlag
+    } else {
+        try FileAppend "", SsFlag
+    }
+    Osd("Screensaver " (SsEnabled ? "on" : "off"))
+}
+
+; --- Nightlight (Windows Night light; Omarchy: hyprsunset) ----------------------
+; State lives in a CloudStore blob: byte 18 is 0x15 when on / 0x13 when off, "on"
+; carries two extra bytes (10 00) at 23, and bytes 10-14 hold a varint unix time that
+; must move forward for Windows to pick the change up.
+NightlightKey() => "HKCU\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\default$windows.data.bluelightreduction.bluelightreductionstate\windows.data.bluelightreduction.bluelightreductionstate"
+
+NightlightBytes() {
+    try hex := RegRead(NightlightKey(), "Data")
+    catch
+        return 0
+    b := []
+    loop StrLen(hex) // 2
+        b.Push(Integer("0x" SubStr(hex, 2 * A_Index - 1, 2)))
+    ; Only touch the layout we know (header 43 42 01 00, state 13/15).
+    if b.Length < 30 || b[1] != 0x43 || b[2] != 0x42 || (b[19] != 0x13 && b[19] != 0x15)
+        return 0
+    return b
+}
+
+NightlightOn() {
+    b := NightlightBytes()
+    return b ? b[19] = 0x15 : false
+}
+
+ToggleNightlight() {
+    if !(b := NightlightBytes()) {
+        Run "ms-settings:nightlight"      ; unknown layout: let Settings do it
+        return
+    }
+    on := b[19] = 0x15
+    if on {
+        b[19] := 0x13
+        if b[24] = 0x10 && b[25] = 0x00
+            b.RemoveAt(24, 2)
+    } else {
+        b[19] := 0x15
+        b.InsertAt(24, 0x10, 0x00)
+    }
+    t := DateDiff(A_NowUTC, "19700101000000", "Seconds")
+    loop 5 {
+        v := t & 0x7F, t >>= 7
+        b[10 + A_Index] := A_Index < 5 ? v | 0x80 : v
+    }
+    hex := ""
+    for x in b
+        hex .= Format("{:02X}", x)
+    RegWrite hex, "REG_BINARY", NightlightKey(), "Data"
+    Osd("Nightlight " (on ? "off" : "on"))
+    SetTimer WriteIndicators, -300
+}
+
+; --- Do not disturb (Omarchy: notification silencing) ---------------------------
+; Windows keeps the active "quiet hours" profile in a WNF state: 0 = off (all
+; notifications), 1 = priority only, 2 = alarms only (also set by Windows' own
+; automatic rules, e.g. during fullscreen apps).
+DndProfile() {
+    static name := 0x0D83063EA3BF1C75
+    n := name, buf := Buffer(4, 0), size := 4, stamp := 0
+    if DllCall("ntdll\NtQueryWnfStateData", "int64*", &n, "ptr", 0, "ptr", 0, "uint*", &stamp, "ptr", buf, "uint*", &size) != 0
+        return -1
+    return NumGet(buf, 0, "uint")
+}
+
+ToggleDnd() {
+    static name := 0x0D83063EA3BF1C75
+    cur := DndProfile()
+    if cur < 0 {
+        Run "ms-settings:notifications"
+        return
+    }
+    buf := Buffer(4, 0)
+    NumPut "uint", cur ? 0 : 1, buf
+    n := name
+    DllCall("ntdll\NtUpdateWnfStateData", "int64*", &n, "ptr", buf, "uint", 4, "ptr", 0, "ptr", 0, "uint", 0, "uint", 0)
+    Sleep 150
+    now := DndProfile()
+    if (now != 0) = (cur != 0) {
+        Run "ms-settings:notifications"   ; Windows didn't take it: open the setting
+        return
+    }
+    Osd("Do not disturb " (now ? "on" : "off"))
+    SetTimer WriteIndicators, -100
+}
+
+; --- Text capture (OCR): snip a region, its text lands on the clipboard ----------
+CaptureText() {
+    static busy := false
+    if busy
+        return
+    busy := true
+    flag := Env("data") "\generated\ocr.flag"
+    ; The screenshot watcher (if on) skips re-copying the snip while this flag is fresh.
+    try FileDelete flag
+    FileAppend "", flag
+    seq := DllCall("GetClipboardSequenceNumber")
+    Send "#+s"
+    start := A_TickCount
+    got := false
+    while A_TickCount - start < 30000 {
+        Sleep 150
+        if DllCall("GetClipboardSequenceNumber") != seq && DllCall("IsClipboardFormatAvailable", "uint", 2) {
+            got := true
+            break
+        }
+    }
+    if got {
+        FileSetTime A_Now, flag
+        out := Env("data") "\generated\ocr.out"
+        try FileDelete out
+        RunWait('"' Env("powershell", "powershell.exe") '" -NoProfile -STA -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "' Env("code") '\ps51\ocr.ps1" -Out "' out '"', , "Hide")
+        n := 0
+        try n := Integer(Trim(FileRead(out)))
+        Osd(n > 0 ? "Copied " n " line" (n = 1 ? "" : "s") " of text" : "No text found")
+    }
+    busy := false
+}
+
+; --- Info popups (Omarchy: Super+Ctrl+Alt+T/B/W) ----------------------------------
+ShowTime() => Osd(FormatTime(, "dddd d MMMM  ") FormatTime(, Is24h() ? "HH:mm" : "h:mm tt"))
+Is24h() {
+    try return InStr(RegRead("HKCU\Control Panel\International", "sShortTime"), "H", true) > 0
+    return false
+}
+ShowBattery() {
+    ps := Buffer(12, 0)
+    DllCall("GetSystemPowerStatus", "ptr", ps)
+    flag := NumGet(ps, 1, "uchar"), pct := NumGet(ps, 2, "uchar"), ac := NumGet(ps, 0, "uchar")
+    if flag = 128 || pct = 255
+        Osd("No battery (plugged in)")
+    else
+        Osd("Battery " pct "%" (ac = 1 ? " (charging)" : ""))
+}
+ShowWeather() {
+    try {
+        json := FileRead(Env("pack") "\weather.json", "UTF-8")
+        if RegExMatch(json, '"text":\s*"([^"]*)"', &m) {
+            Osd(m[1])
+            return
+        }
+    }
+    Osd("No weather yet")
+    OmarchyCmd("weather")
+}
+
+; --- Activity (Omarchy: btop) -------------------------------------------------------
+Activity() {
+    btop := Env("btop")
+    if btop && FileExist(btop)
+        Run 'wt.exe -w new --title Activity "' btop '"'
+    else
+        Run "taskmgr.exe"
+}
+
+; Any app asking to keep the display on (ES_DISPLAY_REQUIRED in the system state).
+DisplayRequired() {
+    state := 0
+    DllCall("PowrProf\CallNtPowerInformation", "int", 16, "ptr", 0, "uint", 0, "uint*", &state, "uint", 4)
+    return state & 0x2
+}
+
+; False while the lock screen / a secure desktop is up.
+InputDesktopActive() {
+    if h := DllCall("OpenInputDesktop", "uint", 0, "int", 0, "uint", 0x100, "ptr") {
+        DllCall("CloseDesktop", "ptr", h)
+        return true
+    }
+    return false
+}
+
+; Hide the pointer (blank system cursors) / bring the real ones back.
+SystemCursor(show) {
+    static ids := [32512, 32513, 32514, 32515, 32516, 32642, 32643, 32644, 32645, 32646, 32648, 32649, 32650, 32651]
+    if show {
+        DllCall("SystemParametersInfo", "uint", 0x57, "uint", 0, "ptr", 0, "uint", 0)   ; SPI_SETCURSORS
+        return
+    }
+    andMask := Buffer(128, 0xFF), xorMask := Buffer(128, 0)
+    for id in ids {
+        blank := DllCall("CreateCursor", "ptr", 0, "int", 0, "int", 0, "int", 32, "int", 32, "ptr", andMask, "ptr", xorMask, "ptr")
+        DllCall("SetSystemCursor", "ptr", blank, "uint", id)
+    }
+}
 
 BarGuard() {
     global BarEnabled, Zebar
@@ -282,6 +544,13 @@ OnMenuCommand(wParam, *) {
         case 5: SetTimer ColorPicker, -10
         case 6: TogglePanel("audio")
         case 7: TogglePanel("bluetooth")
+        case 8: SetTimer ScreensaverStart, -400
+        case 9: ToggleScreensaver()
+        case 10: SetTimer CaptureText, -300
+        case 11: ToggleNightlight()
+        case 12: ToggleDnd()
+        case 13: ShowWeather()
+        case 14: Activity()
     }
 }
 
@@ -317,6 +586,7 @@ if Env("takeOverWinSpace", "1") = "1" {
 ; Capture (Win+PrtScn stays Windows' save-to-Screenshots)
 !PrintScreen::Send "#+r"              ; screen recording (Snipping Tool)
 #^PrintScreen::SetTimer(ColorPicker, -10)
+#+PrintScreen::SetTimer(CaptureText, -10)   ; text capture (OCR) -> clipboard
 
 ; Super + left drag: move the window from anywhere inside it.
 ; The window follows the mouse; on release drop.ps1 re-tiles a tiled window
@@ -419,7 +689,12 @@ if Env("takeOverWinSpace", "1") = "1" {
 
 ; Omarchy utility panels -> closest Windows equivalents
 #^q::Run "calc.exe"                               ; calculator
-#^t::Run "taskmgr.exe"                            ; activity
+#^t::Activity()                                   ; activity (btop; Task Manager if missing)
+#^n::ToggleNightlight()                           ; nightlight
+#^SC033::ToggleDnd()                              ; Super+Ctrl+Comma: do not disturb
+#^!t::ShowTime()                                  ; time popup
+#^!b::ShowBattery()                               ; battery popup
+#^!w::ShowWeather()                               ; weather popup
 #^a::TogglePanel("audio")                         ; audio panel (again: close)
 #^b::TogglePanel("bluetooth")                     ; bluetooth panel (again: close)
 #^w::Run "ms-settings:network"                    ; network
@@ -583,12 +858,19 @@ ThemeColors() {
     return c
 }
 
+; indicators.json feeds the bar's indicator icons (this script is its only writer).
 WriteIndicators() {
     global Pack, Awake
+    static last := ""
+    b := v => v ? "true" : "false"
+    json := '{"awake":' b(Awake) ',"nightlight":' b(NightlightOn()) ',"dnd":' b(DndProfile() > 0) '}'
+    if json = last
+        return
     try {
         f := FileOpen(Pack "\indicators.json", "w", "UTF-8-RAW")
-        f.Write('{"awake":' (Awake ? "true" : "false") '}')
+        f.Write(json)
         f.Close()
+        last := json
     }
 }
 

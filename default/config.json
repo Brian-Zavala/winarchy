@@ -26,9 +26,16 @@
     "browser": true,
     "btop": true
   },
+  "screensaver": {
+    "enabled": true,
+    "idleSeconds": 150
+  },
+  "weather": true,
+  "location": null,
   "screenshotAutoCopy": false,
   "syncAtLogin": true,
   "omarchyRepo": "omacom/omarchy",
   "omarchyTag": "v4.0.4",
-  "zebarClientVersion": "3.0.3"
+  "zebarClientVersion": "3.0.3",
+  "ttfxUrl": null
 }
