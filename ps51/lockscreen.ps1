@@ -7,7 +7,7 @@
 param([Parameter(Mandatory)][string]$Path, [string]$StateFile)
 
 $log = Join-Path $env:USERPROFILE '.omarchy-win\logs\omarchy-win.log'
-function Write-Log([string]$msg) { try { Add-Content $log "$(Get-Date -Format 'HH:mm:ss') [lockscreen] $msg" } catch {} }
+function Write-OwLog([string]$msg) { try { Add-Content $log "$(Get-Date -Format 'HH:mm:ss') [lockscreen] $msg" } catch {} }
 
 if ($StateFile -and (Test-Path $StateFile)) {
     Start-Sleep -Milliseconds 700   # let a burst of picks settle
@@ -33,8 +33,8 @@ try {
 
     $set = $asTaskAction.Invoke($null, @([Windows.System.UserProfile.LockScreen]::SetImageFileAsync($file)))
     [void]$set.Wait(15000)
-    Write-Log "-> $Path"
+    Write-OwLog "-> $Path"
 } catch {
-    Write-Log "FAILED for ${Path}: $($_.Exception.Message)"
+    Write-OwLog "FAILED for ${Path}: $($_.Exception.Message)"
     exit 1
 }

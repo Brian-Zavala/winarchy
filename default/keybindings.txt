@@ -44,10 +44,11 @@ WINDOWS
 
 {{ apps }}
 
-CAPTURE
+CAPTURE   (no PrtScn key on your laptop? Super + Ctrl + C opens the Capture menu)
   Print                         Screenshot (region, Snipping Tool)
   Super + Print                 Full screenshot saved to Pictures\Screenshots
   Alt + Print                   Screen recording (Snipping Tool)
+  Super + Shift + Print         Text capture: snip a region, its text is copied (OCR)
   Super + Ctrl + Print          Color picker (click copies #rrggbb)
 
 UTILITIES
@@ -56,12 +57,15 @@ UTILITIES
   Super + Ctrl + E              Emoji picker
   Shift + F9  or Super+Ctrl+X   Voice dictation (talk -> types; again to stop)
   Super + Ctrl + I              Stay awake (coffee icon in the bar)
+  Super + Ctrl + N              Nightlight (moon icon in the bar)
+  Super + Ctrl + ,              Do not disturb (bell icon in the bar)
   Super + Ctrl + Q              Calculator
-  Super + Ctrl + T              Activity (Task Manager)
+  Super + Ctrl + T              Activity (btop; right click the bar CPU icon: Task Manager)
   Super + Ctrl + A              Audio panel (output device + volumes; again: close)
   Super + Ctrl + B              Bluetooth panel (devices, on/off; again: close)
   Super + Ctrl + W              Network settings
   Super + Ctrl + D / P          Display / power settings
+  Super + Ctrl + Alt + T / B / W  Show time / battery / weather
   Super + Ctrl + Alt + D        Calendar
   Super + Shift + Alt + ,       Notification history
   Super + Ctrl + Z              Zoom in (+ Alt: reset)
@@ -70,14 +74,19 @@ UTILITIES
 SYSTEM
   Bar logo: left / right click  Omarchy menu / terminal
   Bar clock: left / right click Calendar / date format
+  Bar indicators                Click to turn off (stay awake, nightlight, do not disturb)
+  Bar weather / update icons    Click: weather details / update everything
   Bar audio icon                Click: audio panel, right click: mute, scroll: volume
   Bar bluetooth icon            Click: Bluetooth panel
+  Idle 2.5 minutes              Screensaver (any key or mouse move ends it)
   Ctrl + Esc                    Windows Start menu
   Super + Shift + Alt + R       Reload GlazeWM config
   Super + Shift + Alt + P       Pause / resume GlazeWM (escape hatch)
 
-GO BACK TO NORMAL WINDOWS
-  Omarchy menu > System         Back to normal Windows
-  pwsh -File revert.ps1         Full revert (in %USERPROFILE%\.omarchy-win)
-  revert.ps1 -KeepApps          Disable only, keep apps installed
-  revert.ps1 -DryRun            Preview what would happen
+TERMINAL COMMANDS
+  omarchy-win doctor            Check everything, explain problems (-Fix to repair)
+  omarchy-win theme <name>      Switch theme (omarchy-win theme list)
+  omarchy-win font <family>     Switch font (omarchy-win font list)
+  omarchy-win apply             Re-apply after editing your config.json
+  omarchy-win update            Update omarchy-win, themes and apps
+  omarchy-win uninstall         Back to normal Windows (-DryRun to preview, -KeepApps)

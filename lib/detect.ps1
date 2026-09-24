@@ -5,7 +5,7 @@ function Find-First([string[]]$candidates) {
     foreach ($c in $candidates) { if ($c -and (Test-Path -LiteralPath $c)) { return (Resolve-Path -LiteralPath $c).Path } }
     $null
 }
-function Find-Command([string]$name) {
+function Find-Program([string]$name) {
     $c = Get-Command $name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($c) { $c.Source }
 }
@@ -29,7 +29,7 @@ function Find-Pwsh {
     Find-First @(
         (Join-Path $env:ProgramFiles 'PowerShell\7\pwsh.exe'),
         (Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\pwsh.exe'),
-        (Find-Command pwsh)
+        (Find-Program pwsh)
     )
 }
 
@@ -116,7 +116,7 @@ function Update-Paths {
     $flowSettings = Join-Path $env:APPDATA 'FlowLauncher\Settings\Settings.json'
     $flowHotkey = (Read-Json $flowSettings).Hotkey
     $nvimConfig = Join-Path $env:LOCALAPPDATA 'nvim'
-    $glazeDir = Find-First @((Join-Path $env:ProgramFiles 'glzr.io\GlazeWM'), (Split-Path (Find-Command glazewm) -ErrorAction SilentlyContinue))
+    $glazeDir = Find-First @((Join-Path $env:ProgramFiles 'glzr.io\GlazeWM'), (Split-Path (Find-Program glazewm) -ErrorAction SilentlyContinue))
     $culture = Get-Culture
     $browser = Find-Browser
     $p = [ordered]@{
@@ -129,23 +129,23 @@ function Update-Paths {
         powershell     = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
         glazewm        = Find-First @((Join-Path "$glazeDir" 'glazewm.exe'))
         glazewmCli     = Find-First @((Join-Path "$glazeDir" 'cli\glazewm.exe'), (Join-Path "$glazeDir" 'glazewm.exe'))
-        zebar          = Find-First @((Join-Path $env:ProgramFiles 'glzr.io\Zebar\zebar.exe'), (Find-Command zebar))
+        zebar          = Find-First @((Join-Path $env:ProgramFiles 'glzr.io\Zebar\zebar.exe'), (Find-Program zebar))
         flow           = Find-First @((Join-Path $flowDir 'Flow.Launcher.exe'))
         flowSettings   = $flowSettings
         flowThemes     = Join-Path $env:APPDATA 'FlowLauncher\Themes'
         flowHotkey     = ConvertTo-AhkHotkey $flowHotkey
-        wt             = Find-Command wt.exe
+        wt             = Find-Program wt.exe
         wtSettings     = Find-TerminalSettings
-        nvim           = Find-Command nvim
+        nvim           = Find-Program nvim
         nvimConfig     = $nvimConfig
         nvimOmarchy    = (Test-Path (Join-Path $nvimConfig 'lua\plugins\theme.lua'))
-        vscode        = Find-Command code
+        vscode        = Find-Program code
         vscodeSettings = Join-Path $env:APPDATA 'Code\User\settings.json'
         btopDir        = Split-Path (Find-First @(
                             (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\aristocratos.btop4win_*\btop4win\btop4win.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName,
-                            (Find-Command btop4win.exe))) -ErrorAction SilentlyContinue
-        fastfetch      = Find-Command fastfetch.exe
-        ttfx           = Find-First @((Join-Path $env:USERPROFILE '.cargo\bin\ttfx.exe'), (Join-Path $Data 'bin\ttfx.exe'), (Find-Command ttfx.exe), (Find-Command tte.exe))
+                            (Find-Program btop4win.exe))) -ErrorAction SilentlyContinue
+        fastfetch      = Find-Program fastfetch.exe
+        ttfx           = Find-First @((Join-Path $env:USERPROFILE '.cargo\bin\ttfx.exe'), (Join-Path $Data 'bin\ttfx.exe'), (Find-Program ttfx.exe), (Find-Program tte.exe))
         browser        = $browser.exe
         browserName    = $browser.name
         browserPrivate = $browser.private

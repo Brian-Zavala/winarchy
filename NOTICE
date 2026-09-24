@@ -1,0 +1,17 @@
+omarchy-win includes or is derived from:
+
+- Omarchy (https://github.com/omacom/omarchy), MIT License, Copyright (c) David Heinemeier Hansson
+  and contributors:
+    zebar/omarchy/omarchy.ttf (Omarchy logo font), the menu/keybinding design, and the theme
+    template mapping in lib/render.ps1, lib/targets.ps1, templates/*. Theme files
+    (colors.toml, neovim.lua, vscode.json, btop.theme, ...), templates and backgrounds are
+    downloaded from the Omarchy repository at install time and are not part of this
+    repository. Background artwork remains the property of its respective artists.
+
+Installed separately (not bundled), each under its own license:
+
+- GlazeWM and Zebar (https://github.com/glzr-io), GPL-3.0 - installed with winget. The Zebar
+  client library (zebar.mjs) is downloaded at install time from the npm package.
+- Flow Launcher (MIT), AutoHotkey (GPL-2.0), PowerShell (MIT), fastfetch (MIT), btop4win (Apache-2.0).
+- ttfx (https://github.com/omacom/ttfx), MIT - built or downloaded at install time.
+- Nerd Fonts (https://www.nerdfonts.com) - downloaded at install time, SIL OFL 1.1 / MIT per font.

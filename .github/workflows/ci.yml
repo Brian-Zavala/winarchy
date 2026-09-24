@@ -1,0 +1,30 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pester + PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module Pester -MinimumVersion 5.5 -Force -Scope CurrentUser -SkipPublisherCheck
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $r = Invoke-Pester ./tests -PassThru -Output Detailed
+          if ($r.FailedCount) { exit 1 }
+          $issues = Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error
+          $issues | Format-Table -AutoSize
+          if ($issues) { exit 1 }
+      - name: JSON files parse
+        shell: pwsh
+        run: |
+          foreach ($f in 'default/config.json', 'zebar/omarchy/menu.json') { Get-Content -Raw $f | ConvertFrom-Json | Out-Null }
+      - name: AutoHotkey scripts load
+        shell: pwsh
+        run: |
+          winget install -e --id AutoHotkey.AutoHotkey --silent --accept-source-agreements --accept-package-agreements --scope user
+          $ahk = Get-ChildItem "$env:LOCALAPPDATA\Programs\AutoHotkey\v2\AutoHotkey64.exe", "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          foreach ($s in Get-ChildItem ahk/*.ahk) {
+            & $ahk.FullName /ErrorStdOut /validate $s.FullName
+            if ($LASTEXITCODE) { Write-Error "$($s.Name) failed to load"; exit 1 }
+          }
