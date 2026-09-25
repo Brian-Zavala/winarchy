@@ -42,6 +42,8 @@ Then press **Super + K** for every key. Super is the Windows key.
 | **Backgrounds** | Super+Ctrl+Space: every Omarchy background plus your own (`Pictures\Wallpapers`) |
 | **Fonts** | Style > Font: one font for terminal, bar, menus and launcher; installs Omarchy's Nerd Fonts |
 | **Screensaver** | Omarchy's animated logo ([ttfx](https://github.com/omacom/ttfx) effects) on every monitor after 2.5 min idle; never while a video plays |
+| **Wallpaper reveal** | New backgrounds open out of the middle of every monitor in Omarchy v4's slanted band (420 ms) |
+| **Window animations** *(experimental)* | `omarchy-win animations build` compiles GlazeWM's open animation pull request ([#1392](https://github.com/glzr-io/glazewm/pull/1392)) and switches to it: windows zoom and glide to their tiles. Needs Rust + Visual C++ build tools; `animations off` returns to the official GlazeWM |
 | **Toggles** | Stay awake, nightlight, do not disturb, top bar, gaps, transparency |
 | **Capture** | Region screenshot, screen recording, **text capture (OCR)**, color picker |
 | **About / Activity** | fastfetch with the Omarchy logo; btop |
@@ -53,7 +55,8 @@ omarchy-win doctor            check everything and explain problems (-Fix repair
 omarchy-win theme <name>      switch theme            (omarchy-win theme list)
 omarchy-win font <family>     switch font             (omarchy-win font list)
 omarchy-win bg <image>        set the background      (omarchy-win bg next)
-omarchy-win config            open your settings      then: omarchy-win apply
+omarchy-win config            open your settings      (saving applies them)
+omarchy-win animations on     window animations       (experimental; first: animations build)
 omarchy-win update            update omarchy-win, Omarchy themes and the apps
 omarchy-win uninstall         back to normal Windows  (-DryRun to preview, -KeepApps)
 ```
@@ -65,6 +68,10 @@ see [docs/config.md](docs/config.md). Examples: 24-hour clock, °C, your own wor
 more background folders, turning single theme targets off, screensaver timeout.
 
 Bar/menu CSS overrides go in `%USERPROFILE%\.glzr\zebar\omarchy\user.css` (kept across updates).
+
+Like Hyprland, saved edits take effect by themselves: `config.json` re-applies, your GlazeWM
+template reloads GlazeWM, your keybindings script reloads, and the bar picks up `user.css`.
+Open them from the Omarchy menu (Setup / Style).
 
 ## Undo
 

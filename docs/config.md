@@ -32,12 +32,21 @@ Put only the keys you want to change; everything else comes from
 | `screenshotAutoCopy` | `false` | Copy every new screenshot file to the clipboard |
 | `syncAtLogin` | `true` | Re-index your background folders after login (no downloads) |
 | `glazewmManaged` | `true` | `false` = omarchy-win stops writing `~/.glzr/glazewm/config.yaml` (edit it yourself) |
+| `backgroundTransition` | `"reveal"` | Omarchy v4's slanted reveal when the wallpaper changes; `"none"` for an instant change (skipped while Wallpaper Engine or Lively runs) |
+| `animations.enabled` | `false` | Experimental window animations: run the GlazeWM build of glzr-io/glazewm#1392 (`omarchy-win animations build`, then `animations on`) |
+| `animations.moveMs` / `openMs` / `closeMs` | `379` / `410` / `149` | Durations (Omarchy's `looknfeel.lua`); shorter feels snappier |
+| `animations.workspaceSwitch` | `false` | Slide between workspaces (Omarchy keeps this off) |
 | `omarchyTag` | `"v4.0.4"` | Omarchy release the themes/backgrounds come from (`omarchy-win update` moves it) |
 
 ## Customizing beyond config.json
 
-* **GlazeWM:** copy `templates/glazewm.yaml.tpl` to `%USERPROFILE%\.omarchy-win\glazewm.yaml.tpl`
-  and edit it; `apply` uses your copy. Placeholders: `{{ gap }}`, `{{ focused_border }}`, `{{ workspaces }}`.
+* **GlazeWM:** Omarchy menu → Setup → GlazeWM creates `%USERPROFILE%\.omarchy-win\glazewm.yaml.tpl`
+  (a copy of `templates/glazewm.yaml.tpl`); saving it rewrites GlazeWM's config and reloads it.
+  Placeholders: `{{ gap }}`, `{{ gap_top }}`, `{{ focused_border }}`, `{{ workspaces }}`, `{{ animations }}`.
+  Delete the file to go back to the default.
+* **App keys:** Omarchy menu → Setup → Keybindings opens your launcher script (your own
+  `Startup\launchers.ahk`, or `%USERPROFILE%\.omarchy-win\launchers.ahk`, a copy of omarchy-win's);
+  saving reloads it.
 * **Bar and menu look:** `%USERPROFILE%\.glzr\zebar\omarchy\user.css` (loaded last, never overwritten).
 * **Screensaver / About art:** Omarchy menu → Style → Screensaver / About → Edit Text.
 * **Browser toolbar color:** `omarchy-win browser-setup` (one admin prompt; Chrome then says
