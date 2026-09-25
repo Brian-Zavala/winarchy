@@ -1,4 +1,5 @@
-# Winarchy
+![Winarchy](images/winarchy-no-bg.png)
+
 
 **[Omarchy](https://omarchy.org)'s look, keys and themes on Windows 11.** Tiling windows, the Omarchy
 top bar and menu, 22 Omarchy themes that recolor everything at once, the background and theme
