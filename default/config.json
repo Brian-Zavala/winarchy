@@ -4,6 +4,7 @@
   "units": "auto",
   "workspaces": "auto",
   "gap": 10,
+  "barHeight": 26,
   "hideTaskbar": true,
   "takeOverWinSpace": true,
   "launchers": true,

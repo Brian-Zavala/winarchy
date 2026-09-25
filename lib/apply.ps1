@@ -48,11 +48,13 @@ function Write-GlazeConfig([int]$monitorCount) {
     # Keep what the toggles/theme last set: gaps on/off and the focused border colour.
     $gap = [int]$cfg.gap
     if ($old -match "inner_gap:\s*'0px'\s*# gaps") { $gap = 0 }
+    # The bar's strip lives in GlazeWM's top gap (scaled per monitor like the bar itself).
+    $gapTop = [int]$cfg.barHeight + $gap
     $border = if ($old -match "color:\s*'(#[0-9A-Fa-f]{6})'\s*# theme:focused-border") { $Matches[1] } else {
         try { (Read-Colors (Read-State).theme).accent } catch { '#7aa2f7' }
     }
     $values = @{
-        gap = "$gap"; focused_border = $border
+        gap = "$gap"; gap_top = "$gapTop"; focused_border = $border
         workspaces = ConvertTo-WorkspacesYaml (Get-WorkspaceLayout $monitorCount $cfg.workspaces)
     }
     $yaml = Expand-Template (Get-Content -Raw $tplFile) $values
@@ -89,6 +91,7 @@ function Write-AhkIni($p, $cfg) {
             launchers = [int][bool]$cfg.launchers
             hideTaskbar = [int][bool]$cfg.hideTaskbar
             gap = [int]$cfg.gap
+            barHeight = [int]$cfg.barHeight
             syncAtLogin = [int][bool]$cfg.syncAtLogin
             screensaver = [int][bool]($cfg.screensaver.enabled -and $p.wt)
             screensaverIdle = [int]$cfg.screensaver.idleSeconds
@@ -124,9 +127,10 @@ function Get-ZpackJson($p) {
         [ordered]@{ program = 'explorer'; argsRegex = 'ms-settings:.*' },
         $menuPrivilege
     ) @([ordered]@{
-        name = 'default'; anchor = 'top_left'; offsetX = '0px'; offsetY = '0px'; width = '100%'; height = '26px'
+        name = 'default'; anchor = 'top_left'; offsetX = '0px'; offsetY = '0px'; width = '100%'; height = "$([int]$cfg.barHeight)px"
         monitorSelection = [ordered]@{ type = 'all' }
-        # Space is reserved by omarchy-wm.ahk (work area), not Zebar's appbar.
+        # Space is kept by GlazeWM's top gap; Zebar's appbar reservation is unreliable
+        # with the taskbar hidden, and fighting Explorer over the work area flickers it.
         dockToEdge = [ordered]@{ enabled = $false; edge = 'top'; windowMargin = '0px' }
     })
     # One menu preset per monitor position (Zebar sorts monitors left->right, top->bottom);

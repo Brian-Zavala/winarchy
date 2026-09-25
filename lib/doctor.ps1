@@ -50,14 +50,13 @@ function Invoke-Doctor([switch]$Fix) {
     & $check 'omarchy-win on PATH' ((([Environment]::GetEnvironmentVariable('Path', 'User')) -split ';') -contains (Join-Path $Code 'bin')) 'omarchy-win install'
 
     Write-Host "`nScreen"
-    Add-Type -AssemblyName System.Windows.Forms
-    $bars = (Get-Process zebar -ErrorAction SilentlyContinue) -and $true
-    foreach ($s in [System.Windows.Forms.Screen]::AllScreens) {
-        $reserved = $s.WorkingArea.Top -gt $s.Bounds.Top
-        & $check "$($s.DeviceName): bar strip kept free of windows" ($reserved -or -not $bars) 'omarchy-wm.ahk reserves it; if this persists run: omarchy-win apply'
-    }
-    $layout = Get-WorkspaceLayout @($p.monitors).Count $cfg.workspaces
     $yaml = if (Test-Path $GlazeConfig) { Get-Content -Raw $GlazeConfig } else { '' }
+    $top = if ($yaml -match "'(\d+)px'\s*# gaps:top") { [int]$Matches[1] } else { 0 }
+    & $check "bar strip kept free of windows (GlazeWM top gap $top px)" ($top -ge [int]$cfg.barHeight) 'omarchy-win apply'
+    # Screensaver health: the effects engine must not be crash-looping.
+    $crashes = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; ProviderName = 'Application Error'; StartTime = (Get-Date).AddHours(-1) } -MaxEvents 500 -ErrorAction SilentlyContinue |
+        Where-Object { $_.Message -match 'ttfx' }).Count
+    & $check "screensaver effects engine: $crashes crash(es) in the last hour" ($crashes -eq 0) 'omarchy-win update (older versions crash-looped ttfx on Windows)'
     $maxBound = ([regex]::Matches($yaml, 'bind_to_monitor:\s*(\d+)') | ForEach-Object { [int]$_.Groups[1].Value } | Measure-Object -Maximum).Maximum
     & $check "workspaces fit $(@($p.monitors).Count) monitor(s)" ($null -eq $maxBound -or $maxBound -lt [Math]::Max(1, @($p.monitors).Count)) 'omarchy-win apply -MonitorsOnly'
 

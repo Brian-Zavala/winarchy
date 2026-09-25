@@ -48,7 +48,7 @@ switch verb {
     case "restart": Run "shutdown.exe /r /t 0", , "Hide"
     case "shutdown": Run "shutdown.exe /s /t 0", , "Hide"
     case "logout": Run "shutdown.exe /l", , "Hide"
-    case "upgrade": RunInTerminal("Update", '"' Env("pwsh", "pwsh") '" -NoExit -NoProfile -ExecutionPolicy Bypass -File "' Env("code") '\bin\omarchy-win.ps1" update')
+    case "upgrade": RunInTerminal("Update", '"' Env("pwsh", "pwsh") '" -NoProfile -ExecutionPolicy Bypass -File "' Env("code") '\bin\omarchy-win.ps1" update')
     case "uninstall", "revert": RunInTerminal("Uninstall omarchy-win", '"' Env("pwsh", "pwsh") '" -NoExit -NoProfile -ExecutionPolicy Bypass -File "' Env("code") '\bin\omarchy-win.ps1" uninstall')
 }
 

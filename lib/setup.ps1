@@ -239,16 +239,58 @@ function Invoke-Adopt {
     Write-Host "`nAdopted. Run 'omarchy-win doctor' to check." -ForegroundColor Green
 }
 
+# omarchy-win update (also the bar's update icon): exactly what update-check found,
+# once at a time, then a fresh check so the icon clears.
 function Invoke-Update {
-    Write-Step 'Updating omarchy-win'
-    if ((Test-Path (Join-Path $Code '.git')) -and (git -C $Code remote)) {
-        git -C $Code pull --ff-only | Out-Host
-    } else { Write-Ok 'no git remote configured; skipping code update' }
-    # Re-apply with the (possibly new) code in a fresh process.
-    & (Get-Paths).pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Code 'bin\omarchy-win.ps1') apply
-    Write-Step 'Apps (winget)'
-    foreach ($id in 'glzr-io.glazewm', 'Flow-Launcher.Flow-Launcher') {
-        winget upgrade -e --id $id --silent --accept-source-agreements --accept-package-agreements | Out-Host
-    }
-    Write-Ok 'If the bar or menus misbehave after a GlazeWM/Zebar upgrade, run: omarchy-win doctor'
+    $m = [Threading.Mutex]::new($false, 'Local\OmarchyWinUpdate')
+    if (-not $m.WaitOne(0)) { Write-Host 'An update is already running in another window.'; return }
+    try {
+        $updFile = Join-Path $Pack 'updates.json'
+        $pending = @((Read-Json $updFile).items | Where-Object { $_ })
+        # Hide the bar icon while this runs, so it can't be clicked again.
+        Write-Json $updFile ([ordered]@{ checked = (Get-Date).ToString('s'); updating = $true; items = @() })
+        $p = Get-Paths
+
+        Write-Step 'omarchy-win'
+        $codeChanged = $false
+        if ((Test-Path (Join-Path $Code '.git')) -and (git -C $Code remote)) {
+            $before = git -C $Code rev-parse HEAD
+            git -C $Code pull --ff-only | Out-Host
+            $codeChanged = $before -ne (git -C $Code rev-parse HEAD)
+        } else { Write-Ok 'installed from a local copy (no git remote): nothing to pull' }
+
+        Write-Step 'Omarchy themes'
+        $omarchy = $pending | Where-Object name -eq 'Omarchy themes' | Select-Object -First 1
+        if ($omarchy) {
+            $s = Read-State; $s.omarchyTag = $omarchy.to; Save-State $s
+            Use-Lock { Invoke-Sync }
+        } else { Write-Ok 'up to date' }
+
+        Write-Step 'Apps'
+        $ids = @($pending | Where-Object { $_.name -match '^[\w-]+\.[\w.-]+$' } | ForEach-Object name)
+        if (-not $ids) { Write-Ok 'up to date' }
+        # Upgrading AutoHotkey closes running scripts: remember them to start them again.
+        $scripts = @(Get-CimInstance Win32_Process -Filter "Name like 'AutoHotkey%'" | ForEach-Object CommandLine)
+        foreach ($id in $ids) {
+            Write-Ok "upgrading $id"
+            winget upgrade -e --id $id --silent --accept-source-agreements --accept-package-agreements | Out-Host
+        }
+        if ($ids -contains 'AutoHotkey.AutoHotkey') {
+            $p = Update-Paths
+            $running = @(Get-CimInstance Win32_Process -Filter "Name like 'AutoHotkey%'" | ForEach-Object CommandLine)
+            foreach ($cmd in $scripts | Where-Object { $running -notcontains $_ }) {
+                if ($cmd -match '^"?[^"]+\.exe"?\s+(.+)$') { Start-Process $p.ahk -ArgumentList $Matches[1]; Write-Ok "restarted $($Matches[1])" }
+            }
+        }
+
+        Write-Step 'Applying'
+        # A fresh process so new code is used; restart the bar/keys only when something changed.
+        $restart = $codeChanged -or ($ids -contains 'glzr-io.glazewm') -or ($ids -contains 'AutoHotkey.AutoHotkey')
+        $applyArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Code 'bin\omarchy-win.ps1'), 'apply') + $(if (-not $restart) { '-NoRestart' })
+        & $p.pwsh @applyArgs
+
+        Write-Step 'Checking again'
+        Invoke-UpdateCheck
+    } finally { $m.ReleaseMutex(); $m.Dispose() }
+    if (-not [Console]::IsInputRedirected) { Write-Host "`nDone. Press any key to close."; [void][Console]::ReadKey($true) }
 }

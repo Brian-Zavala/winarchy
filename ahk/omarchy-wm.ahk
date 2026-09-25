@@ -18,7 +18,7 @@ BarEnabled := true
 Awake := false
 OsdGui := 0
 Transparent := Map()
-Reserved := Map()      ; monitor index -> true while its work area holds the bar
+
 PanelSeen := Map()     ; quick panel kind -> tick it was last seen open
 MonitorCount := MonitorGetCount()
 
@@ -54,14 +54,14 @@ SetTimer HideTaskbars, 1000
 OnExit ShowTaskbars
 
 ; --- Robustness -------------------------------------------------------------
-; Keep the bar's strip out of every monitor's work area. Zebar's own appbar
-; reservation (dockToEdge) doesn't hold with the taskbar hidden, so it is set
-; here from each bar's real height (any DPI, any number of monitors) and put back
-; whenever Explorer resets it. GlazeWM tiles inside the work area, and maximized
-; windows respect it too.
-SetTimer ReserveBarSpace, 1000
-OnMessage 0x001A, OnSettingChange                             ; WM_SETTINGCHANGE
-OnExit ReleaseBarSpace
+; The bar's strip is kept free by GlazeWM's top gap (bar height + gap, scaled per
+; monitor DPI), so nothing here touches the monitor work area. (Setting the work
+; area directly made Explorer and this script fight: the taskbar flickered.)
+; Sleep / lock: stop the screensaver first, then give the desktop a quiet spell.
+QuietUntil := 0
+OnMessage 0x0218, OnPowerBroadcast                            ; WM_POWERBROADCAST
+OnMessage 0x02B1, OnSessionChange                             ; WM_WTSSESSION_CHANGE
+DllCall("Wtsapi32\WTSRegisterSessionNotification", "ptr", A_ScriptHwnd, "uint", 0)
 ; The bar stays above windows, except a fullscreen one on its monitor.
 SetTimer FullscreenWatch, 400
 ; Bring the bar back if Zebar dies or a monitor lost its bar; reopen the bars
@@ -94,14 +94,32 @@ if Env("launchers", "1") = "1"
 SsFlag := Env("data") "\generated\screensaver-off"
 SsActive := false, SsStart := 0, SsIdleBase := 0
 SsEnabled := Env("screensaver", "0") = "1" && !FileExist(SsFlag)
-SystemCursor(true)            ; in case a previous run died with the cursor hidden
+RestoreCursors()              ; an older version hid the pointer during the screensaver
 OnExit ScreensaverStop
 if Env("screensaver", "0") = "1"
     SetTimer ScreensaverIdle, 5000
 
+OnPowerBroadcast(wParam, *) {
+    global QuietUntil
+    if wParam = 4 {                                   ; PBT_APMSUSPEND: about to sleep
+        ScreensaverStop("sleep")
+    } else if wParam = 7 || wParam = 0x12 {           ; PBT_APMRESUMESUSPEND / RESUMEAUTOMATIC
+        ScreensaverStop("wake")
+        QuietUntil := A_TickCount + 180000
+    }
+}
+
+OnSessionChange(wParam, *) {
+    global QuietUntil
+    if wParam = 7                                     ; WTS_SESSION_LOCK
+        ScreensaverStop("lock")
+    else if wParam = 8                                ; WTS_SESSION_UNLOCK
+        QuietUntil := A_TickCount + 180000
+}
+
 ScreensaverIdle() {
-    global SsActive, SsEnabled
-    if SsActive || !SsEnabled || A_TimeIdlePhysical < Env("screensaverIdle", 150) * 1000
+    global SsActive, SsEnabled, QuietUntil
+    if SsActive || !SsEnabled || A_TickCount < QuietUntil || A_TimeIdlePhysical < Env("screensaverIdle", 150) * 1000
         return
     ; Not while something keeps the display on (video, presentation, Stay Awake),
     ; the session is locked, or a fullscreen app is in front.
@@ -118,12 +136,12 @@ ScreensaverStart() {
     if SsActive
         return
     SsActive := true, SsStart := A_TickCount, SsIdleBase := A_TimeIdlePhysical
+    WmLog("screensaver: start")
     PerMonitorDpi()
     loop MonitorGetCount() {
         MonitorGet A_Index, &l, &t
         try Run('wt.exe -w new --pos ' (l + 40) ',' (t + 40) ' --fullscreen -p "' Env("screensaverProfile", "Omarchy Screensaver") '"', , "Hide")
     }
-    SystemCursor(false)
     SetTimer ScreensaverWatch, 100
 }
 
@@ -133,21 +151,33 @@ ScreensaverWatch() {
     if elapsed < 1500
         return
     ; Physical input since the start resets the idle counter. Also stop if the
-    ; windows are gone (a key press inside one ends its script).
+    ; windows are gone (a key press inside one ends its script), the session got
+    ; locked, or it has run for 4 hours (the display is long off by then).
     if A_TimeIdlePhysical + 300 < SsIdleBase + elapsed
-        || (elapsed > 8000 && !WinExist("Omarchy Screensaver ahk_exe WindowsTerminal.exe"))
-        ScreensaverStop()
+        ScreensaverStop("input")
+    else if elapsed > 8000 && !WinExist("Omarchy Screensaver ahk_exe WindowsTerminal.exe")
+        ScreensaverStop("closed")
+    else if !InputDesktopActive()
+        ScreensaverStop("locked")
+    else if elapsed > 4 * 3600000
+        ScreensaverStop("timeout")
 }
 
-ScreensaverStop(*) {
+; Closes every screensaver window (and anything they left running). Safe to call anytime.
+ScreensaverStop(reason := "exit", *) {
     global SsActive
-    if !SsActive
-        return
-    SsActive := false
     SetTimer ScreensaverWatch, 0
+    wasActive := SsActive
+    SsActive := false
     for hwnd in WinGetList("Omarchy Screensaver ahk_exe WindowsTerminal.exe")
         try PostMessage 0x10, 0, 0, , hwnd
-    SystemCursor(true)
+    loop 20 {
+        if !ProcessExist("ttfx.exe")
+            break
+        ProcessClose "ttfx.exe"
+    }
+    if wasActive
+        WmLog("screensaver: stop (" (IsObject(reason) ? "exit" : reason) ")")
 }
 
 ToggleScreensaver() {
@@ -330,18 +360,14 @@ InputDesktopActive() {
     return false
 }
 
-; Hide the pointer (blank system cursors) / bring the real ones back.
-SystemCursor(show) {
-    static ids := [32512, 32513, 32514, 32515, 32516, 32642, 32643, 32644, 32645, 32646, 32648, 32649, 32650, 32651]
-    if show {
-        DllCall("SystemParametersInfo", "uint", 0x57, "uint", 0, "ptr", 0, "uint", 0)   ; SPI_SETCURSORS
-        return
-    }
-    andMask := Buffer(128, 0xFF), xorMask := Buffer(128, 0)
-    for id in ids {
-        blank := DllCall("CreateCursor", "ptr", 0, "int", 0, "int", 0, "int", 32, "int", 32, "ptr", andMask, "ptr", xorMask, "ptr")
-        DllCall("SetSystemCursor", "ptr", blank, "uint", id)
-    }
+; Reload the system pointers (undoes any hidden-cursor state; the screensaver no
+; longer hides the pointer: a system-wide change is too risky around sleep/lock).
+RestoreCursors() {
+    DllCall("SystemParametersInfo", "uint", 0x57, "uint", 0, "ptr", 0, "uint", 0)   ; SPI_SETCURSORS
+}
+
+WmLog(msg) {
+    try FileAppend FormatTime(, "HH:mm:ss") " [wm] " msg "`n", Env("log", A_Temp "\omarchy-win.log"), "UTF-8"
 }
 
 BarGuard() {
@@ -366,7 +392,6 @@ RestartBar() {
         return
     CloseBar()
     try Run('"' Zebar '" startup', , "Hide")
-    SetTimer ReserveBarSpace, -2000
     SetTimer () => Glaze("wm-redraw"), -2500
 }
 
@@ -408,49 +433,26 @@ BarWindows() {
     return bars
 }
 
-ReserveBarSpace() {
-    global BarEnabled, Reserved
-    PerMonitorDpi()
-    bars := BarEnabled ? BarWindows() : Map()
-    loop MonitorGetCount() {
-        MonitorGet A_Index, &l, &t, &r, &b
-        MonitorGetWorkArea A_Index, &wl, &wt, &wr, &wb
-        if bars.Has(A_Index) {
-            want := Max(t, bars[A_Index].bottom)
-            Reserved[A_Index] := true
-        } else if Reserved.Has(A_Index) {
-            want := t   ; bar gone (toggled off): hand the strip back once
-            Reserved.Delete(A_Index)
-        } else
-            continue
-        if wt != want
-            SetWorkArea(wl, want, wr, wb)
+; GlazeWM's gaps hold the bar's strip: the top gap is the bar height (when the bar
+; is on) plus the normal gap (when gaps are on). GlazeWM scales both per monitor DPI,
+; like Zebar scales the bar, so they line up on any screen.
+ApplyGaps(gapsOn, barOn) {
+    file := Env("glazeConfig")
+    yaml := FileRead(file, "UTF-8")
+    gap := Integer(Env("gap", 10)), barH := Integer(Env("barHeight", 26))
+    new := RegExReplace(yaml, "'\d+px'(\s*# gaps)(?!:)", "'" (gapsOn ? gap : 0) "px'$1")
+    new := RegExReplace(new, "'\d+px'(\s*# gaps:top)", "'" ((barOn ? barH : 0) + (gapsOn ? gap : 0)) "px'$1")
+    if new != yaml {
+        f := FileOpen(file, "w", "UTF-8-RAW")
+        f.Write(new)
+        f.Close()
+        Glaze("wm-reload-config")
     }
 }
 
-ReleaseBarSpace(*) {
-    global Reserved
-    PerMonitorDpi()
-    for m in Reserved {
-        if m > MonitorGetCount()
-            continue
-        MonitorGet m, &l, &t
-        MonitorGetWorkArea m, &wl, &wt, &wr, &wb
-        if wt != t
-            SetWorkArea(wl, t, wr, wb)
-    }
-}
-
-SetWorkArea(l, t, r, b) {
-    rc := Buffer(16)
-    NumPut "int", l, "int", t, "int", r, "int", b, rc
-    ; SPI_SETWORKAREA, SPIF_SENDCHANGE (GlazeWM re-tiles on the broadcast)
-    DllCall("SystemParametersInfo", "uint", 0x2F, "uint", 0, "ptr", rc, "uint", 2)
-}
-
-OnSettingChange(wParam, *) {
-    if wParam = 0x2F   ; someone (usually Explorer) changed a work area
-        SetTimer ReserveBarSpace, -100
+GapsOn() {
+    try return !RegExMatch(FileRead(Env("glazeConfig"), "UTF-8"), "inner_gap:\s*'0px'")
+    return true
 }
 
 ; Topmost bar, but a fullscreen window (Super+F, video, game) may cover it.
@@ -726,21 +728,15 @@ ToggleBar() {
     } else {
         CloseBar()
     }
-    SetTimer ReserveBarSpace, BarEnabled ? -2000 : -10
+    ApplyGaps(GapsOn(), BarEnabled)
     Osd("Top bar " (BarEnabled ? "on" : "off"))
 }
 
 ToggleGaps() {
-    file := Env("glazeConfig")
-    yaml := FileRead(file, "UTF-8")
-    on := !RegExMatch(yaml, "inner_gap:\s*'0px'")
-    gap := on ? 0 : Env("gap", 10)
-    yaml := RegExReplace(yaml, "'\d+px'(\s*# gaps)", "'" gap "px'$1")
-    f := FileOpen(file, "w", "UTF-8-RAW")
-    f.Write(yaml)
-    f.Close()
-    Glaze("wm-reload-config")
-    Osd("Window gaps " (on ? "off" : "on"))
+    global BarEnabled
+    on := !GapsOn()
+    ApplyGaps(on, BarEnabled)
+    Osd("Window gaps " (on ? "on" : "off"))
 }
 
 ToggleAwake() {

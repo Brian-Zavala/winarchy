@@ -25,10 +25,10 @@ general:
 gaps:
   scale_with_dpi: true
   # Hyprland gaps_in = 5 (per side) -> 10 between windows; gaps_out = 10.
-  # The bar strip is kept out of each monitor's work area by omarchy-wm.ahk.
+  # The top gap also holds the bar (bar height + gap; the toggles rewrite these lines).
   inner_gap: '{{ gap }}px' # gaps
   outer_gap:
-    top: '{{ gap }}px' # gaps
+    top: '{{ gap_top }}px' # gaps:top
     right: '{{ gap }}px' # gaps
     bottom: '{{ gap }}px' # gaps
     left: '{{ gap }}px' # gaps
