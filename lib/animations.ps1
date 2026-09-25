@@ -134,6 +134,8 @@ function Invoke-Animations([string]$action) {
 # The `animations:` block for GlazeWM's config (only the animation build reads it; the
 # official GlazeWM ignores unknown keys). Omarchy's timing, from default/hypr/looknfeel.lua:
 # windows 3.79 easeOutQuint, windowsIn 4.1 popin 87%, windowsOut 1.49 linear, workspaces off.
+# No opacity fades: the build fades by changing the real window's transparency, and an
+# interrupted fade left windows (Windows Terminal) almost invisible.
 function ConvertTo-AnimationsYaml($cfg) {
     $a = $cfg.animations
     if (-not $a.enabled -or -not (Get-AnimationBuild)) { return '# Window animations: off (turn on with: omarchy-win animations on)' }
@@ -157,13 +159,13 @@ animations:
     duration_ms: $([int]$a.openMs)
     easing: '$ease'
     style: 'zoom'
-    opacity_from: 0.0
+    opacity_from: 1.0
   window_close:
     enabled: true
     duration_ms: $([int]$a.closeMs)
     easing: 'linear'
     style: 'zoom'
-    opacity_to: 0.0
+    opacity_to: 1.0
   workspace_switch:
     enabled: $ws
     duration_ms: 250
