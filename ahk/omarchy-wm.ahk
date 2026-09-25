@@ -271,7 +271,7 @@ ScreensaverWatch() {
         ; Terminal takes a moment: arm once every monitor has its window.
         waited := A_TickCount - SsStart
         if wins.Length >= MonitorGetCount() || (wins.Length && waited > 6000)
-            SsArmed := A_TickCount, ScreensaverPlace(wins)
+            SsArmed := A_TickCount, ScreensaverPlace(wins), WmLog("screensaver: " wins.Length " window(s) after " waited " ms")
         else if waited > 15000
             ScreensaverStop("no window appeared")
         return
@@ -291,7 +291,7 @@ ScreensaverWatch() {
     if A_TimeIdleKeyboard < since - 1500
         ScreensaverStop("key")
     else if Abs(mx - SsMouse[1]) > jiggle || Abs(my - SsMouse[2]) > jiggle
-        ScreensaverStop("mouse")
+        ScreensaverStop("mouse moved " Abs(mx - SsMouse[1]) "," Abs(my - SsMouse[2]) " px")
     else if GetKeyState("LButton", "P") || GetKeyState("RButton", "P") || GetKeyState("MButton", "P")
         ScreensaverStop("click")
     else if !wins.Length
