@@ -6,7 +6,8 @@
 # (below every app window and the bar) showing the old wallpaper, with the new one on top
 # clipped to the band. The real wallpaper is set underneath while the band is still
 # closed, the band opens, then the windows go away. Anything unexpected: the wallpaper is
-# simply set, as before.
+# simply set, as before. The background picker plays the same band on the monitor it
+# covers (zebar/omarchy/menu.js, land), so that monitor gets no window here.
 
 function Initialize-Reveal {
     if (-not ('OmarchyWin.Reveal' -as [type])) {
@@ -107,18 +108,34 @@ function New-RevealWindow([int[]]$rect, $oldImg, $newImg) {
     [pscustomobject]@{ window = $w; image = $grid.Children[1] }
 }
 
-function Invoke-BackgroundReveal([string]$new, [scriptblock]$apply) {
+# Is point (x, y) on monitor rect (x, y, w, h)?
+function Test-OnMonitor([int[]]$point, [int[]]$rect) {
+    $point.Count -eq 2 -and $point[0] -ge $rect[0] -and $point[0] -lt $rect[0] + $rect[2] -and
+        $point[1] -ge $rect[1] -and $point[1] -lt $rect[1] + $rect[3]
+}
+
+# $skip: a point (physical pixels) on the monitor the background picker covers.
+function Invoke-BackgroundReveal([string]$new, [scriptblock]$apply, [int[]]$skip) {
     $old = Join-Path $env:APPDATA 'Microsoft\Windows\Themes\TranscodedWallpaper'
     $applied = $false
     $applyError = $null
     $reveals = @()
     $oldCtx = [IntPtr]::Zero
     try {
-        Initialize-Reveal
-        if (Test-RevealWanted $old) {
+        # One monitor, and the picker covers it: nothing to reveal (and no compile wait).
+        $alone = $false
+        if ($skip.Count -eq 2) {
+            Add-Type -AssemblyName System.Windows.Forms
+            $alone = [System.Windows.Forms.SystemInformation]::MonitorCount -le 1
+        }
+        $monitors = @()
+        if (-not $alone) { Initialize-Reveal }
+        if (-not $alone -and (Test-RevealWanted $old)) {
             # Per-monitor DPI v2: real pixels on every monitor (mixed 4K/1440p setups).
             $oldCtx = [OmarchyWin.Reveal]::SetThreadDpiAwarenessContext([IntPtr]-4)
-            $monitors = [OmarchyWin.Reveal]::Monitors()
+            $monitors = @([OmarchyWin.Reveal]::Monitors() | Where-Object { -not (Test-OnMonitor $skip $_) })
+        }
+        if ($monitors) {                    # none left: the picker reveals them all
             $width = ($monitors | ForEach-Object { $_[2] } | Measure-Object -Maximum).Maximum
             $oldImg = Read-RevealImage $old $width
             $newImg = Read-RevealImage $new $width

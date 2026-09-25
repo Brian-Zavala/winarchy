@@ -173,6 +173,8 @@ function Write-ZebarPack($p, $cfg) {
         "export const MENU = $((Join-Path $Code 'ahk\menu.ahk') | ConvertTo-Json);"
         "export const CLOCK_24H = $("$clock24".ToLower());"
         "export const METRIC = $("$metric".ToLower());"
+        # The background picker plays the wallpaper reveal on its monitor (lib/transition.ps1).
+        "export const REVEAL = $("$($cfg.backgroundTransition -ne 'none')".ToLower());"
     ) -join "`n"
     Write-Utf8 (Join-Path $Pack 'env.js') "$envJs`n"
     Write-Utf8 (Join-Path $Pack 'keybindings.txt') (Get-KeybindingsText $cfg)

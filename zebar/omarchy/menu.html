@@ -8,13 +8,25 @@
     <link rel="stylesheet" type="text/css" href="./user.css" />
   </head>
   <body>
+    <!-- Background picker: the highlighted wallpaper, blurred, behind everything. -->
+    <div id="backdrop">
+      <canvas></canvas>
+      <canvas></canvas>
+      <img id="land" alt="" />
+      <div class="tint"></div>
+    </div>
     <div id="scrim"></div>
     <div id="card">
       <input id="search" spellcheck="false" autocomplete="off" />
       <div id="tabs" class="hidden"></div>
       <div id="list"></div>
       <div id="grid" class="hidden"></div>
-      <div id="footer" class="hidden"></div>
+      <div id="carousel" class="hidden">
+        <div id="stage"></div>
+        <div id="info"></div>
+        <div id="swatches"></div>
+      </div>
+      <div id="footer" class="hidden"><span class="keys"></span><span class="where"></span></div>
     </div>
     <script type="module" src="./menu.js"></script>
   </body>

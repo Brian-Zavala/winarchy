@@ -170,3 +170,32 @@ Describe 'Theme palette' {
         Should -Invoke New-Thumb -Times 1 -ParameterFilter { $Width -eq 960 }
     }
 }
+
+Describe 'Background landing' {
+    BeforeAll { . "$Code\lib\transition.ps1" }
+    It 'finds the monitor the picker covers, left of the primary too' {
+        Test-OnMonitor @(1920, 1080) @(0, 0, 3840, 2160) | Should -BeTrue
+        Test-OnMonitor @(-960, 540) @(-1920, 0, 1920, 1080) | Should -BeTrue
+        Test-OnMonitor @(3840, 10) @(0, 0, 3840, 2160) | Should -BeFalse
+        Test-OnMonitor $null @(0, 0, 3840, 2160) | Should -BeFalse
+    }
+    It 'names the new background in status.json only once the desktop has it' {
+        $Pack = Join-Path $TestDrive ([guid]::NewGuid())
+        $wall = Join-Path $TestDrive 'wall.jpg'
+        Set-Content $wall 'jpg'
+        Mock Save-Wallpaper {}; Mock Save-LockScreen {}; Mock Save-State {}; Mock Start-Hidden {}; Mock Log {}
+        Mock Get-Paths { @{ powershell = 'powershell.exe' } }
+        Mock Set-DesktopWallpaper { $script:seen = (Read-Json (Join-Path $Pack 'status.json'))?.background; $script:cov = $covered }
+        Set-Background $wall @{ theme = 't'; background = 'old'; perTheme = @{} } @(10, 20)
+        $script:seen | Should -Not -Be $wall
+        $script:cov | Should -Be @(10, 20)
+        (Read-Json (Join-Path $Pack 'status.json')).background | Should -Be $wall
+    }
+    It 'plays the same band as the desktop reveal' {
+        $js = Get-Content -Raw "$Code\zebar\omarchy\menu.js"
+        $ps = Get-Content -Raw "$Code\lib\transition.ps1"
+        [regex]::Match($js, 'const LAND_MS = (\d+)').Groups[1].Value | Should -Be ([regex]::Match($ps, '\$ms / (\d+)\.0').Groups[1].Value)
+        $js | Should -Match '0\.09 \* h'                  # half of Omarchy's 0.18 slant
+        $ps | Should -Match '0\.18 \* \$h / 2'
+    }
+}

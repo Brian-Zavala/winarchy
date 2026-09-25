@@ -8,7 +8,7 @@
 - Background and theme pickers, font switcher, screensaver, nightlight, do not disturb, OCR, weather, update indicator, About (fastfetch), Activity (btop).
 - Bar space kept free by GlazeWM's top gap on every monitor/DPI; bar above windows except fullscreen.
 - The bar is started through AutoHotkey, so Zebar no longer logs into (and dies with) the Update/Doctor terminal.
-- Animated pickers: a 3D cover-flow theme selector that previews each theme by morphing the whole menu into its colors, a wallpaper grid with a live blurred backdrop that lands as the desktop, gliding highlights, sliding sub-menus, a font picker drawn in each font, and a bar that fades between themes. Windows' "Animation effects" setting turns the motion off.
+- Animated pickers: a 3D cover-flow theme selector that previews each theme by morphing the whole menu into its colors, a wallpaper grid with a live blurred backdrop that stays up when you pick and opens into the new wallpaper with the same reveal as the desktop (one animation, no flash of the old wallpaper), gliding highlights, sliding sub-menus, a font picker drawn in each font, and a bar that fades between themes. Windows' "Animation effects" setting turns the motion off.
 - Screensaver windows open visibly (they were started hidden and never closed); leftovers are cleaned up.
 - Saved edits apply themselves: config.json, your GlazeWM template, your keybindings script, user.css.
 - Menu actions report back (OSD); failures are logged and shown by doctor; long downloads run in a terminal.

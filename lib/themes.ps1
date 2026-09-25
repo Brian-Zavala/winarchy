@@ -125,26 +125,27 @@ function Update-Index {
 }
 
 # --- backgrounds ------------------------------------------------------------------
-function Set-DesktopWallpaper([string]$path) {
+# $covered: a point on the monitor the background picker covers (it reveals that one itself).
+function Set-DesktopWallpaper([string]$path, [int[]]$covered) {
     Initialize-Native
     Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value '10'   # Fill
     Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value '0'
     # SPI_SETDESKWALLPAPER, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE, under Omarchy's reveal
     # animation (lib/transition.ps1) when it can play.
     $set = { if (-not [OmarchyWin.Native]::SystemParametersInfo(0x14, 0, $path, 3)) { throw "SystemParametersInfo failed for $path" } }.GetNewClosure()
-    if (Get-Command Invoke-BackgroundReveal -ErrorAction SilentlyContinue) { Invoke-BackgroundReveal $path $set } else { & $set }
+    if (Get-Command Invoke-BackgroundReveal -ErrorAction SilentlyContinue) { Invoke-BackgroundReveal $path $set $covered } else { & $set }
 }
 
-function Set-Background([string]$path, $state) {
+function Set-Background([string]$path, $state, [int[]]$covered) {
     $path = (Resolve-Path -LiteralPath $path).Path
     Save-Wallpaper; Save-LockScreen
-    # Status first: the background picker closes when it sees the new path, so the
-    # reveal below plays in full view.
+    Set-DesktopWallpaper $path $covered
+    # Status last: the background picker holds the new wallpaper over its monitor until
+    # status.json names it, then fades to a desktop that already shows it.
     $state.background = $path
     $state.perTheme[$state.theme] = $path
     Save-State $state
     Write-Status $state
-    Set-DesktopWallpaper $path
     # Lock screen follows (WinRT API needs Windows PowerShell 5.1); detached so the picker
     # feels instant. lockscreen.ps1 skips itself if a newer pick has landed meanwhile.
     $p = Get-Paths

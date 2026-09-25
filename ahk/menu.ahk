@@ -9,7 +9,7 @@
 ;   menu.ahk launcher | start | terminal | calendar
 ;   menu.ahk send <keys> | run <target> [args] | url <url> | settings <ms-settings:...>
 ;   menu.ahk edit <file | glaze-config | bar-css | config | launchers | keybindings>
-;   menu.ahk bg-set <path> | bg-next | theme-set <name> | sync | apply | doctor   (-> omarchy-win CLI)
+;   menu.ahk bg-set <path> [landing name] | bg-next | theme-set <name> | sync | apply | doctor   (-> omarchy-win CLI)
 ;   menu.ahk apply-glaze | update-check | animations <toggle> | glaze <glazewm command>
 ;   menu.ahk wm <bar|gaps|awake|transparency|colorpicker>        (-> running omarchy-wm.ahk)
 ;   menu.ahk panel <audio|bluetooth>                             (toggle Windows' quick panel)
@@ -39,7 +39,8 @@ switch verb {
     case "edit": EditFile(arg)
     ; Quick CLI verbs run hidden; a failure (or a result worth knowing) shows an OSD.
     case "bg-set", "theme-set", "bg-next", "font-set":
-        if OmarchyCmdWait(verb, arg)
+        covered := verb = "bg-set" && A_Args.Length > 2 ? Landing(arg, A_Args[3]) : ""
+        if OmarchyCmdWait(verb, arg, covered ? "-Covered" : "", covered)
             Notify(verb = "theme-set" ? "Theme change failed (Update > Doctor shows why)" : verb = "font-set" ? "Font change failed (Update > Doctor shows why)" : "Background change failed (Update > Doctor shows why)")
     case "apply":
         Osd("Applying settings…", 0)
@@ -140,6 +141,29 @@ CliInTerminal(args*) {
     for a in args
         cmd .= ' "' a '"'
     return cmd ' -Pause'
+}
+
+; The background picker plays the wallpaper reveal on its own monitor with the full-size
+; picture: copy it into the pack under the name the picker asked for (whole, then renamed,
+; so the picker never reads half a file). Returns the picker's centre, for the CLI to skip.
+Landing(src, name) {
+    global MenuTitle
+    if !(name ~= "^\d+\.\w+$")
+        return ""
+    dir := Env("pack") "\thumbs\_land"
+    try {
+        DirCreate dir
+        loop files dir "\*"
+            try FileDelete A_LoopFileFullPath
+        FileCopy src, dir "\part.tmp", true
+        FileMove dir "\part.tmp", dir "\" name, true
+    }
+    PerMonitorDpi()
+    try {
+        WinGetPos &x, &y, &w, &h, MenuTitle
+        return (x + w // 2) "," (y + h // 2)
+    }
+    return ""
 }
 
 ; Show an OSD from this short-lived script, then let it finish.

@@ -31,7 +31,9 @@ param(
     [switch]$Yes, [switch]$Adopt, [switch]$KeepApps, [switch]$DryRun, [switch]$Purge,
     [switch]$Offline, [switch]$MonitorsOnly, [switch]$Fix, [switch]$NoRestart,
     # Wait for a key at the end (verbs the menu runs in a terminal window).
-    [switch]$Pause
+    [switch]$Pause,
+    # bg: "x,y" on the monitor the background picker covers (it plays the reveal there).
+    [string]$Covered
 )
 
 $ErrorActionPreference = 'Stop'
@@ -73,7 +75,7 @@ switch ($Verb) {
     }
     { $_ -in 'bg', 'bg-set' } {
         if (-not $Arg) { throw 'usage: omarchy-win bg <image path> | bg next' }
-        if ($Arg -eq 'next') { Use-Lock { Invoke-BackgroundNext } } else { Use-Lock { Set-Background $Arg (Read-State) } }
+        if ($Arg -eq 'next') { Use-Lock { Invoke-BackgroundNext } } else { Use-Lock { Set-Background $Arg (Read-State) @($Covered -split ',' -ne '' | ForEach-Object { [int]$_ }) } }
     }
     'bg-next' { Use-Lock { Invoke-BackgroundNext } }
     'browser-setup' { Enable-BrowserPolicy }
