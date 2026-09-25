@@ -107,3 +107,66 @@ Describe 'Backup journal' {
         Test-Path $f | Should -BeFalse
     }
 }
+
+Describe 'Bar restart' {
+    # Zebar attaches to its parent's console: from `omarchy-win update` it would log into
+    # that terminal and die with it. It must be started through (console-less) AutoHotkey.
+    BeforeAll {
+        Mock Get-Process {}
+        Mock Start-Sleep {}
+        Mock Start-Process {}
+        Mock Start-Hidden {}
+    }
+    It 'starts Zebar through AutoHotkey, not from this console' {
+        Restart-Bar @{ zebar = 'C:\z\zebar.exe'; ahk = 'C:\a\AutoHotkey64.exe' }
+        Should -Invoke Start-Process -Times 1 -ParameterFilter { $FilePath -eq 'C:\a\AutoHotkey64.exe' -and $ArgumentList -contains 'bar-start' }
+        Should -Invoke Start-Hidden -Times 0
+    }
+    It 'falls back to a direct start without AutoHotkey' {
+        Restart-Bar @{ zebar = 'C:\z\zebar.exe' }
+        Should -Invoke Start-Hidden -Times 1
+    }
+}
+
+Describe 'Theme palette' {
+    # theme.css (bar + menu) and index.json (the theme picker's live preview) must use the
+    # same color names, or a previewed theme would morph only halfway.
+    BeforeAll { Mock Log {} }
+    BeforeEach {
+        $Themes = Join-Path $TestDrive ([guid]::NewGuid())
+        $Pack = Join-Path $TestDrive ([guid]::NewGuid())
+        $Thumbs = Join-Path $Pack 'thumbs'
+        $Walls = Join-Path $TestDrive 'no-walls'
+        # 8-digit hex and missing keys, like some Omarchy themes.
+        New-Item -ItemType Directory -Force "$Themes\test-theme" | Out-Null
+        Set-Content "$Themes\test-theme\colors.toml" "background = `"#101010ff`"`nforeground = `"#e0e0e0`"`naccent = `"#ff8800`"`nhyprland_active_border = `"rgba(26a269ee)`""
+        Set-Content "$Themes\test-theme\preview.png" 'png'
+    }
+    It 'writes every palette color into theme.css as #rrggbb' {
+        $palette = Get-BarPalette (Read-Colors 'test-theme')
+        $palette.Values | ForEach-Object { $_ | Should -Match '^#[0-9a-fA-F]{6}$' }
+        $palette['bg'] | Should -Be '#101010'
+        $palette['bg-light'] | Should -Not -BeNullOrEmpty
+        Set-BarTheme (Read-Colors 'test-theme')
+        $written = [regex]::Matches((Get-Content -Raw "$Pack\theme.css"), '--([\w-]+):') | ForEach-Object { $_.Groups[1].Value }
+        $written | Should -Be @($palette.Keys)
+    }
+    It 'only animates colors that theme.css defines' {
+        $keys = @((Get-BarPalette (Read-Colors 'test-theme')).Keys)
+        foreach ($css in 'menu.css', 'bar.css') {
+            $registered = [regex]::Matches((Get-Content -Raw "$Code\zebar\omarchy\$css"), '@property --([\w-]+)') | ForEach-Object { $_.Groups[1].Value }
+            $registered | Should -Not -BeNullOrEmpty
+            $registered | ForEach-Object { $keys | Should -Contain $_ }
+        }
+    }
+    It 'indexes each theme with its palette and a 960px preview' {
+        Mock New-Thumb {}
+        Mock Write-Status {}
+        Mock Get-BackgroundDirs { @() }
+        Update-Index
+        $t = (Get-Content -Raw "$Pack\index.json" | ConvertFrom-Json).themes[0]
+        $t.palette.accent | Should -Be '#ff8800'
+        $t.thumb | Should -Be 'thumbs/_themes-960/test-theme.jpg'
+        Should -Invoke New-Thumb -Times 1 -ParameterFilter { $Width -eq 960 }
+    }
+}

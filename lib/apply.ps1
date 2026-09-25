@@ -56,6 +56,7 @@ function Write-GlazeConfig([int]$monitorCount) {
     $values = @{
         gap = "$gap"; gap_top = "$gapTop"; focused_border = $border
         workspaces = ConvertTo-WorkspacesYaml (Get-WorkspaceLayout $monitorCount $cfg.workspaces)
+        animations = ConvertTo-AnimationsYaml $cfg
     }
     $yaml = Expand-Template (Get-Content -Raw $tplFile) $values
     if ($yaml -eq $old) { return $false }
@@ -97,6 +98,7 @@ function Write-AhkIni($p, $cfg) {
             screensaverIdle = [int]$cfg.screensaver.idleSeconds
             screensaverProfile = 'Omarchy Screensaver'
             weather = [int]($cfg.weather -ne $false)
+            animations = [int]($p.glazewm -and $p.glazewm -ne $p.glazewmOfficial)
         }
     }
     $text = foreach ($section in $ini.Keys) {
@@ -216,10 +218,12 @@ function Set-Autostart($p, $cfg) {
         Save-File $shot
         New-Shortcut $shot (Join-Path $env:SystemRoot 'System32\conhost.exe') "--headless `"$($p.powershell)`" -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Code\ps51\screenshot-to-clipboard.ps1`"" "$Code\ps51" 7
     }
+    # GlazeWM at login: the selected build (official, or the animation build).
     $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
-    if ($p.glazewm -and -not ((Get-ItemProperty $run -ErrorAction SilentlyContinue).PSObject.Properties.Name -contains 'GlazeWM')) {
+    $want = "`"$($p.glazewm)`""
+    if ($p.glazewm -and (Get-ItemProperty $run -ErrorAction SilentlyContinue).GlazeWM -ne $want) {
         Save-Reg $run 'GlazeWM'
-        Set-ItemProperty $run -Name GlazeWM -Value "`"$($p.glazewm)`""
+        Set-ItemProperty $run -Name GlazeWM -Value $want
     }
 }
 
@@ -304,7 +308,11 @@ function Restart-OmarchyAhk($p) {
 function Restart-Bar($p) {
     Get-Process zebar -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep -Milliseconds 800
-    if ($p.zebar) { Start-Hidden $p.zebar @('startup') }
+    if (-not $p.zebar) { return }
+    # Zebar attaches to its parent's console: started from here it would log into this
+    # terminal (omarchy-win update) and die when the tab closes. AutoHotkey has no console.
+    if ($p.ahk) { Start-Process -FilePath $p.ahk -ArgumentList "`"$Code\ahk\menu.ahk`"", 'bar-start' }
+    else { Start-Hidden $p.zebar @('startup') }
 }
 
 function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart) {
@@ -316,6 +324,8 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart) {
         & $p.glazewmCli command wm-reload-config | Out-Null
     }
     if ($MonitorsOnly) { return }
+    # Window animations on/off switches between the official GlazeWM and the animation build.
+    Switch-GlazeWM $p
     Initialize-Branding
     Write-AhkIni $p $cfg
     Write-ZebarPack $p $cfg
@@ -324,6 +334,8 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart) {
     Set-WindowsScreensaver $cfg
     if (-not (Test-Path (Join-Path $Pack 'font.css'))) { Write-FontCss }
     try { [void](Update-FontList) } catch { Log "font list FAILED: $($_.Exception.Message)" }
+    # The pickers' index.json format follows the code, so rebuild it here too (not only on sync).
+    try { Update-Index } catch { Log "picker index FAILED: $($_.Exception.Message)" }
     if (-not (Test-Path (Join-Path $Pack 'theme.css'))) {
         try { Set-BarTheme (Read-Colors (Read-State).theme) } catch { Log "no theme yet: $($_.Exception.Message)" }
     }

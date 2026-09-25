@@ -23,6 +23,12 @@ function Invoke-Doctor([switch]$Fix) {
 
     Write-Host "`nRunning"
     & $check 'GlazeWM' ([bool](Get-Process glazewm -ErrorAction SilentlyContinue)) "start it: `"$($p.glazewm)`""
+    $build = Get-AnimationBuild
+    $running = Get-Process glazewm -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($running) { $running = Get-GlazeWMPath $running $p }
+    $which = if ($p.glazewm -ne $p.glazewmOfficial) { "animation build $($build.commit.Substring(0, 12)) (experimental)" } else { 'official' }
+    & $check "GlazeWM build: $which" (-not $running -or $running -eq $p.glazewm) "the other build is running: omarchy-win apply"
+    if ((Get-Config).animations.enabled -and -not $build) { & $check 'window animations are on, but the animation build is missing' $false 'omarchy-win animations build' }
     & $check 'Zebar (top bar)' ([bool](Get-Process zebar -ErrorAction SilentlyContinue)) 'omarchy-wm.ahk restarts it within 5 s; else run: omarchy-win apply'
     & $check 'Flow Launcher' ([bool](Get-Process Flow.Launcher -ErrorAction SilentlyContinue)) "start it: `"$($p.flow)`""
     $ahk = @(Get-OmarchyAhk | Where-Object { $_.CommandLine -like '*omarchy-wm.ahk*' })

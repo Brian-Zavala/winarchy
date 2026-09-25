@@ -68,6 +68,8 @@ window_behavior:
       maximized: false
       shown_on_top: false
 
+{{ animations }}
+
 # Workspaces are split across monitors (left to right) by omarchy-win apply.
 workspaces:
 {{ workspaces }}

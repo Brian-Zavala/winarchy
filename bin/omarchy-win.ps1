@@ -17,6 +17,8 @@
   omarchy-win font-install <Name>         install a Nerd Font (CascadiaMono, Meslo, FiraCode, ...)
   omarchy-win browser-setup               tint Chrome/Brave's toolbar with the theme (one admin prompt)
   omarchy-win weather | update-check      refresh the bar's weather / update indicator
+  omarchy-win animations [on|off|toggle|build|status]
+                                          window animations (experimental GlazeWM build)
   omarchy-win config                      open your settings file
   omarchy-win keys                        print the keybindings
   omarchy-win status | version | help
@@ -27,7 +29,9 @@ param(
     [Parameter(Position = 0)][string]$Verb = 'help',
     [Parameter(Position = 1)][string]$Arg,
     [switch]$Yes, [switch]$Adopt, [switch]$KeepApps, [switch]$DryRun, [switch]$Purge,
-    [switch]$Offline, [switch]$MonitorsOnly, [switch]$Fix, [switch]$NoRestart
+    [switch]$Offline, [switch]$MonitorsOnly, [switch]$Fix, [switch]$NoRestart,
+    # Wait for a key at the end (verbs the menu runs in a terminal window).
+    [switch]$Pause
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,9 +46,15 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\lib\uninstall.ps1"
 . "$PSScriptRoot\..\lib\doctor.ps1"
 . "$PSScriptRoot\..\lib\extras.ps1"
+. "$PSScriptRoot\..\lib\animations.ps1"
+. "$PSScriptRoot\..\lib\transition.ps1"
 
 $version = (Get-Content -Raw (Join-Path $Code 'VERSION') -ErrorAction SilentlyContinue)?.Trim()
 
+# Menu and bar actions run hidden: a failure is logged (doctor shows the recent ones)
+# and the exit code tells menu.ahk to say so.
+$failed = $false
+try {
 switch ($Verb) {
     'install' { Invoke-Install -Yes:$Yes -Adopt:$Adopt }
     { $_ -in 'uninstall', 'revert' } { Invoke-Uninstall -KeepApps:$KeepApps -DryRun:$DryRun -Purge:$Purge }
@@ -70,6 +80,7 @@ switch ($Verb) {
     'extras' { Install-Extras; Use-Lock { Invoke-Apply } }
     'weather' { Update-Weather }
     'update-check' { Invoke-UpdateCheck }
+    'animations' { Invoke-Animations $Arg }
     { $_ -in 'font', 'font-set' } {
         if (-not $Arg -or $Arg -eq 'list') { Update-FontList | ForEach-Object { "$(if ($_.name -eq (Get-FontFamily)) { '*' } else { ' ' }) $($_.name)" } }
         else { Use-Lock { Invoke-FontSet $Arg } }
@@ -88,3 +99,12 @@ switch ($Verb) {
     'version' { "omarchy-win $version" }
     default { Get-Help $PSCommandPath -Detailed | Out-String | Write-Host }
 }
+} catch {
+    $failed = $true
+    Log "FAILED: $($_.Exception.Message)"
+}
+if ($Pause -and -not [Console]::IsInputRedirected) {
+    Write-Host "`n$(if ($failed) { 'Failed (see above).' } else { 'Done.' }) Press any key to close." -ForegroundColor $(if ($failed) { 'Yellow' } else { 'Green' })
+    [void][Console]::ReadKey($true)
+}
+if ($failed) { exit 1 }

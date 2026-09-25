@@ -2,12 +2,12 @@
 # Mirrors Omarchy's bin/omarchy-theme-set, omarchy-theme-bg-set and omarchy-theme-bg-next.
 
 # --- sync -------------------------------------------------------------------------
-function New-Thumb([string]$src, [string]$dst) {
+function New-Thumb([string]$src, [string]$dst, [int]$Width = 480) {
     Add-Type -AssemblyName PresentationCore, WindowsBase
     $bi = [System.Windows.Media.Imaging.BitmapImage]::new()
     $bi.BeginInit()
     $bi.UriSource = [Uri]::new($src)
-    $bi.DecodePixelWidth = 480
+    $bi.DecodePixelWidth = $Width
     $bi.CacheOption = [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad
     $bi.CreateOptions = [System.Windows.Media.Imaging.BitmapCreateOptions]::IgnoreColorProfile
     $bi.EndInit()
@@ -19,9 +19,9 @@ function New-Thumb([string]$src, [string]$dst) {
     try { $enc.Save($fs) } finally { $fs.Close() }
 }
 
-function Update-Thumb([string]$src, [string]$dst) {
+function Update-Thumb([string]$src, [string]$dst, [int]$Width = 480) {
     if ((Test-Path $dst) -and (Get-Item $dst).LastWriteTime -ge (Get-Item $src).LastWriteTime) { return $true }
-    try { New-Thumb $src $dst; $true } catch { Log "thumbnail failed for ${src}: $($_.Exception.Message)"; $false }
+    try { New-Thumb $src $dst -Width $Width; $true } catch { Log "thumbnail failed for ${src}: $($_.Exception.Message)"; $false }
 }
 
 function Get-BackgroundDirs {
@@ -74,20 +74,24 @@ function Invoke-Sync([switch]$Offline) {
     Update-Index
 }
 
-# index.json feeds the theme and background pickers.
+# index.json feeds the theme and background pickers. Each theme carries its bar palette,
+# so the theme picker can morph into a theme before it is applied.
 function Update-Index {
     New-Item -ItemType Directory -Force $Thumbs | Out-Null
+    # Theme previews are the picker's big cover-flow cards, so they are twice the width of the
+    # wallpaper thumbs. The width is in the folder name: Update-Thumb only compares timestamps.
+    Remove-Item (Join-Path $Thumbs '_themes') -Recurse -Force -ErrorAction SilentlyContinue
     $themeList = foreach ($dir in Get-ChildItem $Themes -Directory | Where-Object Name -NotLike '_*' | Sort-Object Name) {
         if (-not (Test-Path (Join-Path $dir.FullName 'colors.toml'))) { continue }
         $c = Read-Colors $dir.Name
         $preview = Join-Path $dir.FullName 'preview.png'
         $thumb = $null
-        if ((Test-Path $preview) -and (Update-Thumb $preview (Join-Path $Thumbs "_themes\$($dir.Name).jpg"))) {
-            $thumb = "thumbs/_themes/$($dir.Name).jpg"
+        if ((Test-Path $preview) -and (Update-Thumb $preview (Join-Path $Thumbs "_themes-960\$($dir.Name).jpg") -Width 960)) {
+            $thumb = "thumbs/_themes-960/$($dir.Name).jpg"
         }
         [ordered]@{
             name = $dir.Name; label = Get-ThemeLabel $dir.Name; mode = $c.mode; thumb = $thumb
-            colors = [ordered]@{ background = $c.background; foreground = $c.foreground; accent = $c.accent }
+            palette = Get-BarPalette $c
         }
     }
 
@@ -125,18 +129,22 @@ function Set-DesktopWallpaper([string]$path) {
     Initialize-Native
     Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value '10'   # Fill
     Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value '0'
-    # SPI_SETDESKWALLPAPER, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE
-    if (-not [OmarchyWin.Native]::SystemParametersInfo(0x14, 0, $path, 3)) { throw "SystemParametersInfo failed for $path" }
+    # SPI_SETDESKWALLPAPER, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE, under Omarchy's reveal
+    # animation (lib/transition.ps1) when it can play.
+    $set = { if (-not [OmarchyWin.Native]::SystemParametersInfo(0x14, 0, $path, 3)) { throw "SystemParametersInfo failed for $path" } }.GetNewClosure()
+    if (Get-Command Invoke-BackgroundReveal -ErrorAction SilentlyContinue) { Invoke-BackgroundReveal $path $set } else { & $set }
 }
 
 function Set-Background([string]$path, $state) {
     $path = (Resolve-Path -LiteralPath $path).Path
     Save-Wallpaper; Save-LockScreen
-    Set-DesktopWallpaper $path
+    # Status first: the background picker closes when it sees the new path, so the
+    # reveal below plays in full view.
     $state.background = $path
     $state.perTheme[$state.theme] = $path
     Save-State $state
     Write-Status $state
+    Set-DesktopWallpaper $path
     # Lock screen follows (WinRT API needs Windows PowerShell 5.1); detached so the picker
     # feels instant. lockscreen.ps1 skips itself if a newer pick has landed meanwhile.
     $p = Get-Paths
@@ -159,14 +167,23 @@ function Invoke-BackgroundNext {
 }
 
 # --- theme targets ----------------------------------------------------------------
-function Set-BarTheme($c) {
+# The bar + menu CSS variables (theme.css, and index.json for the theme picker's preview):
+# css name -> colors.toml key.
+function Get-BarPalette($c) {
     $vars = [ordered]@{
         'bg' = 'background'; 'bg-dark' = 'dark_background'; 'bg-darker' = 'darker_background'; 'bg-light' = 'lighter_background'
         'fg' = 'foreground'; 'fg-dim' = 'dark_foreground'; 'fg-light' = 'light_foreground'; 'fg-bright' = 'bright_foreground'
         'accent' = 'accent'; 'alert' = 'red'; 'muted' = 'muted'; 'selection' = 'selection'
         'red' = 'red'; 'green' = 'green'; 'yellow' = 'yellow'; 'blue' = 'blue'; 'magenta' = 'magenta'; 'cyan' = 'cyan'; 'orange' = 'orange'
     }
-    $lines = foreach ($k in $vars.Keys) { "  --${k}: $($c[$vars[$k]]);" }
+    $palette = [ordered]@{}
+    foreach ($k in $vars.Keys) { $palette[$k] = $c[$vars[$k]] }
+    $palette
+}
+
+function Set-BarTheme($c) {
+    $palette = Get-BarPalette $c
+    $lines = foreach ($k in $palette.Keys) { "  --${k}: $($palette[$k]);" }
     Write-Utf8 (Join-Path $Pack 'theme.css') ("/* Generated by omarchy-win theme-set. */`n:root {`n  color-scheme: $($c.mode);`n$($lines -join "`n")`n}`n")
 }
 

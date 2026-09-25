@@ -267,6 +267,17 @@
       setInterval(poll, 2000);
       poll();
 
+      // Style > Top Bar (your CSS): reload user.css when it is saved.
+      let userCss = null;
+      async function pollUserCss() {
+        const text = await fetch(`./user.css?t=${Date.now()}`, { cache: 'no-store' }).then(r => (r.ok ? r.text() : null)).catch(() => null);
+        if (text === null) return;
+        if (userCss !== null && text !== userCss) $('user').href = `./user.css?v=${Date.now()}`;
+        userCss = text;
+      }
+      setInterval(pollUserCss, 2000);
+      pollUserCss();
+
       providers.onOutput(render);
       render();
     </script>

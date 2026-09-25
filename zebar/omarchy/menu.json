@@ -54,7 +54,8 @@
       { "label": "Do Not Disturb", "icon": "", "action": ["wm", "dnd"] },
       { "label": "Top Bar", "icon": "", "action": ["wm", "bar"] },
       { "label": "Window Gaps", "icon": "", "action": ["wm", "gaps"] },
-      { "label": "Window Transparency", "icon": "", "action": ["wm", "transparency"] }
+      { "label": "Window Transparency", "icon": "", "action": ["wm", "transparency"] },
+      { "label": "Window Animations", "icon": "󰗘", "action": ["animations", "toggle"] }
     ]
   },
   "style": {
@@ -110,7 +111,6 @@
       { "label": "Input", "icon": "", "action": ["settings", "ms-settings:typing"] },
       { "label": "Settings", "icon": "", "action": ["edit", "config"] },
       { "label": "Keybindings", "icon": "", "action": ["edit", "keybindings"] },
-      { "label": "Launchers", "icon": "", "action": ["edit", "launchers"] },
       { "label": "GlazeWM", "icon": "", "action": ["edit", "glaze-config"] }
     ]
   },
@@ -122,7 +122,7 @@
       { "label": "Themes & Backgrounds", "icon": "", "action": ["sync"] },
       { "label": "Apply Settings", "icon": "", "action": ["apply"] },
       { "label": "Doctor", "icon": "", "action": ["doctor"] },
-      { "label": "Reload GlazeWM", "icon": "", "action": ["send", "#+!r"] }
+      { "label": "Reload GlazeWM", "icon": "", "action": ["glaze", "wm-reload-config"] }
     ]
   },
   "system": {

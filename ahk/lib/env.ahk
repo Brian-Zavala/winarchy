@@ -25,18 +25,44 @@ Env(key, default := "") {
 
 ; Run an omarchy-win CLI verb hidden (bin\omarchy-win.ps1 under PowerShell 7).
 OmarchyCmd(args*) {
-    cmd := '"' Env("pwsh", "pwsh.exe") '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' Env("code") '\bin\omarchy-win.ps1"'
-    for a in args
-        cmd .= ' "' StrReplace(a, '"', '\"') '"'
-    try Run cmd, , "Hide"
+    try Run OmarchyCmdLine(args*), , "Hide"
 }
 
-; Open a command in the user's terminal (Windows Terminal if present).
+; Same, waiting for it: returns the exit code (1 = failed; the log says why).
+OmarchyCmdWait(args*) {
+    try return RunWait(OmarchyCmdLine(args*), , "Hide")
+    return 1
+}
+
+OmarchyCmdLine(args*) {
+    cmd := '"' Env("pwsh", "pwsh.exe") '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' Env("code") '\bin\omarchy-win.ps1"'
+    for a in args
+        if a != ""
+            cmd .= ' "' StrReplace(a, '"', '\"') '"'
+    return cmd
+}
+
+; Open a command in the user's terminal (Windows Terminal if present, else its own console).
 RunInTerminal(title, command) {
-    if Env("wt")
-        Run 'wt.exe new-tab --title "' title '" ' command
-    else
-        Run '"' Env("pwsh", "pwsh.exe") '" -NoExit -Command ' command
+    if Env("wt") {
+        try {
+            Run 'wt.exe new-tab --title "' title '" ' command
+            return
+        }
+    }
+    Run command
+}
+
+; Windows Terminal with these arguments, or the fallback command line without it.
+RunWt(args, fallback := "") {
+    if Env("wt") {
+        try {
+            Run 'wt.exe ' args
+            return
+        }
+    }
+    if fallback
+        try Run fallback
 }
 
 ; Physical-pixel coordinates (what GlazeWM uses) for this thread.

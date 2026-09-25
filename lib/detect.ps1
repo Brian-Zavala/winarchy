@@ -127,8 +127,8 @@ function Update-Paths {
         ahk            = Find-AutoHotkey
         pwsh           = Find-Pwsh
         powershell     = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-        glazewm        = Find-First @((Join-Path "$glazeDir" 'glazewm.exe'))
-        glazewmCli     = Find-First @((Join-Path "$glazeDir" 'cli\glazewm.exe'), (Join-Path "$glazeDir" 'glazewm.exe'))
+        glazewmOfficial    = Find-First @((Join-Path "$glazeDir" 'glazewm.exe'))
+        glazewmCliOfficial = Find-First @((Join-Path "$glazeDir" 'cli\glazewm.exe'), (Join-Path "$glazeDir" 'glazewm.exe'))
         zebar          = Find-First @((Join-Path $env:ProgramFiles 'glzr.io\Zebar\zebar.exe'), (Find-Program zebar))
         flow           = Find-First @((Join-Path $flowDir 'Flow.Launcher.exe'))
         flowSettings   = $flowSettings
@@ -161,6 +161,10 @@ function Update-Paths {
         build          = [Environment]::OSVersion.Version.Build
         arch           = $env:PROCESSOR_ARCHITECTURE
     }
+    # glazewm / glazewmCli: the GlazeWM that should run (the animation build when it is on).
+    $sel = Get-SelectedGlazeWM $p
+    $p.glazewm = $sel.exe
+    $p.glazewmCli = $sel.cli
     Write-Json $PathsFile $p 6
     Read-Json $PathsFile -AsHashtable
 }

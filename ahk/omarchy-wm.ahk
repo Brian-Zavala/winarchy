@@ -1,6 +1,7 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
 #Include lib\env.ahk
+#Include lib\osd.ahk
 
 ; Omarchy extras that GlazeWM can't do itself: the bar's screen space, menus,
 ; toggles, panels, capture, drag, clipboard and utility keys.
@@ -16,7 +17,6 @@ BarTitle := "Zebar - omarchy / bar ahk_exe zebar.exe"
 
 BarEnabled := true
 Awake := false
-OsdGui := 0
 Transparent := Map()
 
 PanelSeen := Map()     ; quick panel kind -> tick it was last seen open
@@ -87,17 +87,128 @@ BluetoothStatus()
 if Env("syncAtLogin", "1") = "1"
     SetTimer () => OmarchyCmd("sync", "-Offline"), -90000
 ; Project app launchers (Super+Return terminal, ...) unless you use your own.
+; Your copy (%USERPROFILE%\.omarchy-win\launchers.ahk, made by Setup > Keybindings) wins;
+; it gets env.ahk through /include, so it needs no #Include of the code folder.
 if Env("launchers", "1") = "1"
-    try Run('"' A_AhkPath '" "' A_ScriptDir '\launchers.ahk"')
+    StartLaunchers()
+
+StartLaunchers() {
+    user := Env("data") "\launchers.ahk"
+    try Run(FileExist(user)
+        ? '"' A_AhkPath '" /include "' A_ScriptDir '\lib\env.ahk" "' user '"'
+        : '"' A_AhkPath '" "' A_ScriptDir '\launchers.ahk"')
+}
+
+; --- Live reload: saved edits take effect (Hyprland reloads its config on save) ----
+;   config.json          -> omarchy-win apply
+;   glazewm.yaml.tpl     -> rewrite GlazeWM's config and reload it
+;   your keybindings     -> reload that script (the file itself is never touched)
+Watched := Map()
+SetTimer WatchEdits, 2000
+
+WatchEdits() {
+    global Watched
+    data := Env("data")
+    for path, action in Map(data "\config.json", "apply", data "\glazewm.yaml.tpl", "apply-glaze", KeybindingsFile(), "reload") {
+        t := FileExist(path) ? FileGetTime(path, "M") : ""
+        if !Watched.Has(path) {
+            Watched[path] := {seen: t, pending: t, since: 0}
+            continue
+        }
+        w := Watched[path]
+        if t = w.seen
+            continue
+        if t != w.pending {             ; still being written: wait until it settles
+            w.pending := t, w.since := A_TickCount
+            continue
+        }
+        if A_TickCount - w.since < 1500
+            continue
+        w.seen := t
+        if t = ""
+            continue
+        ; omarchy-win's own writes (e.g. animations on/off) apply themselves.
+        if action = "apply" && FileExist(data "\generated\config.selfwrite") && Trim(FileRead(data "\generated\config.selfwrite")) = t
+            continue
+        WmLog("saved: " path)
+        if action = "reload"
+            ReloadScript(path)
+        else
+            Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" ' action)   ; shows the result
+    }
+}
+
+; The file Setup > Keybindings opens: your own launcher script, or your copy of ours.
+KeybindingsFile() {
+    if Env("launchers", "1") != "1"
+        return A_Startup "\launchers.ahk"
+    user := Env("data") "\launchers.ahk"
+    return FileExist(user) ? user : A_ScriptDir "\launchers.ahk"
+}
+
+; AutoHotkey's own "Reload Script" command, so any script (with or without a tray icon)
+; restarts with its saved changes; start it if it isn't running.
+ReloadScript(path) {
+    DetectHiddenWindows true
+    SetTitleMatchMode 2
+    if hwnd := WinExist(path " ahk_class AutoHotkey") {
+        PostMessage 0x111, 65303, 0, , hwnd
+    } else if path = Env("data") "\launchers.ahk" || path = A_ScriptDir "\launchers.ahk" {
+        StartLaunchers()
+    } else {
+        try Run('"' A_AhkPath '" "' path '"')
+    }
+    Osd("Keybindings reloaded")
+}
+
+; --- Window animations build: keep it running, fall back to the official GlazeWM -----
+; (Experimental build: if it quits twice within 5 minutes, animations are switched off.)
+SetTimer GlazeGuard, 3000
+
+GlazeGuard() {
+    static gone := 0, deaths := []
+    exe := Env("glazewm")
+    if !InStr(exe, "\glazewm-animations\") || ProcessExist("glazewm.exe") {
+        gone := 0
+        return
+    }
+    ; omarchy-win is switching builds right now.
+    flag := Env("data") "\generated\glazewm-switch.flag"
+    if FileExist(flag) && DateDiff(A_Now, FileGetTime(flag, "M"), "Seconds") < 30
+        return
+    if !gone {
+        gone := A_TickCount
+        return
+    }
+    now := A_TickCount
+    recent := []
+    for d in deaths
+        if now - d < 300000
+            recent.Push(d)
+    deaths := recent
+    deaths.Push(now)
+    gone := 0
+    if deaths.Length >= 2 {
+        deaths := []
+        WmLog("GlazeWM animation build stopped twice: switching animations off")
+        Osd("Window animations off: the animation build stopped", 4000)
+        OmarchyCmd("animations", "off")
+    } else {
+        WmLog("GlazeWM animation build stopped: restarting it")
+        try Run('"' exe '"', RegExReplace(exe, "\[^\]+$"))
+    }
+}
 
 ; --- Screensaver (Omarchy: effects after 2.5 min idle; any input ends it) -----
 SsFlag := Env("data") "\generated\screensaver-off"
-SsActive := false, SsStart := 0, SsIdleBase := 0
-SsEnabled := Env("screensaver", "0") = "1" && !FileExist(SsFlag)
+SsTitle := "Omarchy Screensaver ahk_exe WindowsTerminal.exe"
+SsActive := false, SsStart := 0, SsArmed := 0, SsMouse := [0, 0]
+SsConfigured := Env("screensaver", "0") = "1"
+SsEnabled := SsConfigured && !FileExist(SsFlag)
 RestoreCursors()              ; an older version hid the pointer during the screensaver
+ScreensaverStop("startup")    ; older versions left hidden screensaver windows running
 OnExit ScreensaverStop
-if Env("screensaver", "0") = "1"
-    SetTimer ScreensaverIdle, 5000
+SetTimer ScreensaverIdle, 5000
 
 OnPowerBroadcast(wParam, *) {
     global QuietUntil
@@ -132,45 +243,101 @@ ScreensaverIdle() {
 }
 
 ScreensaverStart() {
-    global SsActive, SsStart, SsIdleBase
+    global SsActive, SsStart, SsArmed
     if SsActive
         return
-    SsActive := true, SsStart := A_TickCount, SsIdleBase := A_TimeIdlePhysical
+    if !Env("wt") {
+        Osd("The screensaver needs Windows Terminal")
+        return
+    }
+    SsActive := true, SsStart := A_TickCount, SsArmed := 0
     WmLog("screensaver: start")
     PerMonitorDpi()
     loop MonitorGetCount() {
         MonitorGet A_Index, &l, &t
-        try Run('wt.exe -w new --pos ' (l + 40) ',' (t + 40) ' --fullscreen -p "' Env("screensaverProfile", "Omarchy Screensaver") '"', , "Hide")
+        ; Never with "Hide": Windows Terminal honours it and the window stays invisible.
+        try Run('wt.exe -w new --pos ' (l + 40) ',' (t + 40) ' --fullscreen -p "' Env("screensaverProfile", "Omarchy Screensaver") '"')
     }
     SetTimer ScreensaverWatch, 100
 }
 
 ScreensaverWatch() {
-    global SsStart, SsIdleBase
-    elapsed := A_TickCount - SsStart
-    if elapsed < 1500
+    global SsStart, SsArmed, SsMouse, SsTitle
+    DetectHiddenWindows true
+    PerMonitorDpi()
+    CoordMode "Mouse", "Screen"
+    wins := WinGetList(SsTitle)
+    if !SsArmed {
+        ; Terminal takes a moment: arm once every monitor has its window.
+        waited := A_TickCount - SsStart
+        if wins.Length >= MonitorGetCount() || (wins.Length && waited > 6000)
+            SsArmed := A_TickCount, ScreensaverPlace(wins)
+        else if waited > 15000
+            ScreensaverStop("no window appeared")
         return
-    ; Physical input since the start resets the idle counter. Also stop if the
-    ; windows are gone (a key press inside one ends its script), the session got
-    ; locked, or it has run for 4 hours (the display is long off by then).
-    if A_TimeIdlePhysical + 300 < SsIdleBase + elapsed
-        ScreensaverStop("input")
-    else if elapsed > 8000 && !WinExist("Omarchy Screensaver ahk_exe WindowsTerminal.exe")
+    }
+    since := A_TickCount - SsArmed
+    ; 1.5 s grace from when the windows appeared (a Preview is started with the mouse);
+    ; the input baseline (pointer position) is taken at its end.
+    if since < 1500 {
+        if since > 600 && since < 800
+            ScreensaverPlace(wins)      ; again, in case GlazeWM touched one
+        MouseGetPos &mx, &my
+        SsMouse := [mx, my]
+        return
+    }
+    MouseGetPos &mx, &my
+    jiggle := Round(10 * MonitorDpi(MonitorUnderMouse()) / 96)
+    if A_TimeIdleKeyboard < since - 1500
+        ScreensaverStop("key")
+    else if Abs(mx - SsMouse[1]) > jiggle || Abs(my - SsMouse[2]) > jiggle
+        ScreensaverStop("mouse")
+    else if GetKeyState("LButton", "P") || GetKeyState("RButton", "P") || GetKeyState("MButton", "P")
+        ScreensaverStop("click")
+    else if !wins.Length
         ScreensaverStop("closed")
     else if !InputDesktopActive()
         ScreensaverStop("locked")
-    else if elapsed > 4 * 3600000
+    else if A_TickCount - SsStart > 4 * 3600000
         ScreensaverStop("timeout")
 }
 
-; Closes every screensaver window (and anything they left running). Safe to call anytime.
+; Each window visible, topmost and covering its monitor, and not tiled by GlazeWM.
+ScreensaverPlace(wins) {
+    for i, hwnd in wins {
+        try {
+            if info := GlazeWindowInfo(hwnd)
+                RunWait('"' GlazeCli '" command --id ' info.id ' ignore', , "Hide")
+            WinShow hwnd
+            MonitorGet MonitorOfWindow(hwnd), &l, &t, &r, &b
+            WinGetPos &x, &y, &w, &h, hwnd
+            if x != l || y != t || w != r - l || h != b - t
+                WinMove l, t, r - l, b - t, hwnd
+            WinSetAlwaysOnTop 1, hwnd
+            if i = 1
+                WinActivate hwnd
+        }
+    }
+}
+
+; Closes every screensaver window, hidden ones included, and anything they left
+; running (older versions started them hidden, so they outlived every stop). Safe anytime.
 ScreensaverStop(reason := "exit", *) {
-    global SsActive
+    global SsActive, SsTitle
     SetTimer ScreensaverWatch, 0
     wasActive := SsActive
     SsActive := false
-    for hwnd in WinGetList("Omarchy Screensaver ahk_exe WindowsTerminal.exe")
+    DetectHiddenWindows true
+    left := 0
+    for hwnd in WinGetList(SsTitle) {
         try PostMessage 0x10, 0, 0, , hwnd
+        left++
+    }
+    try {
+        for proc in ComObjGet("winmgmts:").ExecQuery("SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name='pwsh.exe' OR Name='powershell.exe'")
+            if InStr(proc.CommandLine, "\lib\screensaver.ps1")
+                ProcessClose proc.ProcessId
+    }
     loop 20 {
         if !ProcessExist("ttfx.exe")
             break
@@ -178,10 +345,16 @@ ScreensaverStop(reason := "exit", *) {
     }
     if wasActive
         WmLog("screensaver: stop (" (IsObject(reason) ? "exit" : reason) ")")
+    else if left
+        WmLog("screensaver: closed " left " leftover window(s)")
 }
 
 ToggleScreensaver() {
-    global SsEnabled, SsFlag
+    global SsEnabled, SsFlag, SsConfigured
+    if !SsConfigured {
+        Osd("Screensaver is off in Setup > Settings")
+        return
+    }
     SsEnabled := !SsEnabled
     if SsEnabled {
         try FileDelete SsFlag
@@ -339,7 +512,7 @@ ShowWeather() {
 Activity() {
     btop := Env("btop")
     if btop && FileExist(btop)
-        Run 'wt.exe -w new --title Activity "' btop '"'
+        RunWt('-w new --title Activity "' btop '"', '"' btop '"')
     else
         Run "taskmgr.exe"
 }
@@ -808,50 +981,6 @@ FocusMonitor(step) {
     if hwnd := WinExist("A")
         cur := MonitorPosition(MonitorOfWindow(hwnd))
     Glaze("focus --monitor " Mod(cur + step + n, n))
-}
-
-; Small Omarchy-style OSD at the bottom center of the active monitor.
-Osd(text) {
-    global OsdGui
-    colors := ThemeColors()
-    OsdHide()
-    PerMonitorDpi()   ; size + place it in the monitor's real pixels (mixed-DPI setups)
-    mon := MonitorUnderMouse()
-    scale := MonitorDpi(mon) / 96
-    OsdGui := g := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20 +Border -DPIScale", "omarchy-osd")
-    g.BackColor := colors.bg
-    g.MarginX := Round(18 * scale), g.MarginY := Round(10 * scale)
-    g.SetFont("s" Round(11 * scale * 96 / A_ScreenDPI) " c" colors.fg, colors.font)
-    g.AddText(, text)
-    g.Show("Hide AutoSize")
-    g.GetPos(, , &w, &h)
-    MonitorGetWorkArea(mon, &l, &t, &r, &b)
-    g.Show("NoActivate x" (l + (r - l - w) // 2) " y" (b - h - Round(60 * scale)))
-    SetTimer OsdHide, -1200
-}
-OsdHide() {
-    global OsdGui
-    if OsdGui
-        OsdGui.Destroy()
-    OsdGui := 0
-}
-
-; Current theme colors (theme.css) and font (status.json); Tokyo Night if missing.
-ThemeColors() {
-    global Pack
-    c := {bg: "1a1b26", fg: "a9b1d6", font: "JetBrainsMono Nerd Font"}
-    try {
-        css := FileRead(Pack "\theme.css")
-        if RegExMatch(css, "--bg:\s*#([0-9a-fA-F]{6})", &m)
-            c.bg := m[1]
-        if RegExMatch(css, "--fg:\s*#([0-9a-fA-F]{6})", &m)
-            c.fg := m[1]
-    }
-    try {
-        if RegExMatch(FileRead(Pack "\status.json"), '"font":\s*"([^"]+)"', &m)
-            c.font := m[1]
-    }
-    return c
 }
 
 ; indicators.json feeds the bar's indicator icons (this script is its only writer).

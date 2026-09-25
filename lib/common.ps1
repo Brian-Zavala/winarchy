@@ -89,7 +89,9 @@ function Write-Status($s, [switch]$BumpTheme) {
     $path = Join-Path $Pack 'status.json'
     $old = Read-Json $path
     $ver = if ($BumpTheme -or -not $old) { [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() } else { $old.themeVersion }
-    Write-Json $path ([ordered]@{ theme = $s.theme; background = $s.background; font = $s.font; themeVersion = $ver })
+    # The effective font (the default when none was picked), so the font picker can mark it.
+    $font = if (Get-Command Get-FontFamily -ErrorAction SilentlyContinue) { Get-FontFamily } else { $s.font }
+    Write-Json $path ([ordered]@{ theme = $s.theme; background = $s.background; font = $font; themeVersion = $ver })
 }
 
 # "0-winding-road.jpg" -> "Winding Road" (omarchy-theme-bg-current naming)

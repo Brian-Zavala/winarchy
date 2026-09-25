@@ -31,6 +31,20 @@
     "enabled": true,
     "idleSeconds": 150
   },
+  "backgroundTransition": "reveal",
+  "animations": {
+    "enabled": false,
+    "moveMs": 379,
+    "openMs": 410,
+    "closeMs": 149,
+    "workspaceSwitch": false,
+    "source": {
+      "repo": "florensm/glazewm",
+      "commit": "d76641418f9642837b63817a8eeed7fbed4aadb5",
+      "version": "3.10.1",
+      "fallbackToolchain": "nightly-2026-07-20"
+    }
+  },
   "weather": true,
   "location": null,
   "screenshotAutoCopy": false,
