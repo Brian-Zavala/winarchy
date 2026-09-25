@@ -74,5 +74,8 @@ html, body {
 .paused { color: var(--alert); }
 
 .indicator { cursor: pointer; }
+/* Admin (UAC) prompt waiting: pulse so it gets noticed. */
+.uac { animation: uac-pulse 1.2s ease-in-out infinite; }
+@keyframes uac-pulse { 50% { opacity: 0.35; } }
 .update { color: var(--accent); }
 #weather { cursor: pointer; }

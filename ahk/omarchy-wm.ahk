@@ -71,8 +71,12 @@ OnMessage DllCall("RegisterWindowMessage", "Str", "TaskbarCreated", "UInt"), (*)
 OnMessage 0x007E, (*) => SetTimer(OnDisplayChange, -3000)    ; WM_DISPLAYCHANGE
 ; Commands from menu.ahk (menu widget actions that need this script's state).
 OnMessage 0x5555, OnMenuCommand
+; Admin (UAC) prompts parked in the hidden taskbar: shield in the bar (see UacWatch).
+global UacClass := "ahk_class $$$Secure UAP Dummy Window Class For Interim Dialog"
+global UacPending := ""            ; title of the parked prompt, "" when none
 WriteIndicators()
 SetTimer WriteIndicators, 5000     ; nightlight / do-not-disturb also change from Quick Settings
+SetTimer UacWatch, 1000
 ; Weather for the bar (every 15 min) and the update indicator (2 min after start, then 6 h).
 if Env("weather", "1") = "1" {
     SetTimer () => OmarchyCmd("weather"), -20000
@@ -726,6 +730,7 @@ OnMenuCommand(wParam, *) {
         case 12: ToggleDnd()
         case 13: ShowWeather()
         case 14: Activity()
+        case 15: SetTimer ShowUacPrompt, -10
     }
 }
 
@@ -985,10 +990,11 @@ FocusMonitor(step) {
 
 ; indicators.json feeds the bar's indicator icons (this script is its only writer).
 WriteIndicators() {
-    global Pack, Awake
+    global Pack, Awake, UacPending
     static last := ""
     b := v => v ? "true" : "false"
-    json := '{"awake":' b(Awake) ',"nightlight":' b(NightlightOn()) ',"dnd":' b(DndProfile() > 0) '}'
+    json := '{"awake":' b(Awake) ',"nightlight":' b(NightlightOn()) ',"dnd":' b(DndProfile() > 0)
+        . ',"uac":"' JsonEscape(UacPending) '"}'
     if json = last
         return
     try {
@@ -997,6 +1003,49 @@ WriteIndicators() {
         f.Close()
         last := json
     }
+}
+
+JsonEscape(s) {
+    s := StrReplace(StrReplace(s, "\", "\\"), '"', '\"')
+    return RegExReplace(s, "[\x00-\x1F]", " ")
+}
+
+; --- Admin (UAC) prompts ---------------------------------------------------------
+; When a program that isn't in front asks for admin (an installer started from a
+; terminal, winget, ...), Windows doesn't show the UAC prompt: it parks it as a
+; flashing taskbar button that opens the prompt when clicked. The taskbar is
+; hidden here, so the bar shows a shield instead (plus an OSD), and clicking the
+; shield opens the prompt. The parked prompt is a visible window of consent.exe
+; with this class, titled e.g. "Go Installer is requesting your permission".
+; (UacClass / UacPending are set at the top, before the first WriteIndicators.)
+UacWatch() {
+    global UacPending
+    hwnd := UacWindow()
+    title := hwnd ? WinGetTitle(hwnd) : ""
+    if title = UacPending
+        return
+    if title != ""
+        Osd(title "  (click the shield in the bar)", 5000)
+    UacPending := title
+    WriteIndicators()
+}
+
+UacWindow() {
+    DetectHiddenWindows false   ; while the prompt is open the placeholder is hidden
+    try return WinExist(UacClass)
+    return 0
+}
+
+; Same as clicking the taskbar button: activate the placeholder, then restore it
+; (WinActivate alone only focuses it; SwitchToThisWindow opens the prompt).
+ShowUacPrompt() {
+    if !(hwnd := UacWindow())
+        return Osd("No admin prompt waiting")
+    try WinActivate("ahk_id " hwnd)
+    Sleep 200
+    if UacWindow() = hwnd
+        DllCall("SwitchToThisWindow", "Ptr", hwnd, "Int", 1)
+    SetTimer UacWatch, -1500
 }
 
 IsTerminal() {

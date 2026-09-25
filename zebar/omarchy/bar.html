@@ -14,6 +14,7 @@
         <div id="workspaces"></div>
       </div>
       <div class="center">
+        <span class="indicator uac hidden" id="uac"></span>
         <span class="indicator hidden" id="dnd" title="Do not disturb is on (Super+Ctrl+, / click)"></span>
         <span class="indicator hidden" id="nightlight" title="Nightlight is on (Super+Ctrl+N / click)"></span>
         <span class="indicator hidden" id="awake" title="Stay awake is on (Super+Ctrl+I / click)"></span>
@@ -45,6 +46,7 @@
         awake: '\uF0F4',            // coffee
         nightlight: '\u{F0594}',    // moon
         dnd: '\u{F009B}',           // bell off
+        uac: '',              // shield (admin prompt waiting)
         update: '\uF0AB',           // arrow-circle-down (Omarchy system-update)
         cpu: '\u{F035B}',
         ethernet: '\u{F0002}',
@@ -75,11 +77,13 @@
       $('awake').textContent = ICONS.awake;
       $('nightlight').textContent = ICONS.nightlight;
       $('dnd').textContent = ICONS.dnd;
+      $('uac').textContent = ICONS.uac;
       $('update').textContent = ICONS.update;
       // Indicators toggle off on click (Omarchy); weather/update open details.
       $('awake').onclick = () => act('wm', 'awake');
       $('nightlight').onclick = () => act('wm', 'nightlight');
       $('dnd').onclick = () => act('wm', 'dnd');
+      $('uac').onclick = () => act('wm', 'uac');
       $('weather').onclick = () => act('wm', 'weather');
       $('update').onclick = () => act('upgrade');
 
@@ -257,6 +261,9 @@
         $('awake').classList.toggle('hidden', !ind?.awake);
         $('nightlight').classList.toggle('hidden', !ind?.nightlight);
         $('dnd').classList.toggle('hidden', !ind?.dnd);
+        // A UAC prompt parked in the (hidden) taskbar; clicking opens it.
+        $('uac').classList.toggle('hidden', !ind?.uac);
+        $('uac').title = ind?.uac ? `${ind.uac}\nClick to open the admin prompt` : '';
         renderBluetooth(bt);
         renderWeather(weather);
         const ups = updates?.items ?? [];
