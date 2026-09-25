@@ -64,7 +64,7 @@ function Invoke-UpdateCheck {
         try {
             git -C $Code fetch --quiet 2>$null
             $behind = [int](git -C $Code rev-list --count 'HEAD..@{u}' 2>$null)
-            if ($behind -gt 0) { $items.Add([ordered]@{ name = 'omarchy-win'; from = 'installed'; to = "$behind new commit(s)" }) }
+            if ($behind -gt 0) { $items.Add([ordered]@{ name = 'winarchy'; from = 'installed'; to = "$behind new commit(s)" }) }
         } catch {}
     }
     try {

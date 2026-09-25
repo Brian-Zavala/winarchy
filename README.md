@@ -1,4 +1,4 @@
-# omarchy-win
+# Winarchy
 
 **[Omarchy](https://omarchy.org)'s look, keys and themes on Windows 11.** Tiling windows, the Omarchy
 top bar and menu, 22 Omarchy themes that recolor everything at once, the background and theme
@@ -13,7 +13,7 @@ pickers, the screensaver, and the Super-key workflow — installed in one comman
 Open **PowerShell** (not as administrator) and run:
 
 ```powershell
-irm https://raw.githubusercontent.com/OWNER/omarchy-win/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/OWNER/winarchy/main/install.ps1 | iex
 ```
 
 The installer:
@@ -43,7 +43,7 @@ Then press **Super + K** for every key. Super is the Windows key.
 | **Fonts** | Style > Font: one font for terminal, bar, menus and launcher; installs Omarchy's Nerd Fonts |
 | **Screensaver** | Omarchy's animated logo ([ttfx](https://github.com/omacom/ttfx) effects) on every monitor after 2.5 min idle; never while a video plays |
 | **Wallpaper reveal** | New backgrounds open out of the middle of every monitor in Omarchy v4's slanted band (420 ms) |
-| **Window animations** *(experimental)* | `omarchy-win animations build` compiles GlazeWM's open animation pull request ([#1392](https://github.com/glzr-io/glazewm/pull/1392)) and switches to it: windows zoom and glide to their tiles. Needs Rust + Visual C++ build tools; `animations off` returns to the official GlazeWM |
+| **Window animations** *(experimental)* | `winarchy animations build` compiles GlazeWM's open animation pull request ([#1392](https://github.com/glzr-io/glazewm/pull/1392)) and switches to it: windows zoom and glide to their tiles. Needs Rust + Visual C++ build tools; `animations off` returns to the official GlazeWM |
 | **Toggles** | Stay awake, nightlight, do not disturb, top bar, gaps, transparency |
 | **Capture** | Region screenshot, screen recording, **text capture (OCR)**, color picker |
 | **About / Activity** | fastfetch with the Omarchy logo; btop |
@@ -51,19 +51,19 @@ Then press **Super + K** for every key. Super is the Windows key.
 ## Everyday commands
 
 ```text
-omarchy-win doctor            check everything and explain problems (-Fix repairs)
-omarchy-win theme <name>      switch theme            (omarchy-win theme list)
-omarchy-win font <family>     switch font             (omarchy-win font list)
-omarchy-win bg <image>        set the background      (omarchy-win bg next)
-omarchy-win config            open your settings      (saving applies them)
-omarchy-win animations on     window animations       (experimental; first: animations build)
-omarchy-win update            update omarchy-win, Omarchy themes and the apps
-omarchy-win uninstall         back to normal Windows  (-DryRun to preview, -KeepApps)
+winarchy doctor            check everything and explain problems (-Fix repairs)
+winarchy theme <name>      switch theme            (winarchy theme list)
+winarchy font <family>     switch font             (winarchy font list)
+winarchy bg <image>        set the background      (winarchy bg next)
+winarchy config            open your settings      (saving applies them)
+winarchy animations on     window animations       (experimental; first: animations build)
+winarchy update            update winarchy, Omarchy themes and the apps
+winarchy uninstall         back to normal Windows  (-DryRun to preview, -KeepApps)
 ```
 
 ## Settings
 
-Your settings live in `%USERPROFILE%\.omarchy-win\config.json` and only need the keys you change —
+Your settings live in `%USERPROFILE%\.winarchy\config.json` and only need the keys you change —
 see [docs/config.md](docs/config.md). Examples: 24-hour clock, °C, your own workspace-to-monitor map,
 more background folders, turning single theme targets off, screensaver timeout.
 
@@ -75,10 +75,10 @@ Open them from the Omarchy menu (Setup / Style).
 
 ## Undo
 
-`omarchy-win uninstall` (or Omarchy menu → System → Back to normal Windows) replays the backup
+`winarchy uninstall` (or Omarchy menu → System → Back to normal Windows) replays the backup
 journal newest-first: taskbar, accent and light/dark mode, wallpaper and lock screen, Windows
 Terminal / Flow / VS Code / Claude Code settings, the Windows screensaver, autostart entries,
-PATH, and uninstalls the apps omarchy-win installed (`-KeepApps` keeps them). Downloaded themes,
+PATH, and uninstalls the apps Winarchy installed (`-KeepApps` keeps them). Downloaded themes,
 backgrounds and fonts are kept unless you add `-Purge`.
 
 ## FAQ
@@ -98,13 +98,18 @@ text, color).
 
 **Docking / undocking.** Workspaces re-split across the monitors automatically.
 
-**Something looks wrong.** Run `omarchy-win doctor`. Logs: `%USERPROFILE%\.omarchy-win\logs`.
+**Something looks wrong.** Run `winarchy doctor`. Logs: `%USERPROFILE%\.winarchy\logs`.
 
 ## Credits
 
 Omarchy by DHH and contributors (MIT) — themes, backgrounds, keybinding design, logo, templates.
 GlazeWM and Zebar by glzr-io (GPL-3.0, installed via winget, not bundled). See [NOTICE](NOTICE).
 
+## Contributing
+
+Winarchy is free for anyone to use, change and share. Ideas, fixes and new features are welcome:
+see [CONTRIBUTING.md](CONTRIBUTING.md) for how the code is laid out and how to test a change.
+
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Use it, fork it, change it, ship it.

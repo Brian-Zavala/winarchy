@@ -1,7 +1,7 @@
 <#
   Omarchy's screensaver (bin/omarchy-screensaver), for Windows Terminal: random
   terminal text effects over the branding text, on black, until a key is pressed.
-  omarchy-wm.ahk opens one fullscreen "Omarchy Screensaver" window per monitor and
+  winarchy.ahk opens one fullscreen "Omarchy Screensaver" window per monitor and
   closes them all on any mouse/keyboard input, sleep or lock.
 
   Safety: ttfx gets an explicit --seed (it reads /dev/urandom otherwise, which doesn't
@@ -9,11 +9,11 @@
   back to the still logo instead of retrying - it never spins in a crash loop.
 #>
 param(
-    [string]$Text = (Join-Path $env:USERPROFILE '.omarchy-win\branding\screensaver.txt'),
+    [string]$Text = (Join-Path $env:USERPROFILE '.winarchy\branding\screensaver.txt'),
     [string]$Ttfx = (Join-Path $env:USERPROFILE '.cargo\bin\ttfx.exe')
 )
 $esc = [char]27
-$log = Join-Path $env:USERPROFILE '.omarchy-win\logs\omarchy-win.log'
+$log = Join-Path $env:USERPROFILE '.winarchy\logs\winarchy.log'
 function Write-SsLog([string]$m) { try { Add-Content $log "$(Get-Date -Format 'HH:mm:ss') [screensaver] $m" } catch {} }
 
 # Black background (OSC 11), hidden cursor, clean screen.

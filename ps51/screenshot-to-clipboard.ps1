@@ -18,7 +18,7 @@ if (-not $dir) { $dir = Join-Path ([Environment]::GetFolderPath('MyPictures')) '
 New-Item -ItemType Directory -Force $dir | Out-Null
 
 # Text capture (OCR) puts text on the clipboard; don't replace it with the snip.
-$ocrFlag = Join-Path $env:USERPROFILE '.omarchy-win\generated\ocr.flag'
+$ocrFlag = Join-Path $env:USERPROFILE '.winarchy\generated\ocr.flag'
 
 # Single instance
 $mutex = New-Object System.Threading.Mutex($false, 'Global\ScreenshotToClipboard')

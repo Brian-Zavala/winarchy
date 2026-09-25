@@ -1,5 +1,5 @@
 # Finds the apps and paths this machine actually has, so nothing is hard-coded.
-# Writes ~/.omarchy-win/paths.json (omarchy-win detect / doctor -Fix refresh it).
+# Writes ~/.winarchy/paths.json (winarchy detect / doctor -Fix refresh it).
 
 function Find-First([string[]]$candidates) {
     foreach ($c in $candidates) { if ($c -and (Test-Path -LiteralPath $c)) { return (Resolve-Path -LiteralPath $c).Path } }
@@ -86,8 +86,8 @@ function ConvertTo-AhkHotkey([string]$flow) {
 function Get-MonitorLayout {
     Add-Type -AssemblyName System.Windows.Forms
     # Physical pixels, like GlazeWM (otherwise mixed-DPI monitors come back scaled).
-    Add-Type -Namespace OmarchyWin -Name Dpi -MemberDefinition '[DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr c);' -ErrorAction SilentlyContinue
-    [void][OmarchyWin.Dpi]::SetThreadDpiAwarenessContext([IntPtr]-4)
+    Add-Type -Namespace Winarchy -Name Dpi -MemberDefinition '[DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr c);' -ErrorAction SilentlyContinue
+    [void][Winarchy.Dpi]::SetThreadDpiAwarenessContext([IntPtr]-4)
     # Same order GlazeWM and Zebar use: left to right, then top to bottom.
     @([System.Windows.Forms.Screen]::AllScreens | Sort-Object { $_.Bounds.X }, { $_.Bounds.Y } | ForEach-Object {
         @{ name = $_.DeviceName; primary = $_.Primary; x = $_.Bounds.X; y = $_.Bounds.Y; width = $_.Bounds.Width; height = $_.Bounds.Height }

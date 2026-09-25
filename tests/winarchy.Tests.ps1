@@ -109,7 +109,7 @@ Describe 'Backup journal' {
 }
 
 Describe 'Bar restart' {
-    # Zebar attaches to its parent's console: from `omarchy-win update` it would log into
+    # Zebar attaches to its parent's console: from `winarchy update` it would log into
     # that terminal and die with it. It must be started through (console-less) AutoHotkey.
     BeforeAll {
         Mock Get-Process {}

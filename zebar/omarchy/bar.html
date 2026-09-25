@@ -37,7 +37,7 @@
       // indicators + clock centered, tray + status icons right).
       // zebar.mjs is a vendored copy of zebar@3 so the bar draws even offline.
       import * as zebar from './zebar.mjs';
-      // Machine paths + settings, written by `omarchy-win apply`.
+      // Machine paths + settings, written by `winarchy apply`.
       import { AHK, MENU, CLOCK_24H } from './env.js';
 
       const ICONS = {
@@ -245,7 +245,7 @@
       };
 
       // status.json (theme version) and indicators.json (stay awake) are written by
-      // omarchy.ps1 / omarchy-wm.ahk. A new theme swaps theme.css without restarting Zebar.
+      // omarchy.ps1 / winarchy.ahk. A new theme swaps theme.css without restarting Zebar.
       let themeVersion = null;
       async function poll() {
         const get = f => fetch(`./${f}?t=${Date.now()}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);

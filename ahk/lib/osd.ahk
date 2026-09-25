@@ -1,5 +1,5 @@
 ; Small Omarchy-style OSD at the bottom center of the monitor under the mouse, in the
-; theme's colors and font. Shared by omarchy-wm.ahk and menu.ahk.
+; theme's colors and font. Shared by winarchy.ahk and menu.ahk.
 ;   Osd(text)        shows it for 1.2 s
 ;   Osd(text, 0)     keeps it until the next Osd / OsdHide
 

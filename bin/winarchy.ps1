@@ -1,29 +1,29 @@
 <#
 .SYNOPSIS
-  omarchy-win: Omarchy's look, keys and themes on Windows 11 (GlazeWM + Zebar + Flow Launcher).
+  winarchy: Omarchy's look, keys and themes on Windows 11 (GlazeWM + Zebar + Flow Launcher).
 
 .DESCRIPTION
-  omarchy-win install [-Yes] [-Adopt]     set everything up (asks a few questions; -Yes = defaults)
-  omarchy-win uninstall [-KeepApps] [-DryRun] [-Purge]
+  winarchy install [-Yes] [-Adopt]     set everything up (asks a few questions; -Yes = defaults)
+  winarchy uninstall [-KeepApps] [-DryRun] [-Purge]
                                           undo every change, from the backup journal
-  omarchy-win update                      pull the latest omarchy-win, re-apply, upgrade apps
-  omarchy-win apply [-MonitorsOnly]       regenerate configs from config.json (after editing it)
-  omarchy-win doctor [-Fix]               check the setup and explain what's wrong
-  omarchy-win detect                      re-detect apps, paths, monitors (paths.json)
-  omarchy-win theme <name> | theme list   switch theme (bar, borders, terminal, Flow, accent, ...)
-  omarchy-win bg <path> | bg next         set the background (and lock screen)
-  omarchy-win sync [-Offline]             download Omarchy themes + backgrounds, rebuild pickers
-  omarchy-win font [<family> | list]      terminal, bar, menus and launcher font
-  omarchy-win font-install <Name>         install a Nerd Font (CascadiaMono, Meslo, FiraCode, ...)
-  omarchy-win browser-setup               tint Chrome/Brave's toolbar with the theme (one admin prompt)
-  omarchy-win weather | update-check      refresh the bar's weather / update indicator
-  omarchy-win animations [on|off|toggle|build|status]
+  winarchy update                      pull the latest winarchy, re-apply, upgrade apps
+  winarchy apply [-MonitorsOnly]       regenerate configs from config.json (after editing it)
+  winarchy doctor [-Fix]               check the setup and explain what's wrong
+  winarchy detect                      re-detect apps, paths, monitors (paths.json)
+  winarchy theme <name> | theme list   switch theme (bar, borders, terminal, Flow, accent, ...)
+  winarchy bg <path> | bg next         set the background (and lock screen)
+  winarchy sync [-Offline]             download Omarchy themes + backgrounds, rebuild pickers
+  winarchy font [<family> | list]      terminal, bar, menus and launcher font
+  winarchy font-install <Name>         install a Nerd Font (CascadiaMono, Meslo, FiraCode, ...)
+  winarchy browser-setup               tint Chrome/Brave's toolbar with the theme (one admin prompt)
+  winarchy weather | update-check      refresh the bar's weather / update indicator
+  winarchy animations [on|off|toggle|build|status]
                                           window animations (experimental GlazeWM build)
-  omarchy-win config                      open your settings file
-  omarchy-win keys                        print the keybindings
-  omarchy-win status | version | help
+  winarchy config                      open your settings file
+  winarchy keys                        print the keybindings
+  winarchy status | version | help
 
-  Your settings: %USERPROFILE%\.omarchy-win\config.json   Log: %USERPROFILE%\.omarchy-win\logs
+  Your settings: %USERPROFILE%\.winarchy\config.json   Log: %USERPROFILE%\.winarchy\logs
 #>
 param(
     [Parameter(Position = 0)][string]$Verb = 'help',
@@ -74,7 +74,7 @@ switch ($Verb) {
         } else { Use-Lock { Invoke-ThemeSet $Arg } }
     }
     { $_ -in 'bg', 'bg-set' } {
-        if (-not $Arg) { throw 'usage: omarchy-win bg <image path> | bg next' }
+        if (-not $Arg) { throw 'usage: winarchy bg <image path> | bg next' }
         if ($Arg -eq 'next') { Use-Lock { Invoke-BackgroundNext } } else { Use-Lock { Set-Background $Arg (Read-State) @($Covered -split ',' -ne '' | ForEach-Object { [int]$_ }) } }
     }
     'bg-next' { Use-Lock { Invoke-BackgroundNext } }
@@ -92,13 +92,13 @@ switch ($Verb) {
         Use-Lock { $family = Install-NerdFont $Arg; [void](Update-FontList); Invoke-FontSet $family }
     }
     'config' {
-        if (-not (Test-Path $ConfigFile)) { Write-Json $ConfigFile ([ordered]@{ _help = 'Only the settings you change. See docs/config.md, then run: omarchy-win apply' }) }
+        if (-not (Test-Path $ConfigFile)) { Write-Json $ConfigFile ([ordered]@{ _help = 'Only the settings you change. See docs/config.md, then run: winarchy apply' }) }
         $p = Get-Paths
         if ($p.nvim) { & $p.nvim $ConfigFile } else { Start-Process notepad.exe $ConfigFile }
     }
     'keys' { Get-Content (Join-Path $Pack 'keybindings.txt') -ErrorAction SilentlyContinue ?? (Get-Content (Join-Path $Code 'default\keybindings.txt')) }
     'status' { $s = Read-State; "theme: $($s.theme)"; "background: $($s.background)"; "font: $(Get-FontFamily)" }
-    'version' { "omarchy-win $version" }
+    'version' { "winarchy $version" }
     default { Get-Help $PSCommandPath -Detailed | Out-String | Write-Host }
 }
 } catch {

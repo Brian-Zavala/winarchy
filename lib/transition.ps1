@@ -10,8 +10,8 @@
 # covers (zebar/omarchy/menu.js, land), so that monitor gets no window here.
 
 function Initialize-Reveal {
-    if (-not ('OmarchyWin.Reveal' -as [type])) {
-        Add-Type -Namespace OmarchyWin -Name Reveal -MemberDefinition @'
+    if (-not ('Winarchy.Reveal' -as [type])) {
+        Add-Type -Namespace Winarchy -Name Reveal -MemberDefinition @'
 [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr ctx);
 [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int hgt, uint flags);
 [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr h, int i);
@@ -38,9 +38,9 @@ function Test-RevealWanted([string]$old) {
     if ((Get-Config).backgroundTransition -eq 'none') { return $false }
     if (Get-Process wallpaper32, wallpaper64, Lively, Lively.UI.WinUI -ErrorAction SilentlyContinue) { return $false }
     if (-not (Test-Path -LiteralPath $old)) { return $false }
-    $desk = [OmarchyWin.Reveal]::OpenInputDesktop(0, $false, 0x100)
+    $desk = [Winarchy.Reveal]::OpenInputDesktop(0, $false, 0x100)
     if ($desk -eq [IntPtr]::Zero) { return $false }
-    [void][OmarchyWin.Reveal]::CloseDesktop($desk)
+    [void][Winarchy.Reveal]::CloseDesktop($desk)
     $true
 }
 
@@ -83,7 +83,7 @@ function Get-RevealBand([double]$w, [double]$h, [double]$p) {
 function New-RevealWindow([int[]]$rect, $oldImg, $newImg) {
     $w = [System.Windows.Window]::new()
     $w.WindowStyle = 'None'; $w.ResizeMode = 'NoResize'; $w.ShowInTaskbar = $false
-    $w.ShowActivated = $false; $w.Focusable = $false; $w.Title = 'omarchy-win background'
+    $w.ShowActivated = $false; $w.Focusable = $false; $w.Title = 'winarchy background'
     $w.Background = [System.Windows.Media.Brushes]::Black
     $w.WindowStartupLocation = 'Manual'
     $grid = [System.Windows.Controls.Grid]::new()
@@ -98,13 +98,13 @@ function New-RevealWindow([int[]]$rect, $oldImg, $newImg) {
     # Tool window + no-activate + click-through before it is shown: GlazeWM leaves it
     # alone, it never takes focus, and clicks go to the desktop.
     $hwnd = [System.Windows.Interop.WindowInteropHelper]::new($w).EnsureHandle()
-    $ex = [OmarchyWin.Reveal]::GetWindowLong($hwnd, -20)
-    [void][OmarchyWin.Reveal]::SetWindowLong($hwnd, -20, ($ex -bor 0x80 -bor 0x08000000 -bor 0x20))
+    $ex = [Winarchy.Reveal]::GetWindowLong($hwnd, -20)
+    [void][Winarchy.Reveal]::SetWindowLong($hwnd, -20, ($ex -bor 0x80 -bor 0x08000000 -bor 0x20))
     # Physical pixels, at the bottom of the z-order (just above the desktop).
     $flags = 0x0010 -bor 0x0200   # NOACTIVATE | NOOWNERZORDER
-    [void][OmarchyWin.Reveal]::SetWindowPos($hwnd, [IntPtr]1, $rect[0], $rect[1], $rect[2], $rect[3], $flags)
+    [void][Winarchy.Reveal]::SetWindowPos($hwnd, [IntPtr]1, $rect[0], $rect[1], $rect[2], $rect[3], $flags)
     $w.Show()
-    [void][OmarchyWin.Reveal]::SetWindowPos($hwnd, [IntPtr]1, $rect[0], $rect[1], $rect[2], $rect[3], $flags -bor 0x0040)
+    [void][Winarchy.Reveal]::SetWindowPos($hwnd, [IntPtr]1, $rect[0], $rect[1], $rect[2], $rect[3], $flags -bor 0x0040)
     [pscustomobject]@{ window = $w; image = $grid.Children[1] }
 }
 
@@ -132,8 +132,8 @@ function Invoke-BackgroundReveal([string]$new, [scriptblock]$apply, [int[]]$skip
         if (-not $alone) { Initialize-Reveal }
         if (-not $alone -and (Test-RevealWanted $old)) {
             # Per-monitor DPI v2: real pixels on every monitor (mixed 4K/1440p setups).
-            $oldCtx = [OmarchyWin.Reveal]::SetThreadDpiAwarenessContext([IntPtr]-4)
-            $monitors = @([OmarchyWin.Reveal]::Monitors() | Where-Object { -not (Test-OnMonitor $skip $_) })
+            $oldCtx = [Winarchy.Reveal]::SetThreadDpiAwarenessContext([IntPtr]-4)
+            $monitors = @([Winarchy.Reveal]::Monitors() | Where-Object { -not (Test-OnMonitor $skip $_) })
         }
         if ($monitors) {                    # none left: the picker reveals them all
             $width = ($monitors | ForEach-Object { $_[2] } | Measure-Object -Maximum).Maximum
@@ -179,7 +179,7 @@ function Invoke-BackgroundReveal([string]$new, [scriptblock]$apply, [int[]]$skip
         Log "background reveal skipped: $($_.Exception.Message)"
     } finally {
         foreach ($r in $reveals) { try { $r.window.Close() } catch {} }
-        if ($oldCtx -ne [IntPtr]::Zero) { [void][OmarchyWin.Reveal]::SetThreadDpiAwarenessContext($oldCtx) }
+        if ($oldCtx -ne [IntPtr]::Zero) { [void][Winarchy.Reveal]::SetThreadDpiAwarenessContext($oldCtx) }
     }
     if (-not $applied) { & $apply }
     elseif ($applyError) { throw $applyError }

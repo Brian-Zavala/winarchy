@@ -1,5 +1,5 @@
-# Backup journal. Every change omarchy-win makes to the system first records what was
-# there, in ~/.omarchy-win/backup/<timestamp>/journal.json, and `omarchy-win uninstall`
+# Backup journal. Every change winarchy makes to the system first records what was
+# there, in ~/.winarchy/backup/<timestamp>/journal.json, and `winarchy uninstall`
 # replays it newest-first. The first recording of a target wins, so re-running install
 # or apply never overwrites the real original.
 
@@ -239,7 +239,7 @@ function Restore-JournalEntry($e, [string]$dir) {
             Initialize-Native
             Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value $e.style
             Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value $e.tile
-            [void][OmarchyWin.Native]::SystemParametersInfo(0x14, 0, $e.path, 3)
+            [void][Winarchy.Native]::SystemParametersInfo(0x14, 0, $e.path, 3)
         }
         'lockscreen' {
             if ($e.path -and (Test-Path -LiteralPath $e.path)) {
@@ -263,7 +263,7 @@ function Restore-JournalEntry($e, [string]$dir) {
         'file-if-ours' { if (Test-Path -LiteralPath $e.path) { Remove-Item -LiteralPath $e.path -Force -ErrorAction SilentlyContinue } }
         'screensaver' {
             Initialize-Native
-            [void][OmarchyWin.Native]::SystemParametersInfoInt(0x11, [uint32]($e.active -eq '1'), [IntPtr]::Zero, 3)   # SPI_SETSCREENSAVEACTIVE
+            [void][Winarchy.Native]::SystemParametersInfoInt(0x11, [uint32]($e.active -eq '1'), [IntPtr]::Zero, 3)   # SPI_SETSCREENSAVEACTIVE
         }
         default { }
     }

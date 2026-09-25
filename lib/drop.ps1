@@ -1,5 +1,5 @@
 <#
-  Called by omarchy-wm.ahk when a Super+drag of a window ends.
+  Called by winarchy.ahk when a Super+drag of a window ends.
   Hyprland-style drop: a tiled window lands where it was dropped (swapping past
   the tiled window under the cursor, or moving to the other monitor's workspace);
   a floating window that crossed monitors is re-homed to that monitor's workspace.

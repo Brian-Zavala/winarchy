@@ -12,4 +12,4 @@
 - Screensaver windows open visibly (they were started hidden and never closed); leftovers are cleaned up.
 - Saved edits apply themselves: config.json, your GlazeWM template, your keybindings script, user.css.
 - Menu actions report back (OSD); failures are logged and shown by doctor; long downloads run in a terminal.
-- Omarchy v4 wallpaper reveal; experimental window animations (GlazeWM #1392 build, `omarchy-win animations`).
+- Omarchy v4 wallpaper reveal; experimental window animations (GlazeWM #1392 build, `winarchy animations`).

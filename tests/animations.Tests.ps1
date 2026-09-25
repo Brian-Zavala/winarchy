@@ -64,13 +64,13 @@ Describe 'CLI errors' {
     It 'logs FAILED and exits 1' {
         $home2 = Join-Path $TestDrive 'home'
         New-Item -ItemType Directory -Force $home2 | Out-Null
-        $cli = Join-Path $root 'bin\omarchy-win.ps1'
+        $cli = Join-Path $root 'bin\winarchy.ps1'
         $saved = $env:USERPROFILE
         try {
             $env:USERPROFILE = $home2
             & (Get-Process -Id $PID).Path -NoProfile -File $cli theme-set no-such-theme *> $null
             $LASTEXITCODE | Should -Be 1
         } finally { $env:USERPROFILE = $saved }
-        Get-Content (Join-Path $home2 '.omarchy-win\logs\omarchy-win.log') -Raw | Should -Match '\[theme-set\] FAILED: .*no-such-theme'
+        Get-Content (Join-Path $home2 '.winarchy\logs\winarchy.log') -Raw | Should -Match '\[theme-set\] FAILED: .*no-such-theme'
     }
 }

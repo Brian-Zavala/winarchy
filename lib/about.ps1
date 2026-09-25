@@ -39,7 +39,7 @@ $modules = @(
     @{ type = 'custom'; format = "`e[90m└────────────────────────────────────────────────────┘" },
     'break',
     @{ type = 'custom'; format = (& $line 'Software') },
-    @{ type = 'custom'; key = ' OS'; keyColor = 'blue'; format = "omarchy-win $version (Omarchy $((Get-Config).omarchyTag) themes)" },
+    @{ type = 'custom'; key = ' OS'; keyColor = 'blue'; format = "Winarchy $version (Omarchy $((Get-Config).omarchyTag) themes)" },
     @{ type = 'os'; key = '│ ├'; keyColor = 'blue' },
     @{ type = 'kernel'; key = '│ ├'; keyColor = 'blue' },
     @{ type = 'custom'; key = '│ ├'; keyColor = 'blue'; format = 'GlazeWM + Zebar' },

@@ -118,7 +118,7 @@
     "title": "Update",
     "items": [
       { "label": "Check for Updates", "icon": "", "action": ["update-check"] },
-      { "label": "Update omarchy-win & apps", "icon": "", "action": ["upgrade"] },
+      { "label": "Update Winarchy & apps", "icon": "", "action": ["upgrade"] },
       { "label": "Themes & Backgrounds", "icon": "", "action": ["sync"] },
       { "label": "Apply Settings", "icon": "", "action": ["apply"] },
       { "label": "Doctor", "icon": "", "action": ["doctor"] },
@@ -139,7 +139,7 @@
     ]
   },
   "revert": {
-    "title": "Undo omarchy-win?",
+    "title": "Undo Winarchy?",
     "items": [
       { "label": "Cancel", "icon": "", "back": true },
       { "label": "Yes, back to normal Windows", "icon": "", "action": ["uninstall"] }

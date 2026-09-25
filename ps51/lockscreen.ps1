@@ -6,7 +6,7 @@
 #>
 param([Parameter(Mandatory)][string]$Path, [string]$StateFile)
 
-$log = Join-Path $env:USERPROFILE '.omarchy-win\logs\omarchy-win.log'
+$log = Join-Path $env:USERPROFILE '.winarchy\logs\winarchy.log'
 function Write-OwLog([string]$msg) { try { Add-Content $log "$(Get-Date -Format 'HH:mm:ss') [lockscreen] $msg" } catch {} }
 
 if ($StateFile -and (Test-Path $StateFile)) {

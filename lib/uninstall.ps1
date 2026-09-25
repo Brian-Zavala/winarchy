@@ -1,9 +1,9 @@
-# omarchy-win uninstall: replays the backup journal newest-first.
+# winarchy uninstall: replays the backup journal newest-first.
 
 function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge) {
     $dir = Get-JournalDir
     $j = Read-Journal
-    Write-Host "Undoing omarchy-win using $dir ($(@($j.entries).Count) recorded changes)"
+    Write-Host "Undoing winarchy using $dir ($(@($j.entries).Count) recorded changes)"
     $step = {
         param([string]$msg, [scriptblock]$action)
         if ($DryRun) { Write-Host "[dry-run] $msg" -ForegroundColor Yellow; return }
@@ -12,8 +12,8 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge) {
     }
     $p = Get-Paths
 
-    & $step 'Stop omarchy-win (bar space released, taskbar shown)' {
-        # A graceful close runs omarchy-wm.ahk's OnExit: shows the taskbars, frees the bar strip.
+    & $step 'Stop winarchy (bar space released, taskbar shown)' {
+        # A graceful close runs winarchy.ahk's OnExit: shows the taskbars, frees the bar strip.
         Get-OmarchyAhk | ForEach-Object {
             $proc = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
             if ($proc) { [void]$proc.CloseMainWindow() }
@@ -44,7 +44,7 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge) {
 
     if (-not $KeepApps) {
         foreach ($e in $entries | Where-Object { $_.kind -eq 'winget' }) {
-            if ($e.preinstalled) { Write-Host "  keeping $($e.id) (it was installed before omarchy-win)"; continue }
+            if ($e.preinstalled) { Write-Host "  keeping $($e.id) (it was installed before winarchy)"; continue }
             & $step "winget uninstall $($e.id)" { winget uninstall -e --id $e.id --silent --accept-source-agreements | Out-Host }
         }
     } else { Write-Host '  -KeepApps: apps stay installed (just not started).' }
@@ -62,11 +62,11 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge) {
         & $step "Delete downloaded themes/backgrounds and settings ($Data, keeping backup\)" {
             Get-ChildItem $Data -Force | Where-Object Name -ne 'backup' | Remove-Item -Recurse -Force
         }
-        & $step "Delete the omarchy-win code ($Code)" {
+        & $step "Delete the winarchy code ($Code)" {
             Start-Process cmd.exe -ArgumentList "/c timeout /t 3 >nul & rmdir /s /q `"$Code`"" -WindowStyle Hidden
         }
     } else {
-        Write-Host "`nKept: $Data (themes, backgrounds, backups) and $Code. 'omarchy-win uninstall -Purge' removes them."
+        Write-Host "`nKept: $Data (themes, backgrounds, backups) and $Code. 'winarchy uninstall -Purge' removes them."
     }
     Write-Host 'Done.' -ForegroundColor Green
 }

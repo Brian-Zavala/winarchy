@@ -1,4 +1,4 @@
-APPS  (omarchy-win launchers; set "launchers": false in config.json to use your own)
+APPS  (winarchy launchers; set "launchers": false in config.json to use your own)
   Super + Return                Terminal
   Super + Shift + Return / B    Browser (your default)
   Super + Shift + Alt + B       Private browser window

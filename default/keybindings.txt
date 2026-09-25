@@ -1,4 +1,4 @@
-OMARCHY-STYLE KEYBINDINGS (omarchy-win)            Super = Windows key
+OMARCHY-STYLE KEYBINDINGS (Winarchy)            Super = Windows key
 =====================================================================
 
 MENUS
@@ -84,9 +84,9 @@ SYSTEM
   Super + Shift + Alt + P       Pause / resume GlazeWM (escape hatch)
 
 TERMINAL COMMANDS
-  omarchy-win doctor            Check everything, explain problems (-Fix to repair)
-  omarchy-win theme <name>      Switch theme (omarchy-win theme list)
-  omarchy-win font <family>     Switch font (omarchy-win font list)
-  omarchy-win apply             Re-apply after editing your config.json
-  omarchy-win update            Update omarchy-win, themes and apps
-  omarchy-win uninstall         Back to normal Windows (-DryRun to preview, -KeepApps)
+  winarchy doctor               Check everything, explain problems (-Fix to repair)
+  winarchy theme <name>         Switch theme (winarchy theme list)
+  winarchy font <family>        Switch font (winarchy font list)
+  winarchy apply                Re-apply after editing your config.json
+  winarchy update               Update Winarchy, themes and apps
+  winarchy uninstall            Back to normal Windows (-DryRun to preview, -KeepApps)

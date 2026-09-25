@@ -27,12 +27,12 @@ function Install-VSCodeLocalTheme($c) {
     $root = Join-Path $env:USERPROFILE '.vscode\extensions'
     $dir = Join-Path $root 'local.omarchy-theme-1.0.0'
     $tpl = Join-Path $Themes '_templates\vscode-theme.json.tpl'
-    if (-not (Test-Path $tpl)) { throw 'vscode-theme.json.tpl missing: run omarchy-win sync' }
+    if (-not (Test-Path $tpl)) { throw 'vscode-theme.json.tpl missing: run winarchy sync' }
     Save-Dir $dir
     $ui = if ($c.mode -eq 'light') { 'vs' } else { 'vs-dark' }
     Write-Utf8 (Join-Path $dir 'themes\omarchy-color-theme.json') (Expand-Template (Get-Content -Raw $tpl) $c)
     Write-Json (Join-Path $dir 'package.json') ([ordered]@{
-        name = 'omarchy-theme'; displayName = 'Omarchy'; description = 'Omarchy color theme (omarchy-win)'
+        name = 'omarchy-theme'; displayName = 'Omarchy'; description = 'Omarchy color theme (winarchy)'
         publisher = 'local'; version = '1.0.0'; engines = @{ vscode = '^1.70.0' }; categories = @('Themes')
         contributes = @{ themes = @([ordered]@{ label = 'Omarchy'; uiTheme = $ui; path = './themes/omarchy-color-theme.json' }) }
     })
@@ -92,8 +92,15 @@ function Set-ClaudeTheme($c) {
 # BrowserThemeColor policy (Chrome/Brave then show "Managed by your organization").
 # Policies are admin-only: an elevated task, set up once, applies the color (see
 # ps51/browser-policy.ps1 for why that is safe).
-$BrowserTask = @{ path = '\omarchy-win\'; name = 'browser-color' }
-$BrowserPolicyDir = Join-Path $env:ProgramData 'omarchy-win'
+$BrowserTask = @{ path = '\winarchy\'; name = 'browser-color' }
+$BrowserPolicyDir = Join-Path $env:ProgramData 'winarchy'
+# Set up under the old name (omarchy-win) before the rename: the admin-created task and
+# folder keep working as they are (re-creating them would need another UAC prompt).
+if (-not (Get-ScheduledTask -TaskPath $BrowserTask.path -TaskName $BrowserTask.name -ErrorAction SilentlyContinue) -and
+    (Get-ScheduledTask -TaskPath '\omarchy-win\' -TaskName 'browser-color' -ErrorAction SilentlyContinue)) {
+    $BrowserTask = @{ path = '\omarchy-win\'; name = 'browser-color' }
+    $BrowserPolicyDir = Join-Path $env:ProgramData 'omarchy-win'
+}
 
 function Test-ChromiumInstalled {
     [bool](@("$env:ProgramFiles\Google\Chrome\Application\chrome.exe", "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe",
@@ -126,7 +133,7 @@ icacls (Join-Path `$dir 'browser-policy.ps1') /reset | Out-Null
 `$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew
 Register-ScheduledTask -TaskPath '$($BrowserTask.path)' -TaskName '$($BrowserTask.name)' -Action `$action -Principal `$principal -Settings `$settings -Force | Out-Null
 `$svc = New-Object -ComObject Schedule.Service; `$svc.Connect()
-`$svc.GetFolder('\omarchy-win').GetTask('$($BrowserTask.name)').SetSecurityDescriptor('D:(A;;FA;;;BA)(A;;FA;;;SY)(A;;GRGX;;;$sid)', 0)
+`$svc.GetFolder('$($BrowserTask.path.TrimEnd([char]92))').GetTask('$($BrowserTask.name)').SetSecurityDescriptor('D:(A;;FA;;;BA)(A;;FA;;;SY)(A;;GRGX;;;$sid)', 0)
 "@
     $tmp = Join-Path $env:TEMP 'omarchy-browser-setup.ps1'
     Set-Content -Encoding UTF8 $tmp $script
@@ -149,7 +156,7 @@ function Disable-BrowserPolicy {
 
 function Set-BrowserTheme([string]$theme, $c) {
     if (-not (Test-ChromiumInstalled)) { return 'skipped' }
-    if (-not (Test-BrowserTask)) { Log 'browser toolbar: run "omarchy-win browser-setup" once to enable'; return 'skipped' }
+    if (-not (Test-BrowserTask)) { Log 'browser toolbar: run "winarchy browser-setup" once to enable'; return 'skipped' }
     $own = Join-Path $Themes "$theme\chromium.theme"
     $rgb = if (Test-Path $own) { (Get-Content -Raw $own).Trim() } else { (ConvertTo-Rgb $c.background) -join ',' }
     $hex = '#' + ((($rgb -split ',') | ForEach-Object { '{0:x2}' -f [int]$_.Trim() }) -join '')

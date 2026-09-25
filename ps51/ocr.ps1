@@ -56,6 +56,6 @@ try {
         Remove-Item $tmp -ErrorAction SilentlyContinue
     }
 } catch {
-    try { Add-Content (Join-Path $env:USERPROFILE '.omarchy-win\logs\omarchy-win.log') "$(Get-Date -Format 'HH:mm:ss') [ocr] FAILED: $($_.Exception.Message)" } catch {}
+    try { Add-Content (Join-Path $env:USERPROFILE '.winarchy\logs\winarchy.log') "$(Get-Date -Format 'HH:mm:ss') [ocr] FAILED: $($_.Exception.Message)" } catch {}
 }
 [IO.File]::WriteAllText($Out, "$lines")

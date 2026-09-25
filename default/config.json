@@ -1,5 +1,5 @@
 {
-  "_help": "Defaults. Put only the keys you change in %USERPROFILE%\\.omarchy-win\\config.json, then run: omarchy-win apply. Reference: docs/config.md",
+  "_help": "Defaults. Put only the keys you change in %USERPROFILE%\\.winarchy\\config.json, then run: winarchy apply. Reference: docs/config.md",
   "clock": "auto",
   "units": "auto",
   "workspaces": "auto",

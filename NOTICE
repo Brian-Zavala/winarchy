@@ -1,4 +1,4 @@
-omarchy-win includes or is derived from:
+winarchy includes or is derived from:
 
 - Omarchy (https://github.com/omacom/omarchy), MIT License, Copyright (c) David Heinemeier Hansson
   and contributors:
@@ -12,7 +12,7 @@ Installed separately (not bundled), each under its own license:
 
 - GlazeWM and Zebar (https://github.com/glzr-io), GPL-3.0 - installed with winget. The Zebar
   client library (zebar.mjs) is downloaded at install time from the npm package.
-  The optional window-animation build (`omarchy-win animations build`) is compiled on the user's
+  The optional window-animation build (`winarchy animations build`) is compiled on the user's
   PC from the GPL-3.0 source of glzr-io/glazewm pull request #1392 (florensm/glazewm, pinned
   commit); no binaries are distributed.
 - Flow Launcher (MIT), AutoHotkey (GPL-2.0), PowerShell (MIT), fastfetch (MIT), btop4win (Apache-2.0).

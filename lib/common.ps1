@@ -1,8 +1,8 @@
 # Shared paths, logging, JSON, config/state and native helpers.
-# Dot-sourced by bin/omarchy-win.ps1 (PowerShell 7).
+# Dot-sourced by bin/winarchy.ps1 (PowerShell 7).
 
 $Code        = Split-Path -Parent $PSScriptRoot
-$Data        = Join-Path $env:USERPROFILE '.omarchy-win'
+$Data        = Join-Path $env:USERPROFILE '.winarchy'
 $Pack        = Join-Path $env:USERPROFILE '.glzr\zebar\omarchy'
 $GlazeConfig = Join-Path $env:USERPROFILE '.glzr\glazewm\config.yaml'
 $Themes      = Join-Path $Data 'themes'
@@ -12,7 +12,7 @@ $Generated   = Join-Path $Data 'generated'
 $StateFile   = Join-Path $Data 'state.json'
 $ConfigFile  = Join-Path $Data 'config.json'
 $PathsFile   = Join-Path $Data 'paths.json'
-$LogFile     = Join-Path $Data 'logs\omarchy-win.log'
+$LogFile     = Join-Path $Data 'logs\winarchy.log'
 $ImageExt    = '.jpg', '.jpeg', '.png', '.bmp', '.webp'
 $Invariant   = [Globalization.CultureInfo]::InvariantCulture
 
@@ -48,7 +48,7 @@ function Expand-UserPath([string]$p) {
 }
 
 # --- config (user settings) ------------------------------------------------------
-# default/config.json holds every key with its default; ~/.omarchy-win/config.json only
+# default/config.json holds every key with its default; ~/.winarchy/config.json only
 # needs the keys the user changed.
 function Merge-Hashtable($base, $over) {
     $out = @{}
@@ -67,7 +67,7 @@ function Get-Config {
     $cfg
 }
 
-# --- state (what omarchy-win last applied) ----------------------------------------
+# --- state (what winarchy last applied) ----------------------------------------
 function Read-State {
     $s = Read-Json $StateFile -AsHashtable
     if (-not $s) { $s = @{} }
@@ -104,11 +104,11 @@ function Get-ThemeLabel([string]$name) { $Invariant.TextInfo.ToTitleCase(($name 
 # One writer at a time: quick successive picks queue up instead of racing on
 # state.json, Flow's settings and Windows Terminal's settings.
 function Use-Lock([scriptblock]$body) {
-    $m = [Threading.Mutex]::new($false, 'Local\OmarchyWin')
+    $m = [Threading.Mutex]::new($false, 'Local\Winarchy')
     $got = $false
     try {
         try { $got = $m.WaitOne(120000) } catch [Threading.AbandonedMutexException] { $got = $true }
-        if (-not $got) { throw 'another omarchy-win command is still running' }
+        if (-not $got) { throw 'another winarchy command is still running' }
         & $body
     } finally {
         if ($got) { $m.ReleaseMutex() }
@@ -118,8 +118,8 @@ function Use-Lock([scriptblock]$body) {
 
 # --- native -----------------------------------------------------------------------
 function Initialize-Native {
-    if (-not ('OmarchyWin.Native' -as [type])) {
-        Add-Type -Namespace OmarchyWin -Name Native -MemberDefinition @'
+    if (-not ('Winarchy.Native' -as [type])) {
+        Add-Type -Namespace Winarchy -Name Native -MemberDefinition @'
 [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
 public static extern bool SystemParametersInfo(uint action, uint param, string vparam, uint winIni);
 [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW")]
@@ -138,13 +138,13 @@ public static extern int SHGetKnownFolderPath([MarshalAs(UnmanagedType.LPStruct)
 function Send-SettingChange([string]$what = 'ImmersiveColorSet') {
     Initialize-Native
     $r = [UIntPtr]::Zero
-    [void][OmarchyWin.Native]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, $what, 2, 1000, [ref]$r)
+    [void][Winarchy.Native]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, $what, 2, 1000, [ref]$r)
 }
 
 function Get-KnownFolder([guid]$id) {
     Initialize-Native
     $ptr = [IntPtr]::Zero
-    if ([OmarchyWin.Native]::SHGetKnownFolderPath($id, 0, [IntPtr]::Zero, [ref]$ptr) -ne 0) { return $null }
+    if ([Winarchy.Native]::SHGetKnownFolderPath($id, 0, [IntPtr]::Zero, [ref]$ptr) -ne 0) { return $null }
     try { [Runtime.InteropServices.Marshal]::PtrToStringUni($ptr) } finally { [Runtime.InteropServices.Marshal]::FreeCoTaskMem($ptr) }
 }
 

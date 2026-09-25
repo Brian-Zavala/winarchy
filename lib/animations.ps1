@@ -1,6 +1,6 @@
 # Window animations (experimental): GlazeWM built from its open animation pull request
 # (glzr-io/glazewm#1392), which animates with DWM-thumbnail stand-ins inside the WM.
-# The official GlazeWM stays installed; `omarchy-win animations on|off` switches between
+# The official GlazeWM stays installed; `winarchy animations on|off` switches between
 # them. Built locally from source (GPL-3.0); nothing is redistributed.
 
 $AnimDir = Join-Path $Data 'glazewm-animations'
@@ -27,14 +27,14 @@ function Test-BuildTools {
 }
 
 # Clones the pinned commit, builds glazewm + cli + watcher, installs them next to each
-# other in ~/.omarchy-win/glazewm-animations (the same layout as the official install).
+# other in ~/.winarchy/glazewm-animations (the same layout as the official install).
 function Invoke-AnimationBuild {
     $src = (Get-Config).animations.source
     $missing = @(Test-BuildTools)
     if ($missing) {
         Write-Host 'Building the animation version of GlazeWM needs:' -ForegroundColor Yellow
         $missing | ForEach-Object { Write-Host "  $_" }
-        throw 'build tools missing (see above), then run: omarchy-win animations build'
+        throw 'build tools missing (see above), then run: winarchy animations build'
     }
     Log "building GlazeWM with animations from $($src.repo)@$($src.commit.Substring(0, 12)) (about 10 minutes)"
     New-Item -ItemType Directory -Force $AnimSrc | Out-Null
@@ -59,7 +59,7 @@ function Invoke-AnimationBuild {
         $out = Join-Path $AnimSrc 'target\release'
         # Stop our build if it is running, so its files can be replaced.
         $running = Get-Process glazewm -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$AnimDir*" }
-        if ($running) { throw 'the animation build is running: omarchy-win animations off, then build again' }
+        if ($running) { throw 'the animation build is running: winarchy animations off, then build again' }
         New-Item -ItemType Directory -Force (Join-Path $AnimDir 'cli') | Out-Null
         Copy-Item -Force (Join-Path $out 'glazewm.exe') (Join-Path $AnimDir 'glazewm.exe')
         Copy-Item -Force (Join-Path $out 'glazewm-watcher.exe') (Join-Path $AnimDir 'glazewm-watcher.exe')
@@ -106,17 +106,17 @@ function Set-Animations([bool]$on) {
     if (-not $user.animations) { $user.animations = @{} }
     $user.animations.enabled = $on
     Write-Json $ConfigFile $user 8
-    # omarchy-wm.ahk re-applies config.json when it is saved; this change applies itself.
+    # winarchy.ahk re-applies config.json when it is saved; this change applies itself.
     Write-Utf8 (Join-Path $Generated 'config.selfwrite') (Get-Item $ConfigFile).LastWriteTime.ToString('yyyyMMddHHmmss')
 }
 
 function Invoke-Animations([string]$action) {
     switch ($action) {
-        'build' { Invoke-AnimationBuild; Write-Host 'Turn them on with: omarchy-win animations on' }
+        'build' { Invoke-AnimationBuild; Write-Host 'Turn them on with: winarchy animations on' }
         # Toggle > Window Animations before the first build: build, then switch.
         'setup' { Invoke-AnimationBuild; Invoke-Animations 'on' }
         'on' {
-            if (-not (Get-AnimationBuild)) { throw 'not built yet: omarchy-win animations build (about 10 minutes)' }
+            if (-not (Get-AnimationBuild)) { throw 'not built yet: winarchy animations build (about 10 minutes)' }
             Set-Animations $true; Use-Lock { Invoke-Apply }
         }
         'off' { Set-Animations $false; Use-Lock { Invoke-Apply } }
@@ -124,7 +124,7 @@ function Invoke-Animations([string]$action) {
         default {
             $b = Get-AnimationBuild
             "window animations: $(if ((Get-Config).animations.enabled -and $b) { 'on' } else { 'off' })"
-            "animation build:   $(if ($b) { "$($b.commit.Substring(0, 12)), built $($b.built)" } else { 'not built (omarchy-win animations build)' })"
+            "animation build:   $(if ($b) { "$($b.commit.Substring(0, 12)), built $($b.built)" } else { 'not built (winarchy animations build)' })"
             $r = Get-Process glazewm -ErrorAction SilentlyContinue | Select-Object -First 1
             "running GlazeWM:   $(if ($r) { Get-GlazeWMPath $r (Get-Paths) } else { 'not running' })"
         }
@@ -138,7 +138,7 @@ function Invoke-Animations([string]$action) {
 # interrupted fade left windows (Windows Terminal) almost invisible.
 function ConvertTo-AnimationsYaml($cfg) {
     $a = $cfg.animations
-    if (-not $a.enabled -or -not (Get-AnimationBuild)) { return '# Window animations: off (turn on with: omarchy-win animations on)' }
+    if (-not $a.enabled -or -not (Get-AnimationBuild)) { return '# Window animations: off (turn on with: winarchy animations on)' }
     $ease = 'cubic_bezier(0.23, 1, 0.32, 1)'
     $ws = if ($a.workspaceSwitch) { 'true' } else { 'false' }
     @"

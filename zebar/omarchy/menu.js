@@ -2,7 +2,7 @@
 // keybindings viewer, in one Zebar widget. menu.ahk writes route.json and opens it;
 // every action is handed back to menu.ahk (whitelisted in zpack.json).
 import * as zebar from './zebar.mjs';
-// Machine paths + settings, written by `omarchy-win apply` (read as a namespace, so a
+// Machine paths + settings, written by `winarchy apply` (read as a namespace, so a
 // setting an older env.js doesn't have yet is just undefined).
 import * as env from './env.js';
 const { AHK, MENU } = env;
@@ -12,7 +12,7 @@ const COLS = 4;
 const MORPH = ['bg', 'bg-light', 'fg', 'fg-dim', 'accent', 'alert', 'muted', 'selection'];
 const SWATCHES = ['bg', 'fg', 'accent', 'red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'magenta'];
 
-// Errors go to %TEMP%\omarchy-win.log (there is no console to look at).
+// Errors go to %TEMP%\winarchy.log (there is no console to look at).
 const log = msg => zebar.shellExec(AHK, [MENU, 'log', String(msg).slice(0, 500)]).catch(() => {});
 window.addEventListener('error', e => log(`error: ${e.message} @${e.lineno}`));
 window.addEventListener('unhandledrejection', e => log(`rejection: ${e.reason?.stack ?? e.reason}`));
@@ -75,7 +75,7 @@ function run(action) {
 // ---- landing: one animation from the picker to the new desktop
 // Enter on a wallpaper: the card drops away and the blurred backdrop stays. Omarchy's reveal
 // band (lib/transition.ps1: slanted, from the middle, 420 ms in-out cubic) opens on it with
-// the full-size picture, which menu.ahk copies into thumbs/_land. omarchy-win leaves this
+// the full-size picture, which menu.ahk copies into thumbs/_land. winarchy leaves this
 // monitor out of its own reveal and writes status.json once the desktop has the wallpaper;
 // then the overlay fades, and the desktop under it already matches.
 const LAND_MS = 420;
@@ -224,7 +224,7 @@ function currentItems() {
     }));
   }
   if (route === 'font') {
-    // Installed monospace fonts (omarchy-win font-list), Nerd Fonts first.
+    // Installed monospace fonts (winarchy font-list), Nerd Fonts first.
     const list = (fonts?.fonts ?? []).filter(f => matches(f.name, q)).map(f => ({
       label: f.name, font: f.name, icon: f.nerd ? '' : '', current: fontKey(f.name) === fontKey(status?.font), action: ['font-set', f.name],
     }));

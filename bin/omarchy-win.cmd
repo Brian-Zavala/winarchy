@@ -1,5 +1,3 @@
 @echo off
-rem omarchy-win CLI shim (this folder is on your user PATH after install).
-set "OW_PWSH=pwsh.exe"
-where pwsh.exe >nul 2>&1 || set "OW_PWSH=%ProgramFiles%\PowerShell\7\pwsh.exe"
-"%OW_PWSH%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0omarchy-win.ps1" %*
+rem Old name of the winarchy CLI (kept so existing habits and scripts still work).
+call "%~dp0winarchy.cmd" %*

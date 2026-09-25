@@ -2,7 +2,7 @@
 
 function Read-Colors([string]$theme) {
     $file = Join-Path $Themes "$theme\colors.toml"
-    if (-not (Test-Path $file)) { throw "Theme '$theme' not found ($file). Run: omarchy-win sync" }
+    if (-not (Test-Path $file)) { throw "Theme '$theme' not found ($file). Run: winarchy sync" }
     $c = @{}
     foreach ($line in Get-Content $file) {
         if ($line -match '^\s*([A-Za-z0-9_]+)\s*=\s*"([^"]*)"') { $c[$Matches[1]] = $Matches[2] }

@@ -22,8 +22,10 @@ jobs:
       - name: AutoHotkey scripts load
         shell: pwsh
         run: |
-          winget install -e --id AutoHotkey.AutoHotkey --silent --accept-source-agreements --accept-package-agreements --scope user
-          $ahk = Get-ChildItem "$env:LOCALAPPDATA\Programs\AutoHotkey\v2\AutoHotkey64.exe", "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          # The portable zip: hosted runners don't always have winget.
+          Invoke-WebRequest https://www.autohotkey.com/download/ahk-v2.zip -OutFile ahk.zip
+          Expand-Archive ahk.zip ahk-bin
+          $ahk = Get-Item ahk-bin/AutoHotkey64.exe
           foreach ($s in Get-ChildItem ahk/*.ahk) {
             & $ahk.FullName /ErrorStdOut /validate $s.FullName
             if ($LASTEXITCODE) { Write-Error "$($s.Name) failed to load"; exit 1 }

@@ -7,8 +7,8 @@
 ; toggles, panels, capture, drag, clipboard and utility keys.
 ; Window management binds live in ~/.glzr/glazewm/config.yaml (generated).
 ; Menus/pickers are the Zebar "menu" widget, opened through menu.ahk.
-; Everything machine-specific comes from `omarchy-win apply` (lib\env.ahk).
-; Undo everything: omarchy-win uninstall
+; Everything machine-specific comes from `winarchy apply` (lib\env.ahk).
+; Undo everything: winarchy uninstall
 
 GlazeCli := Env("glazewmCli")
 Zebar := Env("zebar")
@@ -91,7 +91,7 @@ BluetoothStatus()
 if Env("syncAtLogin", "1") = "1"
     SetTimer () => OmarchyCmd("sync", "-Offline"), -90000
 ; Project app launchers (Super+Return terminal, ...) unless you use your own.
-; Your copy (%USERPROFILE%\.omarchy-win\launchers.ahk, made by Setup > Keybindings) wins;
+; Your copy (%USERPROFILE%\.winarchy\launchers.ahk, made by Setup > Keybindings) wins;
 ; it gets env.ahk through /include, so it needs no #Include of the code folder.
 if Env("launchers", "1") = "1"
     StartLaunchers()
@@ -104,7 +104,7 @@ StartLaunchers() {
 }
 
 ; --- Live reload: saved edits take effect (Hyprland reloads its config on save) ----
-;   config.json          -> omarchy-win apply
+;   config.json          -> winarchy apply
 ;   glazewm.yaml.tpl     -> rewrite GlazeWM's config and reload it
 ;   your keybindings     -> reload that script (the file itself is never touched)
 Watched := Map()
@@ -131,7 +131,7 @@ WatchEdits() {
         w.seen := t
         if t = ""
             continue
-        ; omarchy-win's own writes (e.g. animations on/off) apply themselves.
+        ; winarchy's own writes (e.g. animations on/off) apply themselves.
         if action = "apply" && FileExist(data "\generated\config.selfwrite") && Trim(FileRead(data "\generated\config.selfwrite")) = t
             continue
         WmLog("saved: " path)
@@ -176,7 +176,7 @@ GlazeGuard() {
         gone := 0
         return
     }
-    ; omarchy-win is switching builds right now.
+    ; winarchy is switching builds right now.
     flag := Env("data") "\generated\glazewm-switch.flag"
     if FileExist(flag) && DateDiff(A_Now, FileGetTime(flag, "M"), "Seconds") < 30
         return
@@ -544,7 +544,7 @@ RestoreCursors() {
 }
 
 WmLog(msg) {
-    try FileAppend FormatTime(, "HH:mm:ss") " [wm] " msg "`n", Env("log", A_Temp "\omarchy-win.log"), "UTF-8"
+    try FileAppend FormatTime(, "HH:mm:ss") " [wm] " msg "`n", Env("log", A_Temp "\winarchy.log"), "UTF-8"
 }
 
 BarGuard() {

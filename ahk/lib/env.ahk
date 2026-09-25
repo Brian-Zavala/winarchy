@@ -1,10 +1,10 @@
-; Machine paths and settings written by `omarchy-win apply`
-; (%USERPROFILE%\.omarchy-win\generated\omarchy.ini), so no script hard-codes a path.
+; Machine paths and settings written by `winarchy apply`
+; (%USERPROFILE%\.winarchy\generated\winarchy.ini), so no script hard-codes a path.
 
 global OW := LoadOmarchyEnv()
 
 LoadOmarchyEnv() {
-    ini := EnvGet("USERPROFILE") "\.omarchy-win\generated\omarchy.ini"
+    ini := EnvGet("USERPROFILE") "\.winarchy\generated\winarchy.ini"
     env := Map()
     env.CaseSense := false
     for section in ["paths", "config"] {
@@ -23,7 +23,7 @@ Env(key, default := "") {
     return OW.Has(key) && OW[key] != "" ? OW[key] : default
 }
 
-; Run an omarchy-win CLI verb hidden (bin\omarchy-win.ps1 under PowerShell 7).
+; Run a winarchy CLI verb hidden (bin\winarchy.ps1 under PowerShell 7).
 OmarchyCmd(args*) {
     try Run OmarchyCmdLine(args*), , "Hide"
 }
@@ -35,7 +35,7 @@ OmarchyCmdWait(args*) {
 }
 
 OmarchyCmdLine(args*) {
-    cmd := '"' Env("pwsh", "pwsh.exe") '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' Env("code") '\bin\omarchy-win.ps1"'
+    cmd := '"' Env("pwsh", "pwsh.exe") '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' Env("code") '\bin\winarchy.ps1"'
     for a in args
         if a != ""
             cmd .= ' "' StrReplace(a, '"', '\"') '"'

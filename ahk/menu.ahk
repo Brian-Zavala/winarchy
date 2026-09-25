@@ -4,14 +4,14 @@
 #Include lib\env.ahk
 #Include lib\osd.ahk
 ; Action dispatcher for the Zebar bar + Omarchy menu widget (whitelisted in zpack.json),
-; and for omarchy-wm.ahk hotkeys that open the menu.
+; and for winarchy.ahk hotkeys that open the menu.
 ;   menu.ahk open <route>        open/toggle the Omarchy menu (root, system, keys, background, theme, ...)
 ;   menu.ahk launcher | start | terminal | calendar
 ;   menu.ahk send <keys> | run <target> [args] | url <url> | settings <ms-settings:...>
 ;   menu.ahk edit <file | glaze-config | bar-css | config | launchers | keybindings>
-;   menu.ahk bg-set <path> [landing name] | bg-next | theme-set <name> | sync | apply | doctor   (-> omarchy-win CLI)
+;   menu.ahk bg-set <path> [landing name] | bg-next | theme-set <name> | sync | apply | doctor   (-> winarchy CLI)
 ;   menu.ahk apply-glaze | update-check | animations <toggle> | glaze <glazewm command>
-;   menu.ahk wm <bar|gaps|awake|transparency|colorpicker>        (-> running omarchy-wm.ahk)
+;   menu.ahk wm <bar|gaps|awake|transparency|colorpicker>        (-> running winarchy.ahk)
 ;   menu.ahk panel <audio|bluetooth>                             (toggle Windows' quick panel)
 ;   menu.ahk lock | sleep | restart | shutdown | logout | upgrade | uninstall
 ;   menu.ahk bar-start                                           (start Zebar with no console: see Restart-Bar)
@@ -58,12 +58,12 @@ switch verb {
     case "glaze": try Run('"' Env("glazewmCli") '" command ' arg, , "Hide")
     case "activity": SignalWm("activity")
     case "browser-setup": RunInTerminal("Browser toolbar color", CliInTerminal("browser-setup"))
-    case "doctor": RunInTerminal("omarchy-win doctor", '"' Env("pwsh", "pwsh") '" -NoExit -NoProfile -ExecutionPolicy Bypass -File "' Env("code") '\bin\omarchy-win.ps1" doctor')
+    case "doctor": RunInTerminal("winarchy doctor", '"' Env("pwsh", "pwsh") '" -NoExit -NoProfile -ExecutionPolicy Bypass -File "' Env("code") '\bin\winarchy.ps1" doctor')
     case "wm": SignalWm(arg)
     case "panel": SignalWm("panel-" arg)
     case "about": RunWt('-w new --size 112,38 -p "Omarchy About"', '"' Env("pwsh", "pwsh") '" -NoProfile -ExecutionPolicy Bypass -File "' Env("code") '\lib\about.ps1"')
     case "branding-reset": ResetBranding(arg)
-    case "log": FileAppend FormatTime(, "HH:mm:ss") " [menu] " arg "`n", Env("log", A_Temp "\omarchy-win.log"), "UTF-8"
+    case "log": FileAppend FormatTime(, "HH:mm:ss") " [menu] " arg "`n", Env("log", A_Temp "\winarchy.log"), "UTF-8"
     case "lock": DllCall("LockWorkStation")
     case "sleep":
         ; Modern Standby laptops refuse SetSuspendState: turning the screens off is how they sleep.
@@ -72,9 +72,9 @@ switch verb {
     case "restart": Run "shutdown.exe /r /t 0", , "Hide"
     case "shutdown": Run "shutdown.exe /s /t 0", , "Hide"
     case "logout": Run "shutdown.exe /l", , "Hide"
-    case "upgrade": RunInTerminal("Update", '"' Env("pwsh", "pwsh") '" -NoProfile -ExecutionPolicy Bypass -File "' Env("code") '\bin\omarchy-win.ps1" update')
+    case "upgrade": RunInTerminal("Update", '"' Env("pwsh", "pwsh") '" -NoProfile -ExecutionPolicy Bypass -File "' Env("code") '\bin\winarchy.ps1" update')
     case "bar-start": try Run('"' Env("zebar") '" startup', , "Hide")
-    case "uninstall", "revert": RunInTerminal("Uninstall omarchy-win", '"' Env("pwsh", "pwsh") '" -NoExit -NoProfile -ExecutionPolicy Bypass -File "' Env("code") '\bin\omarchy-win.ps1" uninstall')
+    case "uninstall", "revert": RunInTerminal("Uninstall winarchy", '"' Env("pwsh", "pwsh") '" -NoExit -NoProfile -ExecutionPolicy Bypass -File "' Env("code") '\bin\winarchy.ps1" uninstall')
 }
 
 ; Named targets keep menu.json free of machine paths.
@@ -92,7 +92,7 @@ EditFile(target) {
     }
     if !FileExist(file) && target = "config" {
         f := FileOpen(file, "w", "UTF-8-RAW")
-        f.Write('{`n  "_help": "Only the settings you change. See docs/config.md, then run: omarchy-win apply"`n}`n')
+        f.Write('{`n  "_help": "Only the settings you change. See docs/config.md, then run: winarchy apply"`n}`n')
         f.Close()
     }
     editor := Env("editor", "notepad.exe")
@@ -102,20 +102,20 @@ EditFile(target) {
         Run '"' editor '" "' file '"'
 }
 
-; Your GlazeWM template (omarchy-win uses it instead of its own; saving applies it).
+; Your GlazeWM template (winarchy uses it instead of its own; saving applies it).
 GlazeTemplate() {
     file := Env("data") "\glazewm.yaml.tpl"
     if !FileExist(file) {
         tpl := FileRead(Env("code") "\templates\glazewm.yaml.tpl", "UTF-8")
         f := FileOpen(file, "w", "UTF-8-RAW")
-        f.Write("# YOUR copy of omarchy-win's GlazeWM template: saving it rewrites GlazeWM's config and reloads it.`n"
-            . "# {{ ... }} are filled in by omarchy-win. Delete this file to go back to the default.`n" tpl)
+        f.Write("# YOUR copy of winarchy's GlazeWM template: saving it rewrites GlazeWM's config and reloads it.`n"
+            . "# {{ ... }} are filled in by winarchy. Delete this file to go back to the default.`n" tpl)
         f.Close()
     }
     return file
 }
 
-; Your copy of omarchy-win's app keys (made on first edit; saving reloads it). It gets
+; Your copy of winarchy's app keys (made on first edit; saving reloads it). It gets
 ; env.ahk through AutoHotkey's /include switch, so it has no #Include of the code folder.
 UserLaunchers() {
     file := Env("data") "\launchers.ahk"
@@ -135,9 +135,9 @@ UserLaunchers() {
     return file
 }
 
-; An omarchy-win verb for a terminal tab: shows its output and waits for a key.
+; A winarchy verb for a terminal tab: shows its output and waits for a key.
 CliInTerminal(args*) {
-    cmd := '"' Env("pwsh", "pwsh") '" -NoProfile -ExecutionPolicy Bypass -File "' Env("code") '\bin\omarchy-win.ps1"'
+    cmd := '"' Env("pwsh", "pwsh") '" -NoProfile -ExecutionPolicy Bypass -File "' Env("code") '\bin\winarchy.ps1"'
     for a in args
         cmd .= ' "' a '"'
     return cmd ' -Pause'
@@ -206,13 +206,13 @@ ResetBranding(which) {
     try FileCopy src, Env("data") "\branding\" which ".txt", true
 }
 
-; Commands that need state held by the running omarchy-wm.ahk (bar/awake toggles...).
+; Commands that need state held by the running winarchy.ahk (bar/awake toggles...).
 SignalWm(name) {
     static ids := Map("bar", 1, "gaps", 2, "awake", 3, "transparency", 4, "colorpicker", 5,
         "panel-audio", 6, "panel-bluetooth", 7, "screensaver", 8, "screensaver-toggle", 9,
         "ocr", 10, "nightlight", 11, "dnd", 12, "weather", 13, "activity", 14, "uac", 15)
     DetectHiddenWindows true
-    if ids.Has(name) && (hwnd := WinExist("omarchy-wm.ahk ahk_class AutoHotkey"))
+    if ids.Has(name) && (hwnd := WinExist("winarchy.ahk ahk_class AutoHotkey"))
         PostMessage 0x5555, ids[name], 0, , hwnd
 }
 

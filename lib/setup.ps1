@@ -1,4 +1,4 @@
-# omarchy-win install / update. Install is idempotent: re-running it only does what's
+# winarchy install / update. Install is idempotent: re-running it only does what's
 # missing, and every system change is journaled first (lib/journal.ps1).
 
 . "$PSScriptRoot\fonts.ps1"
@@ -80,7 +80,7 @@ function Install-Extras {
     $p = Update-Paths
     if ($p.ttfx) { Write-Ok "ttfx: $($p.ttfx)"; return }
     # ttfx (Omarchy's Rust port of terminaltexteffects): a prebuilt Windows binary from the
-    # omarchy-win release if one is published, else built with cargo when Rust is present.
+    # winarchy release if one is published, else built with cargo when Rust is present.
     $url = (Get-Config).ttfxUrl
     $dest = Join-Path $Data 'bin\ttfx.exe'
     if ($url) {
@@ -95,7 +95,7 @@ function Install-Extras {
         [void](Add-JournalEntry @{ kind = 'cargo'; key = 'cargo|ttfx'; crate = 'ttfx' })
         cargo install --git https://github.com/omacom/ttfx --tag v0.3.3 --locked 2>&1 | Select-Object -Last 2 | Out-Host
     } else {
-        Write-Ok 'ttfx not available: the screensaver shows the still logo (install Rust, then: omarchy-win extras)'
+        Write-Ok 'ttfx not available: the screensaver shows the still logo (install Rust, then: winarchy extras)'
     }
 }
 
@@ -112,7 +112,7 @@ function Get-InstallAnswers($p) {
     $personal = Join-Path $p.startup 'launchers.ahk'
     if (Test-Path $personal) {
         Write-Ok "Found your own launcher script ($personal)."
-        $cfg.launchers = -not (Read-YesNo 'Keep using it instead of omarchy-win''s app keys?' $true)
+        $cfg.launchers = -not (Read-YesNo 'Keep using it instead of winarchy''s app keys?' $true)
     }
     $cfg.hideTaskbar = Read-YesNo 'Hide the Windows taskbar (the top bar replaces it)?' $true
     $wall = Join-Path $p.pictures 'Wallpapers'
@@ -159,7 +159,7 @@ function Start-Everything($p) {
 function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     $script:AssumeYes = $Yes
     $cfgVersion = (Get-Content -Raw (Join-Path $Code 'VERSION') -ErrorAction SilentlyContinue)?.Trim()
-    Write-Host "omarchy-win $cfgVersion - Omarchy's look and keys on Windows 11 (unofficial)" -ForegroundColor Green
+    Write-Host "winarchy $cfgVersion - Omarchy's look and keys on Windows 11 (unofficial)" -ForegroundColor Green
     New-Item -ItemType Directory -Force $Data | Out-Null
     Test-Preflight
     if ($Adopt) { return Invoke-Adopt }
@@ -185,7 +185,7 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     Write-Step 'Omarchy themes and backgrounds'
     if (Read-YesNo 'Download Omarchy''s 22 themes and ~100 backgrounds now (about 110 MB)?' $true) {
         Use-Lock { Invoke-Sync }
-    } else { Use-Lock { Invoke-Sync -Offline }; Write-Ok 'Skipped: run "omarchy-win sync" any time.' }
+    } else { Use-Lock { Invoke-Sync -Offline }; Write-Ok 'Skipped: run "winarchy sync" any time.' }
     $theme = if (Test-Path (Join-Path $Themes 'tokyo-night\colors.toml')) { 'tokyo-night' }
     if ($theme) { Use-Lock { Invoke-ThemeSet $theme } }
 
@@ -196,11 +196,11 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     Write-Host '  Super + K             all keybindings'
     Write-Host '  Super + Alt + Space   Omarchy menu        Super + Space   app launcher'
     Write-Host '  Super + Return        terminal            Super + 1..0    workspaces'
-    Write-Host '  omarchy-win doctor    check the setup     omarchy-win uninstall   undo everything'
-    Write-Host "  Settings: $ConfigFile   (then: omarchy-win apply)"
+    Write-Host '  winarchy doctor    check the setup     winarchy uninstall   undo everything'
+    Write-Host "  Settings: $ConfigFile   (then: winarchy apply)"
 }
 
-# This PC was set up by hand before omarchy-win existed: take it over in place.
+# This PC was set up by hand before winarchy existed: take it over in place.
 function Invoke-Adopt {
     $legacy = Get-ChildItem (Join-Path $Data 'backup') -Directory -ErrorAction SilentlyContinue |
         Where-Object { Test-Path (Join-Path $_.FullName 'values.json') } | Sort-Object Name | Select-Object -First 1
@@ -236,13 +236,13 @@ function Invoke-Adopt {
     }
     Write-Step 'Restarting'
     Start-Everything $p
-    Write-Host "`nAdopted. Run 'omarchy-win doctor' to check." -ForegroundColor Green
+    Write-Host "`nAdopted. Run 'winarchy doctor' to check." -ForegroundColor Green
 }
 
-# omarchy-win update (also the bar's update icon): exactly what update-check found,
+# winarchy update (also the bar's update icon): exactly what update-check found,
 # once at a time, then a fresh check so the icon clears.
 function Invoke-Update {
-    $m = [Threading.Mutex]::new($false, 'Local\OmarchyWinUpdate')
+    $m = [Threading.Mutex]::new($false, 'Local\WinarchyUpdate')
     if (-not $m.WaitOne(0)) { Write-Host 'An update is already running in another window.'; return }
     try {
         $updFile = Join-Path $Pack 'updates.json'
@@ -251,7 +251,7 @@ function Invoke-Update {
         Write-Json $updFile ([ordered]@{ checked = (Get-Date).ToString('s'); updating = $true; items = @() })
         $p = Get-Paths
 
-        Write-Step 'omarchy-win'
+        Write-Step 'winarchy'
         $codeChanged = $false
         if ((Test-Path (Join-Path $Code '.git')) -and (git -C $Code remote)) {
             $before = git -C $Code rev-parse HEAD
@@ -286,7 +286,7 @@ function Invoke-Update {
         Write-Step 'Applying'
         # A fresh process so new code is used; restart the bar/keys only when something changed.
         $restart = $codeChanged -or ($ids -contains 'glzr-io.glazewm') -or ($ids -contains 'AutoHotkey.AutoHotkey')
-        $applyArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Code 'bin\omarchy-win.ps1'), 'apply') + $(if (-not $restart) { '-NoRestart' })
+        $applyArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Code 'bin\winarchy.ps1'), 'apply') + $(if (-not $restart) { '-NoRestart' })
         & $p.pwsh @applyArgs
 
         Write-Step 'Checking again'

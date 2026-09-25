@@ -1,15 +1,15 @@
 <#
   Sets (or clears) the Chromium BrowserThemeColor policy for this user.
   Browser policies are admin-only, so this runs from the elevated scheduled task
-  \omarchy-win\browser-color, created once by `omarchy-win browser-setup` - the same idea
+  \winarchy\browser-color, created once by `winarchy browser-setup` - the same idea
   as Omarchy's omarchy-theme-set-browser-policy sudo rule.
 
-  Security: the task runs an admin-owned copy of this file (C:\ProgramData\omarchy-win),
-  it accepts nothing but "#rrggbb" or "none" from ~/.omarchy-win/generated/browser-color.txt,
+  Security: the task runs an admin-owned copy of this file (C:\ProgramData\winarchy),
+  it accepts nothing but "#rrggbb" or "none" from ~/.winarchy/generated/browser-color.txt,
   writes nothing but that one policy value, and uses only .NET APIs (no cmdlets, so no
   module can be picked up from a user-writable module path).
 #>
-$colorFile = [IO.Path]::Combine([Environment]::GetFolderPath('UserProfile'), '.omarchy-win', 'generated', 'browser-color.txt')
+$colorFile = [IO.Path]::Combine([Environment]::GetFolderPath('UserProfile'), '.winarchy', 'generated', 'browser-color.txt')
 $color = 'none'
 if ([IO.File]::Exists($colorFile)) { $color = [IO.File]::ReadAllText($colorFile).Trim().ToLowerInvariant() }
 if ($color -ne 'none' -and $color -notmatch '^#[0-9a-f]{6}$') { exit 2 }
