@@ -32,7 +32,7 @@ Put only the keys you want to change; everything else comes from
 | `screenshotAutoCopy` | `false` | Copy every new screenshot file to the clipboard |
 | `syncAtLogin` | `true` | Re-index your background folders after login (no downloads) |
 | `glazewmManaged` | `true` | `false` = omarchy-win stops writing `~/.glzr/glazewm/config.yaml` (edit it yourself) |
-| `backgroundTransition` | `"reveal"` | Omarchy v4's slanted reveal when the wallpaper changes; `"none"` for an instant change (skipped while Wallpaper Engine or Lively runs) |
+| `backgroundTransition` | `"reveal"` | Omarchy v4's slanted reveal when the wallpaper changes; `"none"` for an instant change (skipped while Wallpaper Engine or Lively runs). The background picker plays it on its own monitor, from the blurred preview |
 | `animations.enabled` | `false` | Experimental window animations: run the GlazeWM build of glzr-io/glazewm#1392 (`omarchy-win animations build`, then `animations on`) |
 | `animations.moveMs` / `openMs` / `closeMs` | `379` / `410` / `149` | Durations (Omarchy's `looknfeel.lua`); shorter feels snappier |
 | `animations.workspaceSwitch` | `false` | Slide between workspaces (Omarchy keeps this off) |
