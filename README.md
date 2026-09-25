@@ -13,7 +13,7 @@ pickers, the screensaver, and the Super-key workflow — installed in one comman
 Open **PowerShell** (not as administrator) and run:
 
 ```powershell
-irm https://raw.githubusercontent.com/OWNER/winarchy/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/Brian-Zavala/winarchy/main/install.ps1 | iex
 ```
 
 The installer:

@@ -1,6 +1,6 @@
 # Winarchy bootstrap. Run from any PowerShell window (no admin needed):
 #
-#   irm https://raw.githubusercontent.com/OWNER/winarchy/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/Brian-Zavala/winarchy/main/install.ps1 | iex
 #
 # It gets PowerShell 7 if missing, downloads winarchy to %LOCALAPPDATA%\winarchy
 # (git clone when git is available, else the release zip) and starts the installer,
@@ -9,7 +9,7 @@
 # Windows PowerShell 5.1 compatible on purpose (it's what every Windows 11 PC has).
 
 $ErrorActionPreference = 'Stop'
-$repo = if ($env:WINARCHY_REPO) { $env:WINARCHY_REPO } else { 'OWNER/winarchy' }
+$repo = if ($env:WINARCHY_REPO) { $env:WINARCHY_REPO } else { 'Brian-Zavala/winarchy' }
 $ref = if ($env:WINARCHY_REF) { $env:WINARCHY_REF } else { 'main' }
 $dest = Join-Path $env:LOCALAPPDATA 'winarchy'
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12

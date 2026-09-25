@@ -13,3 +13,5 @@
 - Saved edits apply themselves: config.json, your GlazeWM template, your keybindings script, user.css.
 - Menu actions report back (OSD); failures are logged and shown by doctor; long downloads run in a terminal.
 - Omarchy v4 wallpaper reveal; experimental window animations (GlazeWM #1392 build, `winarchy animations`).
+- Bar shield for admin (UAC) prompts that Windows parks in the (hidden) taskbar: click it to open the prompt.
+- Renamed to Winarchy (`winarchy` CLI; `omarchy-win` still works as an alias).
