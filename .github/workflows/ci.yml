@@ -21,9 +21,11 @@ jobs:
           foreach ($f in 'default/config.json', 'zebar/omarchy/menu.json') { Get-Content -Raw $f | ConvertFrom-Json | Out-Null }
       - name: AutoHotkey scripts load
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # The portable zip: hosted runners don't always have winget.
-          Invoke-WebRequest https://www.autohotkey.com/download/ahk-v2.zip -OutFile ahk.zip
+          # The portable zip from AutoHotkey's GitHub releases (autohotkey.com blocks CI runners).
+          gh release download --repo AutoHotkey/AutoHotkey --pattern 'AutoHotkey_2*.zip' --output ahk.zip
           Expand-Archive ahk.zip ahk-bin
           $ahk = Get-Item ahk-bin/AutoHotkey64.exe
           foreach ($s in Get-ChildItem ahk/*.ahk) {
