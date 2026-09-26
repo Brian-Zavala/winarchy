@@ -92,14 +92,24 @@ function Set-ClaudeTheme($c) {
 # BrowserThemeColor policy (Chrome/Brave then show "Managed by your organization").
 # Policies are admin-only: an elevated task, set up once, applies the color (see
 # ps51/browser-policy.ps1 for why that is safe).
-$BrowserTask = @{ path = '\winarchy\'; name = 'browser-color' }
-$BrowserPolicyDir = Join-Path $env:ProgramData 'winarchy'
 # Set up under the old name (omarchy-win) before the rename: the admin-created task and
 # folder keep working as they are (re-creating them would need another UAC prompt).
-if (-not (Get-ScheduledTask -TaskPath $BrowserTask.path -TaskName $BrowserTask.name -ErrorAction SilentlyContinue) -and
-    (Get-ScheduledTask -TaskPath '\omarchy-win\' -TaskName 'browser-color' -ErrorAction SilentlyContinue)) {
-    $BrowserTask = @{ path = '\omarchy-win\'; name = 'browser-color' }
-    $BrowserPolicyDir = Join-Path $env:ProgramData 'omarchy-win'
+# Looked up on first use through the Task Scheduler COM API (~30 ms), not
+# Get-ScheduledTask (~800 ms to load its module): every CLI call dot-sources this file.
+# Returns @{ path; name; dir; task }, task = $null when it isn't registered.
+function Get-BrowserTask {
+    if ($script:BrowserTaskInfo) { return $script:BrowserTaskInfo }
+    $info = @{ path = '\winarchy\'; name = 'browser-color'; dir = Join-Path $env:ProgramData 'winarchy'; task = $null }
+    try {
+        $svc = New-Object -ComObject Schedule.Service
+        $svc.Connect()
+        foreach ($n in 'winarchy', 'omarchy-win') {
+            try { $task = $svc.GetFolder("\$n").GetTask('browser-color') } catch { continue }
+            $info = @{ path = "\$n\"; name = 'browser-color'; dir = Join-Path $env:ProgramData $n; task = $task }
+            break
+        }
+    } catch {}
+    ($script:BrowserTaskInfo = $info)
 }
 
 function Test-ChromiumInstalled {
@@ -107,11 +117,13 @@ function Test-ChromiumInstalled {
              "$env:ProgramFiles\BraveSoftware\Brave-Browser\Application\brave.exe", "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\Application\brave.exe") |
         Where-Object { Test-Path $_ })
 }
-function Test-BrowserTask { [bool](Get-ScheduledTask -TaskPath $BrowserTask.path -TaskName $BrowserTask.name -ErrorAction SilentlyContinue) }
+function Test-BrowserTask { [bool](Get-BrowserTask).task }
 
 function Invoke-BrowserTask([string]$color) {
     Write-Utf8 (Join-Path $Generated 'browser-color.txt') $color
-    Start-ScheduledTask -TaskPath $BrowserTask.path -TaskName $BrowserTask.name
+    $task = (Get-BrowserTask).task
+    if (-not $task) { throw 'the browser color task is not set up' }
+    [void]$task.Run($null)
 }
 
 # One UAC prompt: admin-owned copy of the helper + a task this user may start.
@@ -120,9 +132,10 @@ function Enable-BrowserPolicy {
     $p = Get-Paths
     $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $src = Join-Path $Code 'ps51\browser-policy.ps1'
+    $bt = Get-BrowserTask
     $script = @"
 `$ErrorActionPreference = 'Stop'
-`$dir = '$BrowserPolicyDir'
+`$dir = '$($bt.dir)'
 New-Item -ItemType Directory -Force `$dir | Out-Null
 icacls `$dir /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null
 Copy-Item -Force '$src' (Join-Path `$dir 'browser-policy.ps1')
@@ -131,26 +144,29 @@ icacls (Join-Path `$dir 'browser-policy.ps1') /reset | Out-Null
 `$action = New-ScheduledTaskAction -Execute `$ps -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path `$dir 'browser-policy.ps1') + '"')
 `$principal = New-ScheduledTaskPrincipal -UserId '$sid' -LogonType Interactive -RunLevel Highest
 `$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew
-Register-ScheduledTask -TaskPath '$($BrowserTask.path)' -TaskName '$($BrowserTask.name)' -Action `$action -Principal `$principal -Settings `$settings -Force | Out-Null
+Register-ScheduledTask -TaskPath '$($bt.path)' -TaskName '$($bt.name)' -Action `$action -Principal `$principal -Settings `$settings -Force | Out-Null
 `$svc = New-Object -ComObject Schedule.Service; `$svc.Connect()
-`$svc.GetFolder('$($BrowserTask.path.TrimEnd([char]92))').GetTask('$($BrowserTask.name)').SetSecurityDescriptor('D:(A;;FA;;;BA)(A;;FA;;;SY)(A;;GRGX;;;$sid)', 0)
+`$svc.GetFolder('$($bt.path.TrimEnd([char]92))').GetTask('$($bt.name)').SetSecurityDescriptor('D:(A;;FA;;;BA)(A;;FA;;;SY)(A;;GRGX;;;$sid)', 0)
 "@
     $tmp = Join-Path $env:TEMP 'omarchy-browser-setup.ps1'
     Set-Content -Encoding UTF8 $tmp $script
     Write-Host 'Windows will ask for admin permission once (browser policies are admin-only).'
     Start-Process $p.powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tmp`""
     Remove-Item $tmp -ErrorAction SilentlyContinue
+    $script:BrowserTaskInfo = $null   # look again
     if (-not (Test-BrowserTask)) { throw 'the browser color task was not created (permission declined?)' }
-    [void](Add-JournalEntry @{ kind = 'browsertask'; key = 'browsertask'; dir = $BrowserPolicyDir })
+    [void](Add-JournalEntry @{ kind = 'browsertask'; key = 'browsertask'; dir = $bt.dir })
     Log 'browser color: ready'
     Set-BrowserTheme (Read-State).theme (Read-Colors (Read-State).theme)
 }
 
 function Disable-BrowserPolicy {
     if (Test-BrowserTask) {
+        $bt = Get-BrowserTask
         try { Invoke-BrowserTask 'none'; Start-Sleep -Seconds 3 } catch {}
-        $script = "Unregister-ScheduledTask -TaskPath '$($BrowserTask.path)' -TaskName '$($BrowserTask.name)' -Confirm:`$false; Remove-Item -Recurse -Force '$BrowserPolicyDir' -ErrorAction SilentlyContinue"
+        $script = "Unregister-ScheduledTask -TaskPath '$($bt.path)' -TaskName '$($bt.name)' -Confirm:`$false; Remove-Item -Recurse -Force '$($bt.dir)' -ErrorAction SilentlyContinue"
         Start-Process (Get-Paths).powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$script`""
+        $script:BrowserTaskInfo = $null
     }
 }
 

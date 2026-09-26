@@ -238,3 +238,39 @@ Describe 'Background landing' {
         $ps | Should -Match '0\.18 \* \$h / 2'
     }
 }
+Describe 'Browser color task' {
+    BeforeEach {
+        $script:BrowserTaskInfo = $null
+        # Task Scheduler COM stand-in: only the folders listed have the task.
+        function New-FakeScheduler([string[]]$has) {
+            $svc = [pscustomobject]@{ has = $has }
+            $svc | Add-Member ScriptMethod Connect {}
+            $svc | Add-Member ScriptMethod GetFolder {
+                param($p)
+                $f = [pscustomobject]@{ p = $p; ok = $this.has -contains $p }
+                $f | Add-Member ScriptMethod GetTask { param($n) if (-not $this.ok) { throw 'not found' }; [pscustomobject]@{ Path = "$($this.p)\$n" } }
+                $f
+            }
+            $svc
+        }
+    }
+    It 'finds the task set up under the old name, and its folder' {
+        Mock New-Object { New-FakeScheduler '\omarchy-win' } -ParameterFilter { $ComObject -eq 'Schedule.Service' }
+        $t = Get-BrowserTask
+        $t.path | Should -Be '\omarchy-win\'
+        $t.dir | Should -Be (Join-Path $env:ProgramData 'omarchy-win')
+        $t.task.Path | Should -Be '\omarchy-win\browser-color'
+        Test-BrowserTask | Should -BeTrue
+    }
+    It 'prefers the winarchy task and asks the scheduler only once' {
+        Mock New-Object { New-FakeScheduler '\winarchy', '\omarchy-win' } -ParameterFilter { $ComObject -eq 'Schedule.Service' }
+        (Get-BrowserTask).path | Should -Be '\winarchy\'
+        [void](Get-BrowserTask)
+        Should -Invoke New-Object -Times 1 -Exactly
+    }
+    It 'reports no task, with the default folder for browser-setup' {
+        Mock New-Object { New-FakeScheduler @() } -ParameterFilter { $ComObject -eq 'Schedule.Service' }
+        Test-BrowserTask | Should -BeFalse
+        (Get-BrowserTask).dir | Should -Be (Join-Path $env:ProgramData 'winarchy')
+    }
+}
