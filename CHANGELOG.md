@@ -3,6 +3,9 @@
 ## Unreleased
 
 - Games no longer fight the desktop: GlazeWM doesn't tile games (the ones Windows' Game Bar knows, plus config `games`), the bar stays behind a fullscreen game, and display-mode changes, bar restarts and the screensaver wait until it closes (a game switching resolution used to loop with the bar: black screen, blinking bar). Gamepad input counts as activity for the screensaver. `gameMode: false` turns this off.
+- Games: the bar hides on the game's monitor (a topmost bar blinked over exclusive-fullscreen games); games are recognised as soon as their window shows; a gamepad icon in the bar switches to or closes the running game, and Super+W / Super+Q close games too (twice: force-quit). See the README's Games section and Super+K.
+- Super+Shift+Space (top bar off) now lasts until you turn the bar back on, across restarts; `winarchy bar on|off|toggle`.
+- Holding Super no longer opens the Start menu on release.
 - Bar indicators work like Omarchy 4 (Quattro): the clock sits at the exact center, and active indicators sit to its left in the normal text color. Hovering the center reveals the others, dimmed, so one click turns them on: dictation, screen recording, night light, do not disturb, stay awake. The clock shows a pointer, and clicking it opens the calendar.
 
 ## 0.1.0 (unreleased)

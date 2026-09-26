@@ -32,7 +32,7 @@ Put only the keys you want to change; everything else comes from
 | `screenshotAutoCopy` | `false` | Copy every new screenshot file to the clipboard |
 | `syncAtLogin` | `true` | Re-index your background folders after login (no downloads) |
 | `glazewmManaged` | `true` | `false` = winarchy stops writing `~/.glzr/glazewm/config.yaml` (edit it yourself) |
-| `gameMode` | `true` | Games get out of the way: GlazeWM doesn't tile them, the bar stays behind a fullscreen game, and display-mode changes, bar restarts and the screensaver wait until it closes. Games = the ones Windows' Game Bar recognised (any launcher) + `games` |
+| `gameMode` | `true` | Games get out of the way: GlazeWM doesn't tile them, the bar hides on the game's monitor, and display-mode changes, bar restarts and the screensaver wait until you leave or close it. Super+W and the bar's gamepad icon close a game; gamepad input counts as activity. Games = the ones Windows' Game Bar recognised (any launcher) + `games`. See the README's Games section |
 | `games` | `[]` | More game process names, e.g. `["MyGame"]` or `["MyGame.exe"]` |
 | `backgroundTransition` | `"reveal"` | Omarchy v4's slanted reveal when the wallpaper changes; `"none"` for an instant change (skipped while Wallpaper Engine or Lively runs). The background picker plays it on its own monitor, from the blurred preview |
 | `animations.enabled` | `false` | Experimental window animations: run the GlazeWM build of glzr-io/glazewm#1392 (`winarchy animations build`, then `animations on`) |

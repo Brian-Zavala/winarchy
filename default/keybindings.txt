@@ -25,7 +25,7 @@ WORKSPACES   (1-0 are split across your monitors, left to right)
   Ctrl + Alt + Tab              Focus next monitor (+ Shift: previous)
 
 WINDOWS
-  Super + W  or  Super + Q      Close window (a game too; twice on a game: force-quit)
+  Super + W  or  Super + Q      Close window (a game too: see GAMES)
   Super + Arrows                Move focus
   Super + Shift + Arrows        Swap / move window (crosses monitors)
   Super + T                     Toggle floating / tiling
@@ -43,6 +43,16 @@ WINDOWS
   Super + Shift + Space         Toggle top bar (stays off until toggled back; also: winarchy bar on|off)
 
 {{ apps }}
+
+GAMES   (automatic for every game Windows' Game Bar knows; add others in config.json "games")
+  A game in front               Not tiled by GlazeWM; the top bar hides on its monitor;
+                                nothing pops over it (bar restarts, display changes and
+                                the screensaver wait until you leave or close the game)
+  Super + W  or  Super + Q      Close the game (again within 15 s: force-quit)
+  Bar gamepad icon              Shown while a game is open. Click: back to the game,
+                                right click: close it (twice: force-quit)
+  Gamepad buttons / sticks      Count as activity: no screensaver mid-game; they also end it
+  "gameMode": false             In config.json: turn all of this off
 
 CAPTURE   (no PrtScn key on your laptop? Super + Ctrl + C opens the Capture menu)
   Print                         Screenshot (region, Snipping Tool)
@@ -79,7 +89,7 @@ SYSTEM
   Bar gamepad icon (game open)  Click: switch to the game, right click: close it (twice: force-quit)
   Bar audio icon                Click: audio panel, right click: mute, scroll: volume
   Bar bluetooth icon            Click: Bluetooth panel
-  Idle 2.5 minutes              Screensaver (any key or mouse move ends it)
+  Idle 2.5 minutes              Screensaver (any key, mouse move or gamepad input ends it)
   Ctrl + Esc                    Windows Start menu
   Super + Shift + Alt + R       Reload GlazeWM config
   Super + Shift + Alt + P       Pause / resume GlazeWM (escape hatch)
