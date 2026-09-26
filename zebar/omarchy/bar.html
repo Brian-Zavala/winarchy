@@ -9,32 +9,43 @@
   </head>
   <body>
     <div id="bar">
-      <div class="left">
-        <span class="logo" id="logo" title="Omarchy menu (right click: terminal)"></span>
-        <div id="workspaces"></div>
+      <div class="side">
+        <div class="left">
+          <span class="logo" id="logo" title="Omarchy menu (right click: terminal)"></span>
+          <div id="workspaces"></div>
+        </div>
+        <!-- Quattro indicators: active ones sit next to the clock; hovering the
+             center reveals the inactive ones (dimmed) further left. -->
+        <div class="indicators" id="indicators">
+          <span class="indicator uac hidden" id="uac"></span>
+          <span class="indicator game hidden" id="game"></span>
+          <span class="indicator off" id="dictation"></span>
+          <span class="indicator off" id="recording"></span>
+          <span class="indicator off" id="nightlight"></span>
+          <span class="indicator off" id="dnd"></span>
+          <span class="indicator off" id="awake"></span>
+        </div>
       </div>
-      <div class="center">
-        <span class="indicator uac hidden" id="uac"></span>
-        <span class="indicator hidden" id="dnd" title="Do not disturb is on (Super+Ctrl+, / click)"></span>
-        <span class="indicator hidden" id="nightlight" title="Nightlight is on (Super+Ctrl+N / click)"></span>
-        <span class="indicator hidden" id="awake" title="Stay awake is on (Super+Ctrl+I / click)"></span>
-        <span id="clock" title="Right-click: date format"></span>
-        <span class="module hidden" id="weather"></span>
-        <span class="module update hidden" id="update"></span>
-      </div>
-      <div class="right">
-        <div class="tray" id="tray"></div>
-        <span class="module hidden" id="bluetooth"></span>
-        <span class="module" id="network"></span>
-        <span class="module" id="audio"></span>
-        <span class="module" id="cpu"></span>
-        <span class="module hidden" id="battery"></span>
+      <span id="clock" title="Click: calendar · Right-click: date format"></span>
+      <div class="side">
+        <div class="post" id="post">
+          <span class="module hidden" id="weather"></span>
+          <span class="module update hidden" id="update"></span>
+        </div>
+        <div class="right">
+          <div class="tray" id="tray"></div>
+          <span class="module hidden" id="bluetooth"></span>
+          <span class="module" id="network"></span>
+          <span class="module" id="audio"></span>
+          <span class="module" id="cpu"></span>
+          <span class="module hidden" id="battery"></span>
+        </div>
       </div>
     </div>
 
     <script type="module">
       // Omarchy-style bar (mirrors Omarchy's top bar: logo + workspaces left,
-      // indicators + clock centered, tray + status icons right).
+      // clock pinned to the center with indicators to its left, tray + status icons right).
       // zebar.mjs is a vendored copy of zebar@3 so the bar draws even offline.
       import * as zebar from './zebar.mjs';
       // Machine paths + settings, written by `winarchy apply`.
@@ -43,10 +54,13 @@
       const ICONS = {
         logo: '\uE900',             // Omarchy logo (omarchy.ttf)
         activeWs: '\u{F14FB}',      // Omarchy's active workspace glyph
-        awake: '\uF0F4',            // coffee
-        nightlight: '\u{F0594}',    // moon
+        awake: '\u{F0176}',         // coffee (Omarchy Quattro indicator glyphs)
+        nightlight: '\u{F050E}',    // night light
         dnd: '\u{F009B}',           // bell off
+        dictation: '\u{F036C}',     // microphone
+        recording: '\u{F0EC2}',     // record
         uac: '',              // shield (admin prompt waiting)
+        game: '\u{F0297}',          // gamepad (a game is running)
         update: '\uF0AB',           // arrow-circle-down (Omarchy system-update)
         cpu: '\u{F035B}',
         ethernet: '\u{F0002}',
@@ -78,12 +92,22 @@
       $('nightlight').textContent = ICONS.nightlight;
       $('dnd').textContent = ICONS.dnd;
       $('uac').textContent = ICONS.uac;
+      $('game').textContent = ICONS.game;
+      $('dictation').textContent = ICONS.dictation;
+      $('recording').textContent = ICONS.recording;
       $('update').textContent = ICONS.update;
-      // Indicators toggle off on click (Omarchy); weather/update open details.
+      // Indicators toggle on click (Omarchy); weather/update open details.
       $('awake').onclick = () => act('wm', 'awake');
       $('nightlight').onclick = () => act('wm', 'nightlight');
       $('dnd').onclick = () => act('wm', 'dnd');
       $('uac').onclick = () => act('wm', 'uac');
+      // Voice typing (Win+H) needs a focused text field, so the bar opens its settings
+      // instead (Omarchy opens the dictation config). Recording = Snipping Tool.
+      $('dictation').onclick = () => zebar.shellExec('explorer', 'ms-settings:speech').catch(() => {});
+      $('recording').onclick = () => act('send', '#+r');
+      // A running game (GlazeWM leaves games alone, so they aren't in the workspaces).
+      $('game').onclick = () => act('wm', 'game');
+      $('game').oncontextmenu = e => { e.preventDefault(); act('wm', 'game-close'); };
       $('weather').onclick = () => act('wm', 'weather');
       $('update').onclick = () => act('upgrade');
 
@@ -208,7 +232,8 @@
       $('logo').onclick = () => act('open', 'root');
       $('logo').oncontextmenu = e => { e.preventDefault(); act('terminal'); };
 
-      // Clock: left click does nothing; right click = next date/time format.
+      // Clock: left click = calendar (Win+N, as Quattro's calendar popup); right click = next format.
+      $('clock').onclick = () => act('calendar');
       $('clock').oncontextmenu = e => {
         e.preventDefault();
         clockFormat = (clockFormat + 1) % CLOCK_FORMATS.length;
@@ -243,6 +268,23 @@
         audio.setVolume(v);
       };
 
+      // Quattro indicators: on = full color next to the clock; off = hidden until
+      // the center is hovered, then dimmed further left (click turns it on).
+      function setIndicator(id, on, tipOn, tipOff) {
+        $(id).classList.toggle('off', !on);
+        $(id).title = on ? tipOn : tipOff;
+      }
+      // Hovering the indicators, clock or weather reveals the inactive indicators; they
+      // stay until the pointer leaves the bar (120 ms grace, as Quattro).
+      let revealTimer = 0;
+      const reveal = () => { clearTimeout(revealTimer); $('bar').classList.add('reveal'); };
+      for (const id of ['indicators', 'clock', 'post']) $(id).addEventListener('mouseenter', reveal);
+      document.body.addEventListener('mouseenter', () => clearTimeout(revealTimer));
+      document.body.addEventListener('mouseleave', () => {
+        clearTimeout(revealTimer);
+        revealTimer = setTimeout(() => $('bar').classList.remove('reveal'), 120);
+      });
+
       // status.json (theme version) and indicators.json (stay awake) are written by
       // omarchy.ps1 / winarchy.ahk. A new theme swaps theme.css without restarting Zebar.
       let themeVersion = null;
@@ -257,12 +299,17 @@
           }
           themeVersion = status.themeVersion;
         }
-        $('awake').classList.toggle('hidden', !ind?.awake);
-        $('nightlight').classList.toggle('hidden', !ind?.nightlight);
-        $('dnd').classList.toggle('hidden', !ind?.dnd);
+        setIndicator('nightlight', ind?.nightlight, 'Day Light (Super+Ctrl+N)', 'Night Light (Super+Ctrl+N)');
+        setIndicator('dnd', ind?.dnd, 'Allow Notifications (Super+Ctrl+,)', 'Silence Notifications (Super+Ctrl+,)');
+        setIndicator('awake', ind?.awake, 'Allow Idle Lock & Screensaver (Super+Ctrl+I)', 'Stay Awake (Super+Ctrl+I)');
+        setIndicator('recording', ind?.recording, 'Recording (stop it in the Snipping Tool bar)', 'Screen Recording (Alt+PrtSc)');
+        setIndicator('dictation', false, '', 'Dictate: Super+Ctrl+X in a text field (click: speech settings)');
         // A UAC prompt parked in the (hidden) taskbar; clicking opens it.
         $('uac').classList.toggle('hidden', !ind?.uac);
         $('uac').title = ind?.uac ? `${ind.uac}\nClick to open the admin prompt` : '';
+        $('game').classList.toggle('hidden', !ind?.game);
+        $('game').title = ind?.game
+          ? `${ind.game}\nClick: switch to it\nRight-click or Super+W: close it (twice: force-quit)` : '';
         renderBluetooth(bt);
         renderWeather(weather);
         const ups = updates?.items ?? [];

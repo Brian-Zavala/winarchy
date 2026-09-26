@@ -37,9 +37,14 @@ html, body {
   padding: 0 8px;
 }
 
-.left, .right, .center { display: flex; align-items: center; height: 100%; }
-.right { justify-content: flex-end; gap: 14px; }
-.center { justify-content: center; gap: 10px; }
+.side, .left, .right, .post, .indicators { display: flex; align-items: center; height: 100%; }
+.side { min-width: 0; }
+/* The clock is its own grid column, so it stays at the exact center (Quattro's
+   centerAnchor); indicators hug it on the left, weather/update on the right. */
+#clock { cursor: pointer; padding: 0 6px; white-space: nowrap; }
+.indicators { margin-left: auto; }
+.post { gap: 10px; margin-left: 4px; }
+.right { margin-left: auto; padding-left: 14px; gap: 14px; }
 
 .logo {
   font-family: 'omarchy', 'JetBrainsMono NF', monospace;
@@ -62,7 +67,17 @@ html, body {
 .workspace.empty { opacity: 0.5; }
 .workspace.focused { color: var(--accent); }
 
-.indicator { color: var(--alert); }
+.indicator { min-width: 21px; text-align: center; color: var(--fg); }
+/* Off: hidden until the center is hovered, then dimmed left of the active ones. */
+.indicator.off { display: none; order: -1; }
+#bar.reveal .indicator.off {
+  display: inline-block;
+  opacity: 0.45;
+  transition: opacity 140ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+@starting-style { #bar.reveal .indicator.off { opacity: 0; } }
+#bar.reveal .indicator.off:hover { opacity: 0.8; }
+@media (prefers-reduced-motion: reduce) { #bar.reveal .indicator.off { transition: none; } }
 
 .tray { display: flex; align-items: center; gap: 8px; }
 .tray img { width: 14px; height: 14px; display: block; cursor: pointer; }
@@ -74,7 +89,8 @@ html, body {
 
 .indicator { cursor: pointer; }
 /* Admin (UAC) prompt waiting: pulse so it gets noticed. */
-.uac { animation: uac-pulse 1.2s ease-in-out infinite; }
+.uac { color: var(--alert); animation: uac-pulse 1.2s ease-in-out infinite; }
 @keyframes uac-pulse { 50% { opacity: 0.35; } }
 .update { color: var(--accent); }
 #weather { cursor: pointer; }
+#game { cursor: pointer; }

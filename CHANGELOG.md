@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Games no longer fight the desktop: GlazeWM doesn't tile games (the ones Windows' Game Bar knows, plus config `games`), the bar stays behind a fullscreen game, and display-mode changes, bar restarts and the screensaver wait until it closes (a game switching resolution used to loop with the bar: black screen, blinking bar). Gamepad input counts as activity for the screensaver. `gameMode: false` turns this off.
+- Bar indicators work like Omarchy 4 (Quattro): the clock sits at the exact center, and active indicators sit to its left in the normal text color. Hovering the center reveals the others, dimmed, so one click turns them on: dictation, screen recording, night light, do not disturb, stay awake. The clock shows a pointer, and clicking it opens the calendar.
 
 ## 0.1.0 (unreleased)
 

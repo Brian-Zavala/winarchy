@@ -1259,6 +1259,15 @@ FocusMonitor(step) {
     Glaze("focus --monitor " Mod(cur + step + n, n))
 }
 
+; Snipping Tool screen recording in progress (Alt+PrtSc / Win+Shift+R): its
+; recording toolbar is a SnippingTool.exe window titled "...Recording...".
+ScreenRecording() {
+    for hwnd in WinGetList("ahk_exe SnippingTool.exe")
+        if InStr(WinGetTitle(hwnd), "Recording")
+            return true
+    return false
+}
+
 ; indicators.json feeds the bar's indicator icons (this script is its only writer).
 WriteIndicators() {
     global Pack, Awake, UacPending
@@ -1266,6 +1275,7 @@ WriteIndicators() {
     b := v => v ? "true" : "false"
     game := (g := GameWindow()) ? GameTitle(g) : ""
     json := '{"awake":' b(Awake) ',"nightlight":' b(NightlightOn()) ',"dnd":' b(DndProfile() > 0)
+        . ',"recording":' b(ScreenRecording())
         . ',"uac":"' JsonEscape(UacPending) '","game":"' JsonEscape(game) '"}'
     if json = last
         return
