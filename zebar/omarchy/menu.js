@@ -96,6 +96,17 @@ async function fullSize(name, ms) {
   }
   return null;
 }
+// When to open the band (Unix ms): winarchy writes reveal.json once its own reveal on the
+// other monitors is ready, so they all open together (lib/transition.ps1, Send-RevealStart).
+// Newer than the pick = this pick's; nothing within 3 s: now.
+async function revealStart(t0) {
+  while (Date.now() - t0 < 3000) {
+    const r = await get('reveal.json');
+    if (r?.start >= t0) return r.start;
+    await wait(25);
+  }
+  return Date.now();
+}
 async function land(it) {
   busy = true;
   const ext = (it.path.match(/\.\w+$/)?.[0] ?? '.jpg').toLowerCase();
@@ -123,6 +134,9 @@ async function land(it) {
   img.id = 'land';
   $('land').replaceWith(img);
   await wait(Math.max(0, 180 - (Date.now() - t0)));   // overlap the card's exit
+  const start = await revealStart(t0);
+  log(`landing: band at ${start} (${start - t0} ms after the pick)`);
+  await wait(start - Date.now());
   document.body.classList.add('revealing');
   // The sharp picture settles as the blur pushes back behind it.
   img.animate([{ clipPath: band(0) }, { clipPath: band(1) }], { duration: LAND_MS, easing: LAND_EASE, fill: 'both' });

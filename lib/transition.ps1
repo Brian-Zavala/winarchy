@@ -114,6 +114,13 @@ function Test-OnMonitor([int[]]$point, [int[]]$rect) {
         $point[1] -ge $rect[1] -and $point[1] -lt $rect[1] + $rect[3]
 }
 
+# The picker starts its band when reveal.json says (Unix ms), so every monitor opens at
+# once: it is ready well before this process is.
+function Send-RevealStart([string]$path, [long]$start) {
+    try { Write-Utf8 (Join-Path $Pack 'reveal.json') (@{ path = $path; start = $start } | ConvertTo-Json -Compress) } catch {}
+}
+function Get-UnixMs { [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
+
 # $skip: a point (physical pixels) on the monitor the background picker covers.
 function Invoke-BackgroundReveal([string]$new, [scriptblock]$apply, [int[]]$skip) {
     $old = Join-Path $env:APPDATA 'Microsoft\Windows\Themes\TranscodedWallpaper'
@@ -121,6 +128,8 @@ function Invoke-BackgroundReveal([string]$new, [scriptblock]$apply, [int[]]$skip
     $applyError = $null
     $reveals = @()
     $oldCtx = [IntPtr]::Zero
+    $picker = $skip.Count -eq 2
+    $signaled = $false
     try {
         # One monitor, and the picker covers it: nothing to reveal (and no compile wait).
         $alone = $false
@@ -144,6 +153,14 @@ function Invoke-BackgroundReveal([string]$new, [scriptblock]$apply, [int[]]$skip
             $applied = $true
             try { & $apply } catch { $applyError = $_ }
             if (-not $applyError) {
+                if ($picker) {
+                    # A moment ahead, for the picker to read it (it polls every 25 ms).
+                    $start = (Get-UnixMs) + 80
+                    Send-RevealStart $new $start
+                    $signaled = $true
+                    Log "reveal: band at $start"
+                    Wait-Dispatcher ([Math]::Max(1, $start - (Get-UnixMs)))
+                }
                 # Each frame: widen every monitor's band (Get-RevealBand, inlined: this runs
                 # as a WPF callback, outside this script's function scope).
                 $st = @{ sw = [Diagnostics.Stopwatch]::StartNew(); frame = [System.Windows.Threading.DispatcherFrame]::new(); images = @($reveals.image) }
@@ -178,6 +195,8 @@ function Invoke-BackgroundReveal([string]$new, [scriptblock]$apply, [int[]]$skip
     } catch {
         Log "background reveal skipped: $($_.Exception.Message)"
     } finally {
+        # No band here (one monitor, reveal off, failed): the picker starts its own now.
+        if ($picker -and -not $signaled) { Send-RevealStart $new (Get-UnixMs) }
         foreach ($r in $reveals) { try { $r.window.Close() } catch {} }
         if ($oldCtx -ne [IntPtr]::Zero) { [void][Winarchy.Reveal]::SetThreadDpiAwarenessContext($oldCtx) }
     }
