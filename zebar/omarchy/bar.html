@@ -276,13 +276,34 @@
       }
       // Hovering the indicators, clock or weather reveals the inactive indicators; they
       // stay until the pointer leaves the bar (120 ms grace, as Quattro).
-      let revealTimer = 0;
-      const reveal = () => { clearTimeout(revealTimer); $('bar').classList.add('reveal'); };
+      // WebView2 doesn't always report the pointer leaving the bar (it got stuck open after
+      // clicking an indicator), so while they are revealed, also ask where the cursor is.
+      const tauri = window.__TAURI_INTERNALS__;
+      const winLabel = tauri?.metadata?.currentWindow?.label;
+      async function pointerInBar() {
+        try {
+          const [c, p, s] = await Promise.all(['cursor_position', 'outer_position', 'outer_size']
+            .map(cmd => tauri.invoke(`plugin:window|${cmd}`, { label: winLabel })));
+          return c.x >= p.x && c.x < p.x + s.width && c.y >= p.y && c.y < p.y + s.height;
+        } catch { return true; }
+      }
+      let revealTimer = 0, revealCheck = 0;
+      function collapse() {
+        clearTimeout(revealTimer);
+        clearInterval(revealCheck);
+        revealCheck = 0;
+        $('bar').classList.remove('reveal');
+      }
+      function reveal() {
+        clearTimeout(revealTimer);
+        $('bar').classList.add('reveal');
+        if (tauri && !revealCheck) revealCheck = setInterval(async () => { if (!(await pointerInBar())) collapse(); }, 250);
+      }
       for (const id of ['indicators', 'clock', 'post']) $(id).addEventListener('mouseenter', reveal);
       document.body.addEventListener('mouseenter', () => clearTimeout(revealTimer));
       document.body.addEventListener('mouseleave', () => {
         clearTimeout(revealTimer);
-        revealTimer = setTimeout(() => $('bar').classList.remove('reveal'), 120);
+        revealTimer = setTimeout(collapse, 120);
       });
 
       // status.json (theme version) and indicators.json (stay awake) are written by
