@@ -62,7 +62,13 @@ QuietUntil := 0
 OnMessage 0x0218, OnPowerBroadcast                            ; WM_POWERBROADCAST
 OnMessage 0x02B1, OnSessionChange                             ; WM_WTSSESSION_CHANGE
 DllCall("Wtsapi32\WTSRegisterSessionNotification", "ptr", A_ScriptHwnd, "uint", 0)
-; The bar stays above windows, except a fullscreen one on its monitor.
+; The bar stays above windows, except a fullscreen one (or a game) on its monitor.
+; Games: see "Games and fullscreen apps" below.
+GameMode := Env("gameMode", "1") = "1"
+Games := Map()            ; game windows seen in front: hwnd -> process name
+BusyUntil := 0            ; a game / fullscreen app was in front until a moment ago
+DisplayPending := false   ; a display change (or bar restart) waits for it to close
+LastPad := 0              ; A_TickCount of the last gamepad input
 SetTimer FullscreenWatch, 400
 ; Bring the bar back if Zebar dies or a monitor lost its bar; reopen the bars
 ; after Explorer restarts or the display layout changes (monitor wake, dock).
@@ -213,6 +219,9 @@ RestoreCursors()              ; an older version hid the pointer during the scre
 ScreensaverStop("startup")    ; older versions left hidden screensaver windows running
 OnExit ScreensaverStop
 SetTimer ScreensaverIdle, 5000
+#DllLoad "*i xinput1_4.dll"
+if SsConfigured
+    SetTimer PadWatch, 1000
 
 OnPowerBroadcast(wParam, *) {
     global QuietUntil
@@ -233,17 +242,45 @@ OnSessionChange(wParam, *) {
 }
 
 ScreensaverIdle() {
-    global SsActive, SsEnabled, QuietUntil
-    if SsActive || !SsEnabled || A_TickCount < QuietUntil || A_TimeIdlePhysical < Env("screensaverIdle", 150) * 1000
+    global SsActive, SsEnabled, QuietUntil, LastPad
+    ; Idle = no keyboard, mouse or gamepad (Windows doesn't count gamepad input).
+    idle := Min(A_TimeIdlePhysical, A_TickCount - LastPad)
+    if SsActive || !SsEnabled || A_TickCount < QuietUntil || idle < Env("screensaverIdle", 150) * 1000
         return
     ; Not while something keeps the display on (video, presentation, Stay Awake),
-    ; the session is locked, or a fullscreen app is in front.
-    if DisplayRequired() || !InputDesktopActive()
-        return
-    PerMonitorDpi()
-    if (fg := WinExist("A")) && IsFullscreenWindow(fg)
+    ; the session is locked, or a game / fullscreen app is in front.
+    if DisplayRequired() || !InputDesktopActive() || Busy()
         return
     ScreensaverStart()
+}
+
+; Gamepad input (XInput pads, which is what most games and Playnite use): buttons,
+; triggers and sticks beyond their dead zone, sampled every second.
+PadWatch() {
+    global LastPad
+    static last := Map(), retry := Map(), state := Buffer(16)
+    loop 4 {
+        pad := A_Index - 1
+        if retry.Has(pad) && A_TickCount < retry[pad]
+            continue
+        try r := DllCall("xinput1_4\XInputGetState", "uint", pad, "ptr", state, "uint")
+        catch {
+            SetTimer PadWatch, 0            ; no XInput on this PC
+            return
+        }
+        if r != 0 {                          ; not connected: look again in 10 s
+            retry[pad] := A_TickCount + 10000
+            if last.Has(pad)
+                last.Delete(pad)
+            continue
+        }
+        s := NumGet(state, 4, "ushort") "," (NumGet(state, 6, "uchar") > 40) "," (NumGet(state, 7, "uchar") > 40)
+        loop 4                               ; sticks: a resting stick's jitter stays 0
+            s .= "," Round(NumGet(state, 6 + 2 * A_Index, "short") / 12000)
+        if last.Has(pad) && last[pad] != s
+            LastPad := A_TickCount
+        last[pad] := s
+    }
 }
 
 ScreensaverStart() {
@@ -298,6 +335,8 @@ ScreensaverWatch() {
         ScreensaverStop("mouse moved " Abs(mx - SsMouse[1]) "," Abs(my - SsMouse[2]) " px")
     else if GetKeyState("LButton", "P") || GetKeyState("RButton", "P") || GetKeyState("MButton", "P")
         ScreensaverStop("click")
+    else if LastPad > SsArmed + 1500
+        ScreensaverStop("gamepad")
     else if !wins.Length
         ScreensaverStop("closed")
     else if !InputDesktopActive()
@@ -550,7 +589,7 @@ WmLog(msg) {
 BarGuard() {
     global BarEnabled, Zebar
     static lastRestart := 0
-    if !BarEnabled
+    if !BarEnabled || Busy()      ; a game changing display modes: see FullscreenWatch
         return
     if !ProcessExist("zebar.exe") {
         try Run('"' Zebar '" startup', , "Hide")
@@ -562,19 +601,33 @@ BarGuard() {
     }
 }
 
-RestartBar() {
-    global BarEnabled, Zebar
+RestartBar(*) {
+    global BarEnabled, Zebar, DisplayPending
     HideTaskbars()
     if !BarEnabled
         return
+    ; New bar windows over a game, then GlazeWM redrawing it, knock it out of
+    ; fullscreen: it switches display mode again and it all repeats. After it closes.
+    if Busy() {
+        DisplayPending := true
+        return
+    }
     CloseBar()
     try Run('"' Zebar '" startup', , "Hide")
     SetTimer () => Glaze("wm-redraw"), -2500
 }
 
 ; A monitor was added or removed (laptop dock/undock): re-split the workspaces.
+; Games switch display modes too: that waits until the game (or fullscreen app) closes.
 OnDisplayChange() {
-    global MonitorCount
+    global MonitorCount, DisplayPending
+    if Busy() {
+        if !DisplayPending
+            WmLog("display changed under a game / fullscreen app: bar and workspaces follow when it closes")
+        DisplayPending := true
+        return
+    }
+    DisplayPending := false
     if MonitorGetCount() != MonitorCount {
         MonitorCount := MonitorGetCount()
         OmarchyCmd("apply", "-MonitorsOnly")
@@ -634,26 +687,147 @@ GapsOn() {
 
 ; Topmost bar, but a fullscreen window (Super+F, video, game) may cover it.
 FullscreenWatch() {
-    global BarEnabled
+    global BarEnabled, BusyUntil, DisplayPending
+    PerMonitorDpi()
+    covered := CoveredMonitors()
+    if covered.Count || GameRunning() || FullscreenState()
+        BusyUntil := A_TickCount + 5000
+    else if DisplayPending && A_TickCount >= BusyUntil {
+        DisplayPending := false
+        SetTimer OnDisplayChange, -500      ; what waited for the game to close
+    }
     if !BarEnabled
         return
-    PerMonitorDpi()
-    fg := WinExist("A"), fsMon := 0
-    if fg && IsFullscreenWindow(fg)
-        fsMon := MonitorOfWindow(fg)
     for m, bar in BarWindows() {
         try {
             onTop := WinGetExStyle(bar.hwnd) & 0x8
-            if m != fsMon {
+            if !covered.Has(m) {
                 if !onTop
                     WinSetAlwaysOnTop 1, bar.hwnd
             } else if onTop {
                 WinSetAlwaysOnTop 0, bar.hwnd
                 ; Leaving topmost lifts it over normal windows: tuck it under the fullscreen one.
-                DllCall("SetWindowPos", "ptr", bar.hwnd, "ptr", fg, "int", 0, "int", 0, "int", 0, "int", 0, "uint", 0x13)
+                DllCall("SetWindowPos", "ptr", bar.hwnd, "ptr", covered[m], "int", 0, "int", 0, "int", 0, "int", 0, "uint", 0x13)
             }
         }
     }
+}
+
+; --- Games and fullscreen apps: stand back ------------------------------------------
+; A game that switches display mode used to loop with this script: mode change ->
+; bar restart (new topmost windows over the game) + GlazeWM redraw (re-tiling it) ->
+; the game drops out of fullscreen and switches again. So while a game or fullscreen
+; app is in front: GlazeWM ignores the game, the bar stays behind it, display changes,
+; bar restarts and the screensaver wait until it closes.
+; Games = the ones Windows' Game Bar recognised (GameConfigStore, like the GlazeWM
+; ignore rules winarchy apply writes) + config "games". config "gameMode": false = off.
+
+; {monitor: window} for each monitor whose front window is fullscreen or a game:
+; the focused window, or the one showing at the monitor's centre (overlays such as
+; NVIDIA's or Steam's are click-through, so they don't count).
+CoveredMonitors() {
+    covered := Map()
+    ; (try: any of these windows can close between two calls)
+    try {
+        if (fg := WinExist("A")) && WinGetMinMax(fg) != -1 && (IsFullscreenWindow(fg) || IsGame(fg))
+            covered[MonitorOfWindow(fg)] := fg
+    }
+    loop MonitorGetCount() {
+        if covered.Has(A_Index)
+            continue
+        try {
+            MonitorGet A_Index, &l, &t, &r, &b
+            top := RootWindowAt((l + r) // 2, (t + b) // 2)
+            if top && (IsFullscreenWindow(top) || IsGame(top)) && MonitorOfWindow(top) = A_Index
+                covered[A_Index] := top
+        }
+    }
+    return covered
+}
+
+RootWindowAt(x, y) {
+    hwnd := DllCall("WindowFromPoint", "int64", (x & 0xFFFFFFFF) | (y << 32), "ptr")
+    return hwnd ? DllCall("GetAncestor", "ptr", hwnd, "uint", 2, "ptr") : 0
+}
+
+; A game or fullscreen app is (or was a moment ago) in front: nothing may pop over it.
+Busy() {
+    global BusyUntil
+    PerMonitorDpi()
+    return A_TickCount < BusyUntil || GameRunning() || FullscreenState() || CoveredMonitors().Count > 0
+}
+
+; Windows' own view: a fullscreen app (2), an exclusive-fullscreen Direct3D game (3)
+; or presentation mode (4).
+FullscreenState() {
+    state := 0
+    try DllCall("shell32\SHQueryUserNotificationState", "int*", &state)
+    return state >= 2 && state <= 4
+}
+
+; Is this window a game's? New ones are logged and taken out of GlazeWM's tiling
+; (the apply-time rules already cover games Windows knew about then).
+IsGame(hwnd) {
+    global Games, GameMode
+    static checked := Map()                ; hwnd -> when it was found not to be a game
+    if !GameMode || !hwnd
+        return false
+    if Games.Has(hwnd)
+        return true
+    if checked.Has(hwnd) && A_TickCount - checked[hwnd] < 30000
+        return false
+    if checked.Count > 300
+        checked.Clear()
+    checked[hwnd] := A_TickCount
+    try {
+        name := RegExReplace(WinGetProcessName(hwnd), "i)\.exe$")
+        if !GameNames().Has(name) || !(WinGetStyle(hwnd) & 0x10000000)  ; WS_VISIBLE
+            return false
+    } catch
+        return false
+    Games[hwnd] := name
+    WmLog("game: " name " (GlazeWM leaves it alone, the bar stays behind it)")
+    if info := GlazeWindowInfo(hwnd)
+        try Run('"' GlazeCli '" command --id ' info.id ' ignore', , "Hide")
+    return true
+}
+
+; A game window is open and not minimized.
+GameRunning() {
+    global Games
+    running := false
+    for hwnd, name in Games.Clone() {
+        try minmax := WinGetMinMax(hwnd)
+        catch {                              ; closed
+            Games.Delete(hwnd)
+            WmLog("game closed: " name)
+            continue
+        }
+        if minmax != -1
+            running := true
+    }
+    return running
+}
+
+; Process names (no .exe) of games: Windows' Game Bar list + config "games".
+GameNames() {
+    static names := Map(), loaded := 0
+    if loaded && A_TickCount - loaded < 60000
+        return names
+    loaded := A_TickCount
+    names := Map()
+    names.CaseSense := false
+    try loop reg, "HKCU\System\GameConfigStore\Children", "K" {
+        try {
+            SplitPath RegRead(A_LoopRegKey "\" A_LoopRegName, "MatchedExeFullPath"), , , , &stem
+            if stem && !(stem ~= "i)^(explorer|WindowsTerminal|pwsh|powershell|cmd|Code|chrome|msedge|firefox|zebar|glazewm)$")
+                names[stem] := true
+        }
+    }
+    for g in StrSplit(Env("games"), "|")
+        if g := Trim(RegExReplace(g, "i)\.exe$"))
+            names[g] := true
+    return names
 }
 
 IsFullscreenWindow(hwnd) {

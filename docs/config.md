@@ -32,6 +32,8 @@ Put only the keys you want to change; everything else comes from
 | `screenshotAutoCopy` | `false` | Copy every new screenshot file to the clipboard |
 | `syncAtLogin` | `true` | Re-index your background folders after login (no downloads) |
 | `glazewmManaged` | `true` | `false` = winarchy stops writing `~/.glzr/glazewm/config.yaml` (edit it yourself) |
+| `gameMode` | `true` | Games get out of the way: GlazeWM doesn't tile them, the bar stays behind a fullscreen game, and display-mode changes, bar restarts and the screensaver wait until it closes. Games = the ones Windows' Game Bar recognised (any launcher) + `games` |
+| `games` | `[]` | More game process names, e.g. `["MyGame"]` or `["MyGame.exe"]` |
 | `backgroundTransition` | `"reveal"` | Omarchy v4's slanted reveal when the wallpaper changes; `"none"` for an instant change (skipped while Wallpaper Engine or Lively runs). The background picker plays it on its own monitor, from the blurred preview |
 | `animations.enabled` | `false` | Experimental window animations: run the GlazeWM build of glzr-io/glazewm#1392 (`winarchy animations build`, then `animations on`) |
 | `animations.moveMs` / `openMs` / `closeMs` | `379` / `410` / `149` | Durations (Omarchy's `looknfeel.lua`); shorter feels snappier |
@@ -42,7 +44,7 @@ Put only the keys you want to change; everything else comes from
 
 * **GlazeWM:** Omarchy menu → Setup → GlazeWM creates `%USERPROFILE%\.winarchy\glazewm.yaml.tpl`
   (a copy of `templates/glazewm.yaml.tpl`); saving it rewrites GlazeWM's config and reloads it.
-  Placeholders: `{{ gap }}`, `{{ gap_top }}`, `{{ focused_border }}`, `{{ workspaces }}`, `{{ animations }}`.
+  Placeholders: `{{ gap }}`, `{{ gap_top }}`, `{{ focused_border }}`, `{{ workspaces }}`, `{{ animations }}`, `{{ games }}`.
   Delete the file to go back to the default.
 * **App keys:** Omarchy menu → Setup → Keybindings opens your launcher script (your own
   `Startup\launchers.ahk`, or `%USERPROFILE%\.winarchy\launchers.ahk`, a copy of winarchy's);

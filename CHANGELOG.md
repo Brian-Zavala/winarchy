@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Games no longer fight the desktop: GlazeWM doesn't tile games (the ones Windows' Game Bar knows, plus config `games`), the bar stays behind a fullscreen game, and display-mode changes, bar restarts and the screensaver wait until it closes (a game switching resolution used to loop with the bar: black screen, blinking bar). Gamepad input counts as activity for the screensaver. `gameMode: false` turns this off.
+
 ## 0.1.0 (unreleased)
 
 - First portable release: one-line install, backup journal + uninstall, doctor, config.json.

@@ -103,6 +103,12 @@ window_rules:
         window_class: { not_regex: 'OpusApp' }
       - window_process: { equals: 'POWERPNT' }
         window_class: { not_regex: 'PPTFrameClass' }
+      # Fullscreen game launchers and games: they manage their own window and display
+      # mode (tiling one knocks it out of fullscreen). Games = the ones Windows' Game Bar
+      # recognised + config "games"; "gameMode": false in config.json leaves them tiled.
+      - window_process: { equals: 'Playnite.FullscreenApp' }
+      - window_title: { equals: 'Steam Big Picture Mode' }
+{{ games }}
 
   # Small utility windows float centered (Omarchy floats calculator, btop, dialogs...).
   - commands: ['set-floating --centered']

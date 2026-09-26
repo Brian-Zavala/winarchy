@@ -32,6 +32,8 @@
     "idleSeconds": 150
   },
   "backgroundTransition": "reveal",
+  "gameMode": true,
+  "games": [],
   "animations": {
     "enabled": false,
     "moveMs": 379,

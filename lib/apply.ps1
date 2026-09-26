@@ -130,6 +130,29 @@ function Repair-WorkspaceMonitors([string]$cli, $bindings) {
     Log "workspaces: $($done -join '; ')"
 }
 
+# Games manage their own window and display mode: GlazeWM tiling one (or redrawing it
+# after a display change) knocks it out of fullscreen. Process names (no .exe) of the
+# games Windows' Game Bar has recognised (GameConfigStore; any PC) + config.games.
+# winarchy.ahk does the same at run time for games recognised after this apply.
+function Get-GameProcesses($cfg, [string[]]$exePaths) {
+    if ($cfg.gameMode -eq $false) { return @() }
+    if ($null -eq $exePaths) {
+        $exePaths = foreach ($k in Get-ChildItem 'HKCU:\System\GameConfigStore\Children' -ErrorAction SilentlyContinue) {
+            (Get-ItemProperty $k.PSPath -ErrorAction SilentlyContinue).MatchedExeFullPath
+        }
+    }
+    $names = [Collections.Generic.SortedSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($e in $exePaths) { if ($e) { [void]$names.Add([IO.Path]::GetFileNameWithoutExtension($e)) } }
+    foreach ($g in @($cfg.games)) { if ($g) { [void]$names.Add(($g -replace '(?i)\.exe$', '')) } }
+    # Never apps winarchy itself manages, should Game Bar ever have been told they're games.
+    @($names | Where-Object { $_ -notmatch '^(explorer|WindowsTerminal|pwsh|powershell|cmd|Code|chrome|msedge|firefox|zebar|glazewm)$' })
+}
+
+function ConvertTo-GamesYaml([string[]]$names) {
+    if (-not $names) { return '      # (none yet)' }
+    ($names | ForEach-Object { "      - window_process: { equals: '$($_ -replace "'", "''")' }" }) -join "`n"
+}
+
 function Write-GlazeConfig([int]$monitorCount) {
     $cfg = Get-Config
     if ($cfg.glazewmManaged -eq $false) { Log 'GlazeWM config: not managed (glazewmManaged=false)'; return $false }
@@ -148,6 +171,7 @@ function Write-GlazeConfig([int]$monitorCount) {
         gap = "$gap"; gap_top = "$gapTop"; focused_border = $border
         workspaces = ConvertTo-WorkspacesYaml (Get-WorkspaceLayout $monitorCount $cfg.workspaces)
         animations = ConvertTo-AnimationsYaml $cfg
+        games = ConvertTo-GamesYaml (Get-GameProcesses $cfg)
     }
     $yaml = Expand-Template (Get-Content -Raw $tplFile) $values
     if ($yaml -eq $old) { return $false }
@@ -190,6 +214,8 @@ function Write-AhkIni($p, $cfg) {
             screensaverProfile = 'Omarchy Screensaver'
             weather = [int]($cfg.weather -ne $false)
             animations = [int]($p.glazewm -and $p.glazewm -ne $p.glazewmOfficial)
+            gameMode = [int]($cfg.gameMode -ne $false)
+            games = (@($cfg.games) | Where-Object { $_ }) -join '|'
         }
     }
     $text = foreach ($section in $ini.Keys) {
@@ -421,7 +447,6 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Respli
             catch { Log "workspaces: repair FAILED: $($_.Exception.Message)" }
         }
     }
-
     if ($MonitorsOnly) { return }
     # Window animations on/off switches between the official GlazeWM and the animation build.
     Switch-GlazeWM $p

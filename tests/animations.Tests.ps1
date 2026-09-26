@@ -55,6 +55,7 @@ Describe 'Wallpaper reveal band' {
 Describe 'Status' {
     It 'reports the effective font when none was picked' {
         $Pack = Join-Path $TestDrive 'pack'
+        Mock Read-State { @{} }       # not this PC's state.json (its font may be picked)
         Write-Status @{ theme = 't'; background = 'b' }
         (Read-Json (Join-Path $Pack 'status.json')).font | Should -Be 'JetBrainsMono Nerd Font'
     }
