@@ -262,11 +262,20 @@ function Get-ZpackJson($p) {
         }
     }
     $menu = & $widget 'menu' './menu.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf', '*.txt', 'thumbs/**/*') @($menuPrivilege) @($menuPresets)
+    # The clock's calendar: the same per-monitor presets (c0..c7), transparent, and a click
+    # outside the panel closes it.
+    $calPresets = foreach ($i in 0..7) {
+        [ordered]@{
+            name = "c$i"; anchor = 'top_left'; offsetX = '0px'; offsetY = '0px'; width = '100%'; height = '100%'
+            monitorSelection = [ordered]@{ type = 'index'; match = $i }
+        }
+    }
+    $calendar = & $widget 'calendar' './calendar.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.ttf') @($menuPrivilege) @($calPresets)
     [ordered]@{
         '$schema' = 'https://github.com/glzr-io/zebar/raw/v3.0.0/resources/zpack-schema.json'
         name = 'omarchy'; version = '3.0.0'; description = 'Omarchy style top bar, menu and pickers for GlazeWM (winarchy)'
         tags = @('topbar'); previewImages = @(); repositoryUrl = ''
-        widgets = @($bar, $menu)
+        widgets = @($bar, $menu, $calendar)
     } | ConvertTo-Json -Depth 12
 }
 
@@ -293,6 +302,9 @@ function Write-ZebarPack($p, $cfg) {
         "export const METRIC = $("$metric".ToLower());"
         # The background picker plays the wallpaper reveal on its monitor (lib/transition.ps1).
         "export const REVEAL = $("$($cfg.backgroundTransition -ne 'none')".ToLower());"
+        # Popups under the bar (calendar) sit barHeight + gap from the top.
+        "export const BAR_HEIGHT = $([int]$cfg.barHeight);"
+        "export const GAP = $([int]$cfg.gap);"
     ) -join "`n"
     Write-Utf8 (Join-Path $Pack 'env.js') "$envJs`n"
     Write-Utf8 (Join-Path $Pack 'keybindings.txt') (Get-KeybindingsText $cfg)
@@ -413,9 +425,18 @@ function Set-WindowsScreensaver($cfg) {
 # --- restart what changed ---------------------------------------------------------
 # AutoHotkey scripts of this project (never the user's own scripts elsewhere).
 function Get-OmarchyAhk {
+    # Our folders by any name: a script started through the pre-rename junctions
+    # (omarchy-win) is the same script, and missing it leaves two copies running.
+    $roots = foreach ($d in $Code, $Data) {
+        $d
+        try { $t = (Get-Item -LiteralPath $d -Force).LinkTarget; if ($t) { $t } } catch {}
+        foreach ($alt in ($d -replace 'omarchy-win$', 'winarchy'), ($d -replace '(?<!omarchy-)winarchy$', 'omarchy-win')) {
+            if ($alt -ne $d -and (Test-Path -LiteralPath $alt)) { $alt }
+        }
+    }
     Get-CimInstance Win32_Process -Filter "Name like 'AutoHotkey%'" | Where-Object {
-        $_.CommandLine -match '(winarchy|menu|launchers)\.ahk' -and
-        ($_.CommandLine -like "*$Code*" -or $_.CommandLine -like "*$Data*")
+        $cmd = $_.CommandLine
+        $cmd -match '(winarchy|menu|launchers)\.ahk' -and ($roots | Where-Object { $cmd -like "*$_\*" })
     }
 }
 

@@ -1147,7 +1147,7 @@ if Env("takeOverWinSpace", "1") = "1" {
 #^w::Run "ms-settings:network"                    ; network
 #^d::Run "ms-settings:display"                    ; display
 #^p::Run "ms-settings:powersleep"                 ; power
-#^!d::Send "#n"                                   ; calendar
+#^!d::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" calendar')   ; calendar (the clock's)
 #+!SC033::Send "#n"                               ; Super+Shift+Alt+Comma: notification history
 #^z::Send "#{NumpadAdd}"                          ; zoom in (Magnifier)
 #^!z::Send "#{Esc}"                               ; reset zoom

@@ -32,7 +32,7 @@ switch verb {
     case "launcher": Send Env("flowHotkey", "!{Space}")
     case "start": Send "^{Esc}"
     case "terminal": Run Env("terminal", "wt.exe")
-    case "calendar": Send "#n"
+    case "calendar": OpenCalendar()
     case "send": Send arg
     case "run": Run(arg (A_Args.Length > 2 ? " " A_Args[3] : ""))
     case "url", "settings": Run arg
@@ -237,4 +237,17 @@ OpenMenu(route) {
     if hwnd := WinWait(MenuTitle, , 3) {
         try WinActivate hwnd
     }
+}
+
+; The clock's calendar (Omarchy Quattro), on the monitor under the mouse; again closes it.
+OpenCalendar() {
+    title := "Zebar - omarchy / calendar ahk_exe zebar.exe"
+    if hwnd := WinExist(title) {
+        PostMessage 0x10, 0, 0, , hwnd
+        return
+    }
+    PerMonitorDpi()
+    Run '"' Env("zebar") '" start-widget-preset --pack omarchy --widget-name calendar --preset c' MonitorPosition(MonitorUnderMouse()), , "Hide"
+    if hwnd := WinWait(title, , 3)
+        try WinActivate hwnd
 }

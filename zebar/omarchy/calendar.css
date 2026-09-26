@@ -1,0 +1,82 @@
+/* The clock's calendar (Omarchy Quattro). Colors come from theme.css; the values below
+   are Tokyo Night fallbacks. Card look matches the menu (menu.css #card). */
+:root {
+  --bg: #1a1b26; --fg: #a9b1d6; --accent: #7aa2f7;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --cell-w: 46px; --cell-h: 32px; --wk-w: 30px; --gutter: 14px; --gap: 2px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  overflow: clip;
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font, 'JetBrainsMono NF'), 'JetBrainsMono NF', 'JetBrainsMono Nerd Font', monospace;
+  font-size: 14px;
+  user-select: none;
+  cursor: default;
+}
+
+button { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
+
+#panel {
+  position: absolute;
+  top: var(--top, 36px);
+  left: 50%;
+  translate: -50% -6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 22px 26px 14px;
+  background: var(--bg);
+  border: 2px solid var(--fg);
+  box-shadow: 0 24px 70px -24px color-mix(in srgb, var(--accent) 45%, transparent);
+  opacity: 0;
+  transition: opacity 140ms var(--ease), translate 180ms var(--ease);
+}
+.shown #panel { opacity: 1; translate: -50% 0; }
+@media (prefers-reduced-motion: reduce) { #panel { transition: none; } }
+
+/* ---- hero: today's date; while browsing another month it takes you back */
+#hero { display: flex; align-items: center; gap: 22px; line-height: 1; cursor: default; }
+#hero .glyph { font-size: 40px; }
+#heroDate { font-size: 40px; font-weight: 700; }
+#hero.away { cursor: pointer; }
+#hero.away:hover { color: var(--accent); }
+
+/* ---- the year so far */
+.rail { display: flex; align-items: center; gap: 12px; width: 100%; font-size: 11px; }
+.label { letter-spacing: 1px; color: color-mix(in srgb, var(--fg) 65%, transparent); }
+.meter { flex: 1; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--fg) 12%, transparent); overflow: hidden; }
+#yearFill { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 160ms var(--ease); }
+
+/* ---- month grid: week numbers, a hairline gutter, seven day columns */
+#grid {
+  display: grid;
+  grid-template-columns: var(--wk-w) var(--gutter) repeat(7, var(--cell-w));
+  grid-auto-rows: var(--cell-h);
+  grid-template-rows: 18px;
+  gap: 3px var(--gap);
+  margin-top: 4px;
+}
+#grid > span { display: flex; align-items: center; justify-content: center; }
+.dow, .wk { font-size: 10px; letter-spacing: 1px; font-weight: 700; }
+.dow { color: color-mix(in srgb, var(--fg) 65%, transparent); }
+.wk { font-weight: 400; color: color-mix(in srgb, var(--fg) 45%, transparent); }
+.wk.head { font-weight: 700; border-radius: 4px; }
+.wk.head:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.gutter.line::after { content: ''; width: 1px; height: calc(100% + 3px); background: color-mix(in srgb, var(--fg) 10%, transparent); }
+.day { border: 1px solid transparent; }
+.day.weekend { color: color-mix(in srgb, var(--fg) 70%, transparent); }
+.day.out { color: color-mix(in srgb, var(--fg) 30%, transparent); }
+/* Today is outlined, not filled: a lit-up block shouts over a grid this quiet. */
+.day.today { border-color: var(--accent); font-weight: 700; color: var(--fg); }
+
+/* ---- month stepping */
+.nav { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+#month { width: 180px; text-align: center; letter-spacing: 1px; color: color-mix(in srgb, var(--fg) 72%, transparent); }
+.step { width: 30px; height: 26px; font-size: 16px; border-radius: 4px; color: color-mix(in srgb, var(--fg) 72%, transparent); }
+.step:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }

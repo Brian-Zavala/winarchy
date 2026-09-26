@@ -6,7 +6,8 @@
 - Games: the bar hides on the game's monitor (a topmost bar blinked over exclusive-fullscreen games); games are recognised as soon as their window shows; a gamepad icon in the bar switches to or closes the running game, and Super+W / Super+Q close games too (twice: force-quit). See the README's Games section and Super+K.
 - Super+Shift+Space (top bar off) now lasts until you turn the bar back on, across restarts; `winarchy bar on|off|toggle`.
 - Holding Super no longer opens the Start menu on release.
-- Bar indicators work like Omarchy 4 (Quattro): the clock sits at the exact center, and active indicators sit to its left in the normal text color. Hovering the center reveals the others, dimmed, so one click turns them on: dictation, screen recording, night light, do not disturb, stay awake. The clock shows a pointer, and clicking it opens the calendar.
+- Bar indicators work like Omarchy 4 (Quattro): the clock sits at the exact center, and active indicators sit to its left in the normal text color. Hovering the center reveals the others, dimmed, so one click turns them on: dictation, screen recording, night light, do not disturb, stay awake. The clock shows a pointer, and clicking it (or Super+Ctrl+Alt+D) opens Quattro's calendar under it: a month grid with ISO week numbers and the year's progress, stepped with the chevrons, scroll wheel or arrow keys.
+- `winarchy apply` no longer leaves two copies of winarchy.ahk running when one was started through the old omarchy-win folder name.
 
 ## 0.1.0 (unreleased)
 
