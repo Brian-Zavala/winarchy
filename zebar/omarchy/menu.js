@@ -95,6 +95,8 @@ function reset() {
   land.id = 'land';
   $('land').replaceWith(land);
   mouse = '';
+  clearTimeout(typing);
+  typing = 0;
   closing = busy = false;
 }
 // A theme or font change while hidden: fresh copies of the generated stylesheets, swapped
@@ -463,8 +465,10 @@ function renderCarousel(entry) {
       const cover = el('div', 'cover off');
       cover.dataset.name = t.name;
       if (t.thumb) {
+        // 960px previews: loaded once a cover comes near the middle (placeCarousel).
         const img = el('img');
-        img.src = `./${t.thumb}`;
+        img.decoding = 'async';
+        img.dataset.src = `./${t.thumb}`;
         cover.append(img);
       } else {
         const blank = el('div', 'blank', t.label);
@@ -504,6 +508,9 @@ function placeCarousel(entry = false) {
     cover.style.opacity = a > 3 ? '0' : String([1, 0.8, 0.5, 0.22][a]);
     cover.style.transitionDelay = entry ? `${a * 55}ms` : '';
     if (d === undefined) continue;   // filtered out: fade where it stands
+    // Shown, or next in line to be: load its preview.
+    const img = a <= 4 && cover.querySelector('img[data-src]');
+    if (img) { img.src = img.dataset.src; delete img.dataset.src; }
     const s = Math.sign(d);
     const x = a ? s * cw * (0.66 + (a - 1) * 0.27) : 0;
     const z = a ? -cw * (0.45 + (a - 1) * 0.15) : 0;
@@ -611,6 +618,7 @@ function activate() {
 
 window.addEventListener('keydown', e => {
   if (busy) return e.preventDefault();
+  if (typing && e.key.length > 1) flushSearch();   // Enter/arrows act on what was typed
   const k = e.key;
   const ctrl = e.ctrlKey;
   const flow = route === 'theme';
@@ -653,7 +661,17 @@ window.addEventListener('wheel', e => {
   requestAnimationFrame(() => (wheelFrame = false));
 }, { passive: false });
 
-$('search').addEventListener('input', () => { if (!busy) { sel = 0; render(); } });
+// Typing re-filters once the keys pause (a background search rebuilds every tile).
+let typing = 0;
+function flushSearch() {
+  clearTimeout(typing);
+  typing = 0;
+  if (!busy) { sel = 0; render(); }
+}
+$('search').addEventListener('input', () => {
+  clearTimeout(typing);
+  typing = setTimeout(flushSearch, 50);
+});
 $('search').addEventListener('blur', () => setTimeout(() => !closing && $('search').focus(), 0));
 
 await open();
