@@ -802,7 +802,7 @@ IsGame(hwnd) {
         if !byPid.Has(pid) || (byPid[pid].name = "" && A_TickCount - byPid[pid].t > 30000) {
             if byPid.Count > 300
                 byPid.Clear()
-            name := RegExReplace(WinGetProcessName(hwnd), "i)\.exe$")
+            name := RegExReplace(WindowProcessName(hwnd), "i)\.exe$")
             byPid[pid] := {name: GameNames().Has(name) ? name : "", t: A_TickCount}
         }
         name := byPid[pid].name
@@ -811,7 +811,9 @@ IsGame(hwnd) {
     } catch
         return false
     Games[hwnd] := name
-    WmLog("game: " name " (GlazeWM leaves it alone; the bar hides behind it)")
+    admin := IsElevated(pid)
+    WmLog("game: " name " (GlazeWM leaves it alone; the bar hides behind it)"
+        . (admin ? "; runs as administrator" (GameHelper() ? "" : ": run 'winarchy game-setup' once so Super+W and the bar can close it") : ""))
     if info := GlazeWindowInfo(hwnd)
         try Run('"' GlazeCli '" command --id ' info.id ' ignore', , "Hide")
     SetTimer WriteIndicators, -10                     ; the game icon in the bar
@@ -866,6 +868,8 @@ FocusGame() {
 
 ; Bar game icon right-click / Super+W / Super+Q on a game: close it like its own
 ; window's X (it may ask to save); again within 15 s: force-quit it.
+; A game running as administrator is out of this script's reach (Windows blocks
+; messages and force-quit from normal programs): the admin game helper does it.
 CloseGame(hwnd := 0) {
     static asked := 0, askedPid := 0
     if !hwnd && !(hwnd := GameWindow()) {
@@ -875,17 +879,61 @@ CloseGame(hwnd := 0) {
     try pid := WinGetPID(hwnd), title := GameTitle(hwnd)
     catch
         return
-    if pid = askedPid && A_TickCount - asked < 15000 {
-        askedPid := 0
+    force := pid = askedPid && A_TickCount - asked < 15000
+    asked := force ? 0 : A_TickCount, askedPid := force ? 0 : pid
+    if IsElevated(pid) {
+        if !(helper := GameHelper()) {
+            WmLog("game close: " title " runs as administrator; no game helper")
+            Osd(title " runs as administrator: run 'winarchy game-setup' once so Winarchy can close it", 6000)
+            return
+        }
+        PostMessage 0x5556, force ? 2 : 1, hwnd, , helper
+    } else if force {
         ProcessClose pid
-        WmLog("game force-quit: " title)
-        Osd(title ": force-quit")
-        return
+    } else {
+        PostMessage 0x10, 0, 0, , hwnd                ; WM_CLOSE
     }
-    asked := A_TickCount, askedPid := pid
-    PostMessage 0x10, 0, 0, , hwnd                    ; WM_CLOSE
-    WmLog("game close: " title)
-    Osd("Closing " title "  (again: force-quit)", 3000)
+    WmLog("game " (force ? "force-quit: " : "close: ") title)
+    Osd(force ? title ": force-quit" : "Closing " title "  (again: force-quit)", 3000)
+}
+
+; The admin game helper's window (winarchy game-setup), or 0.
+GameHelper() {
+    DetectHiddenWindows true
+    SetTitleMatchMode 2
+    return WinExist("\game-helper.ahk ahk_class AutoHotkey")
+}
+
+; The process runs as administrator (elevated), so this script can't reach its windows.
+IsElevated(pid) {
+    elevated := false
+    if h := DllCall("OpenProcess", "uint", 0x1000, "int", 0, "uint", pid, "ptr") {   ; QUERY_LIMITED_INFORMATION
+        token := 0
+        if DllCall("advapi32\OpenProcessToken", "ptr", h, "uint", 8, "ptr*", &token) {  ; TOKEN_QUERY
+            value := 0, size := 0
+            DllCall("advapi32\GetTokenInformation", "ptr", token, "int", 20, "uint*", &value, "uint", 4, "uint*", &size)  ; TokenElevation
+            elevated := value != 0
+            DllCall("CloseHandle", "ptr", token)
+        }
+        DllCall("CloseHandle", "ptr", h)
+    }
+    return elevated
+}
+
+; A window's program name, also for programs running as administrator (this asks
+; Windows for no more access than it gives normal programs over admin ones).
+WindowProcessName(hwnd) {
+    pid := WinGetPID(hwnd)
+    if h := DllCall("OpenProcess", "uint", 0x1000, "int", 0, "uint", pid, "ptr") {
+        buf := Buffer(2048), size := 1024
+        ok := DllCall("QueryFullProcessImageNameW", "ptr", h, "uint", 0, "ptr", buf, "uint*", &size)
+        DllCall("CloseHandle", "ptr", h)
+        if ok {
+            SplitPath StrGet(buf, size, "UTF-16"), &name
+            return name
+        }
+    }
+    return WinGetProcessName(hwnd)
 }
 
 ; Process names (no .exe) of games: Windows' Game Bar list + config "games".

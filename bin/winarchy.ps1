@@ -18,6 +18,8 @@
   winarchy font [<family> | list]      terminal, bar, menus and launcher font
   winarchy font-install <Name>         install a Nerd Font (CascadiaMono, Meslo, FiraCode, ...)
   winarchy browser-setup               tint Chrome/Brave's toolbar with the theme (one admin prompt)
+  winarchy game-setup [remove]         let Super+W / the bar close games that run as administrator
+                                          (one admin prompt: a small helper that runs as admin)
   winarchy weather | update-check      refresh the bar's weather / update indicator
   winarchy bar [on|off|toggle]         the top bar (Super+Shift+Space); off stays off
   winarchy animations [on|off|toggle|build|status]
@@ -82,6 +84,7 @@ switch ($Verb) {
     }
     'bg-next' { Use-Lock { Invoke-BackgroundNext } }
     'browser-setup' { Enable-BrowserPolicy }
+    'game-setup' { if ($Arg -eq 'remove') { Disable-GameHelper } else { Enable-GameHelper } }
     'extras' { Install-Extras; Use-Lock { Invoke-Apply } }
     'weather' { Update-Weather }
     'update-check' { Invoke-UpdateCheck }

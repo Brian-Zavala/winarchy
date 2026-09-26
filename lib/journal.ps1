@@ -259,6 +259,7 @@ function Restore-JournalEntry($e, [string]$dir) {
             [Environment]::SetEnvironmentVariable('Path', $new, 'User')
         }
         'browsertask' { Disable-BrowserPolicy }
+        'gametask' { Disable-GameHelper }
         'cargo' { if (Get-Command cargo -ErrorAction SilentlyContinue) { cargo uninstall $e.crate 2>&1 | Out-Host } }
         'file-if-ours' { if (Test-Path -LiteralPath $e.path) { Remove-Item -LiteralPath $e.path -Force -ErrorAction SilentlyContinue } }
         'screensaver' {

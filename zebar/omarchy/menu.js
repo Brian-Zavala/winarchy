@@ -25,14 +25,15 @@ const get = (file, type = 'json') =>
 const el = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls, textContent: text ?? '' });
 const span = (cls, text) => el('span', cls, text);
 
-// menu.ahk activates the window after it loads: start the open animation then.
-const focused = new Promise(r => {
+// menu.ahk activates the window after it loads (or shows it again): start the open
+// animation then.
+const focused = () => new Promise(r => {
   if (document.hasFocus()) return r();
   window.addEventListener('focus', r, { once: true });
   setTimeout(r, 300);
 });
 
-const [start, menus] = await Promise.all([get('route.json'), get('menu.json')]);
+let menus = null;    // menu.json
 let index = null;    // index.json: themes + background groups (pickers only)
 let status = null;   // status.json: current theme + background
 let keys = null;     // parsed keybindings.txt
@@ -46,8 +47,13 @@ let tab = 0;
 let groups = [];
 
 // ---------------------------------------------------------------- lifecycle
+// The window outlives a close: it hides, and menu.ahk shows it again for the next open on
+// this monitor (focus starts it over from route.json), which saves starting a webview.
 let closing = false;
 let busy = false;    // an apply animation is playing: ignore input
+let idle = false;    // hidden, waiting to be shown again
+let openedAt = Date.now();
+const win = () => zebar.currentWidget().window.tauri;
 // fade: how long body.closing takes in menu.css (the landing fades slower).
 function close(delay = 0, fade = 120) {
   if (closing) return;
@@ -56,9 +62,71 @@ function close(delay = 0, fade = 120) {
   skipSwap();
   setTimeout(() => {
     document.body.classList.add('closing');
-    setTimeout(() => Promise.resolve(zebar.currentWidget().window.tauri.close()).catch(() => {}), calm.matches ? 0 : fade);
+    setTimeout(hide, calm.matches ? 0 : fade);
   }, delay);
 }
+async function hide() {
+  try {
+    await win().hide();
+  } catch (e) {
+    log(`menu: hide failed, closing instead: ${e}`);
+    return Promise.resolve(win().close()).catch(() => {});
+  }
+  reset();
+  idle = true;
+}
+// Back to the empty page menu.html starts with.
+function reset() {
+  document.body.className = '';
+  stack.length = 0;
+  route = null;
+  items = [];
+  sel = tab = 0;
+  groups = [];
+  index = status = keys = fonts = null;
+  $('search').value = '';
+  palette(null);
+  $('card').className = '';
+  for (const id of ['list', 'grid', 'tabs', 'stage', 'info', 'swatches']) $(id).replaceChildren();
+  delete $('info').dataset.name;
+  for (const c of layers) { c.getAnimations().forEach(a => a.cancel()); c.classList.remove('on'); }
+  wanted = null;
+  const land = el('img');
+  land.id = 'land';
+  $('land').replaceWith(land);
+  mouse = '';
+  closing = busy = false;
+}
+// A theme or font change while hidden: fresh copies of the generated stylesheets, swapped
+// in once loaded, without the palette morph (that is for previews).
+async function restyle() {
+  const root = document.documentElement;
+  const olds = [...document.querySelectorAll('link[rel="stylesheet"]')].filter(l => !/menu\.css/.test(l.getAttribute('href')));
+  root.style.transition = 'none';
+  await Promise.all(olds.map(old => new Promise(r => {
+    const l = Object.assign(document.createElement('link'), { rel: 'stylesheet' });
+    l.onload = l.onerror = r;
+    l.href = `${old.getAttribute('href').replace(/\?.*$/, '')}?v=${Date.now()}`;
+    old.after(l);
+  })));
+  olds.forEach(l => l.remove());
+  getComputedStyle(root).getPropertyValue('--bg');   // settle before the morph is back
+  root.style.transition = '';
+}
+async function open(again = false) {
+  idle = false;
+  openedAt = Date.now();
+  if (again) Promise.resolve(win().show()).catch(() => {});   // keep Tauri's state in step with menu.ahk's WinShow
+  let start;
+  [start, menus] = await Promise.all([get('route.json'), get('menu.json'), again && restyle()]);
+  await go(start?.route && (menus?.[start.route] || ['background', 'theme', 'keys', 'font'].includes(start.route)) ? start.route : 'root', false);
+  $('search').focus();
+  await focused();
+  requestAnimationFrame(() => document.body.classList.add('shown'));
+}
+window.addEventListener('focus', () => { if (idle) open(true); });
+// menu.ahk's toggle (and anything else closing the window) fades and hides it instead.
+Promise.resolve(win().onCloseRequested?.(e => { e.preventDefault(); if (!idle) close(); })).catch(() => {});
 function run(action) {
   if (action[0] === 'bg-set') return land(items[sel]);
   // Fire the action, then close: menu.ahk waits for this window to go away before
@@ -146,7 +214,7 @@ async function land(it) {
   close(0, 300);
 }
 // Clicking outside (focus moves to another window) closes, like Omarchy's menu.
-setTimeout(() => window.addEventListener('blur', () => busy || close()), 400);
+window.addEventListener('blur', () => busy || idle || Date.now() - openedAt < 400 || close());
 $('scrim').onclick = () => busy || close();
 
 // ---------------------------------------------------------------- routes
@@ -588,7 +656,4 @@ window.addEventListener('wheel', e => {
 $('search').addEventListener('input', () => { if (!busy) { sel = 0; render(); } });
 $('search').addEventListener('blur', () => setTimeout(() => !closing && $('search').focus(), 0));
 
-await go(start?.route && (menus?.[start.route] || ['background', 'theme', 'keys', 'font'].includes(start.route)) ? start.route : 'root', false);
-$('search').focus();
-await focused;
-requestAnimationFrame(() => document.body.classList.add('shown'));
+await open();

@@ -170,6 +170,73 @@ function Disable-BrowserPolicy {
     }
 }
 
+# --- Admin game helper (ahk\game-helper.ahk) ------------------------------------------
+# Games set to "Run as administrator" are out of reach of winarchy.ahk and GlazeWM
+# (no keys while one is in front, no closing it). One UAC prompt sets up an
+# admin-only copy of AutoHotkey + the helper and a task that starts it at login with
+# the highest privileges. Admin-only folder: nothing user-writable runs elevated.
+function Get-GameHelper {
+    $dir = Join-Path $env:ProgramData 'winarchy-games'
+    $task = $null
+    try {
+        $svc = New-Object -ComObject Schedule.Service
+        $svc.Connect()
+        $task = $svc.GetFolder('\winarchy').GetTask('game-helper')
+    } catch {}
+    @{ path = '\winarchy\'; name = 'game-helper'; dir = $dir; task = $task
+       script = Join-Path $dir 'game-helper.ahk'; source = Join-Path $Code 'ahk\game-helper.ahk' }
+}
+
+# The installed copy is older than the repo's (after winarchy update): game-setup again.
+function Test-GameHelperCurrent {
+    $gh = Get-GameHelper
+    $gh.task -and (Test-Path $gh.script) -and
+        (Get-FileHash $gh.script).Hash -eq (Get-FileHash $gh.source).Hash
+}
+
+function Enable-GameHelper {
+    $p = Get-Paths
+    if (-not $p.ahk) { throw 'AutoHotkey was not found (winarchy doctor)' }
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $gh = Get-GameHelper
+    $script = @"
+`$ErrorActionPreference = 'Stop'
+`$dir = '$($gh.dir)'
+Get-CimInstance Win32_Process -Filter "Name like 'AutoHotkey%'" | Where-Object { `$_.CommandLine -like "*`$dir*" } | ForEach-Object { Stop-Process -Id `$_.ProcessId -Force }
+New-Item -ItemType Directory -Force `$dir | Out-Null
+icacls `$dir /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null
+Copy-Item -Force '$($p.ahk)' (Join-Path `$dir 'AutoHotkey64.exe')
+Copy-Item -Force '$($gh.source)' (Join-Path `$dir 'game-helper.ahk')
+foreach (`$f in 'AutoHotkey64.exe', 'game-helper.ahk') { icacls (Join-Path `$dir `$f) /reset | Out-Null }
+`$action = New-ScheduledTaskAction -Execute (Join-Path `$dir 'AutoHotkey64.exe') -Argument ('"' + (Join-Path `$dir 'game-helper.ahk') + '"')
+`$trigger = New-ScheduledTaskTrigger -AtLogOn -User '$sid'
+`$principal = New-ScheduledTaskPrincipal -UserId '$sid' -LogonType Interactive -RunLevel Highest
+`$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
+Register-ScheduledTask -TaskPath '$($gh.path)' -TaskName '$($gh.name)' -Action `$action -Trigger `$trigger -Principal `$principal -Settings `$settings -Force | Out-Null
+`$svc = New-Object -ComObject Schedule.Service; `$svc.Connect()
+`$task = `$svc.GetFolder('$($gh.path.TrimEnd([char]92))').GetTask('$($gh.name)')
+`$task.SetSecurityDescriptor('D:(A;;FA;;;BA)(A;;FA;;;SY)(A;;GRGX;;;$sid)', 0)
+[void]`$task.Run(`$null)
+"@
+    $tmp = Join-Path $env:TEMP 'winarchy-game-setup.ps1'
+    Set-Content -Encoding UTF8 $tmp $script
+    Write-Host 'Windows will ask for admin permission once (the helper runs as administrator to reach admin games).'
+    Start-Process $p.powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tmp`""
+    Remove-Item $tmp -ErrorAction SilentlyContinue
+    if (-not (Get-GameHelper).task) { throw 'the game helper task was not created (permission declined?)' }
+    [void](Add-JournalEntry @{ kind = 'gametask'; key = 'gametask'; dir = $gh.dir })
+    Log 'game helper: ready (Super+W and the bar can close games that run as administrator)'
+}
+
+function Disable-GameHelper {
+    $gh = Get-GameHelper
+    if (-not $gh.task -and -not (Test-Path $gh.dir)) { return }
+    $script = "Get-CimInstance Win32_Process -Filter `"Name like 'AutoHotkey%'`" | Where-Object { `$_.CommandLine -like '*$($gh.dir)*' } | ForEach-Object { Stop-Process -Id `$_.ProcessId -Force }; " +
+        "Unregister-ScheduledTask -TaskPath '$($gh.path)' -TaskName '$($gh.name)' -Confirm:`$false -ErrorAction SilentlyContinue; Remove-Item -Recurse -Force '$($gh.dir)' -ErrorAction SilentlyContinue"
+    Start-Process (Get-Paths).powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$script`""
+    Log 'game helper: removed'
+}
+
 function Set-BrowserTheme([string]$theme, $c) {
     if (-not (Test-ChromiumInstalled)) { return 'skipped' }
     if (-not (Test-BrowserTask)) { Log 'browser toolbar: run "winarchy browser-setup" once to enable'; return 'skipped' }

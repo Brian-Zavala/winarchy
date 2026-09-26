@@ -35,6 +35,16 @@ function Invoke-Doctor([switch]$Fix) {
     & $check 'winarchy.ahk (keys, bar space, panels)' ($ahk.Count -eq 1) $(if ($ahk.Count -gt 1) { 'more than one copy is running: winarchy apply' } else { 'winarchy apply (starts it)' })
     $old = @($ahk | Where-Object { $_.CommandLine -notlike "*$Code*" })
     & $check 'running from this code folder' ($old.Count -eq 0) 'an old copy is running: winarchy apply'
+    # Games set to "Run as administrator" need the admin game helper to be closed by Super+W / the bar.
+    $gh = Get-GameHelper
+    if ($gh.task) {
+        & $check 'admin game helper (closes games that run as administrator)' (Test-GameHelperCurrent) 'winarchy game-setup (the installed copy is out of date)'
+    } else {
+        $games = @(Get-GameProcesses (Get-Config))
+        $admin = @((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers' -ErrorAction SilentlyContinue).PSObject.Properties |
+            Where-Object { $_.Value -match 'RUNASADMIN' -and $games -contains [IO.Path]::GetFileNameWithoutExtension($_.Name) })
+        if ($admin) { & $check "admin game helper: $($admin.Count) game(s) run as administrator" $false 'winarchy game-setup (one admin prompt), so Super+W and the bar can close them' }
+    }
 
     Write-Host "`nGenerated files"
     foreach ($f in @(

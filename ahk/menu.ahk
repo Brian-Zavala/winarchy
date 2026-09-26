@@ -58,6 +58,7 @@ switch verb {
     case "glaze": try Run('"' Env("glazewmCli") '" command ' arg, , "Hide")
     case "activity": SignalWm("activity")
     case "browser-setup": RunInTerminal("Browser toolbar color", CliInTerminal("browser-setup"))
+    case "game-setup": RunInTerminal("Admin game helper", CliInTerminal("game-setup"))
     case "doctor": RunInTerminal("winarchy doctor", '"' Env("pwsh", "pwsh") '" -NoExit -NoProfile -ExecutionPolicy Bypass -File "' Env("code") '\bin\winarchy.ps1" doctor')
     case "wm": SignalWm(arg)
     case "panel": SignalWm("panel-" arg)
@@ -222,21 +223,52 @@ OpenMenu(route) {
     global MenuTitle
     pack := Env("pack")
     if hwnd := WinExist(MenuTitle) {
+        ; (menu.js turns this into its fade and hides the window for next time)
         PostMessage 0x10, 0, 0, , hwnd      ; WinClose can stall on Zebar's webview windows
         return
     }
     PerMonitorDpi()
-    ; Zebar's presets m0..m7 follow its monitor order (left to right, top to bottom).
-    preset := "m" MonitorPosition(MonitorUnderMouse())
+    mon := MonitorUnderMouse()
     f := FileOpen(pack "\route.json", "w", "UTF-8-RAW")
     f.Write('{"route":"' route '"}')
     f.Close()
+    ; A closed menu stays loaded, hidden (menu.js): show it again, and it starts over from
+    ; route.json. Much faster than a new webview.
+    if hwnd := HiddenMenu(mon) {
+        WinShow hwnd
+        try WinActivate hwnd
+        return
+    }
+    ; Zebar's presets m0..m7 follow its monitor order (left to right, top to bottom).
+    preset := "m" MonitorPosition(mon)
     Run '"' Env("zebar") '" start-widget-preset --pack omarchy --widget-name menu --preset ' preset, , "Hide"
     ; Windows won't hand focus to a window opened by a background process, and the
     ; transparent webview doesn't paint until it is activated, so activate it here.
     if hwnd := WinWait(MenuTitle, , 3) {
         try WinActivate hwnd
     }
+}
+
+; The hidden menu window on monitor `mon`, if a closed menu left one there.
+HiddenMenu(mon) {
+    global MenuTitle
+    prev := A_DetectHiddenWindows
+    DetectHiddenWindows true
+    MonitorGet mon, &l, &t, &r, &b
+    found := 0
+    for hwnd in WinGetList(MenuTitle) {
+        try {
+            if WinGetStyle(hwnd) & 0x10000000           ; WS_VISIBLE: not one of ours
+                continue
+            WinGetPos &x, &y, &w, &h, hwnd
+            if (cx := x + w // 2) >= l && cx < r && (cy := y + h // 2) >= t && cy < b {
+                found := hwnd
+                break
+            }
+        }
+    }
+    DetectHiddenWindows prev
+    return found
 }
 
 ; The clock's calendar (Omarchy Quattro), on the monitor under the mouse; again closes it.

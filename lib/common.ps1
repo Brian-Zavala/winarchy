@@ -2,6 +2,10 @@
 # Dot-sourced by bin/winarchy.ps1 (PowerShell 7).
 
 $Code        = Split-Path -Parent $PSScriptRoot
+# Called through a junction (the old %LOCALAPPDATA%\omarchy-win, still on the PATH of
+# shells started before the rename), $Code would name the junction, and apply would point
+# autostart and the running scripts there: always the real folder.
+try { if ($t = [IO.Directory]::ResolveLinkTarget($Code, $true)) { $Code = $t.FullName } } catch {}
 $Data        = Join-Path $env:USERPROFILE '.winarchy'
 $Pack        = Join-Path $env:USERPROFILE '.glzr\zebar\omarchy'
 $GlazeConfig = Join-Path $env:USERPROFILE '.glzr\glazewm\config.yaml'

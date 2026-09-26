@@ -91,6 +91,13 @@ and again (black screen, blinking bar). So Winarchy steps aside for games, with 
   you leave or close the game. A game played in a window is left untiled as well.
 * **Closing a game:** Super+W / Super+Q, or right-click the gamepad icon in the bar. Doing it
   again within 15 s force-quits a game that doesn't close. Clicking the icon switches back to the game.
+* **Games that run as administrator** (the "Run this program as an administrator" compatibility
+  setting, common for games): Windows keeps normal programs away from them, so Super+W would reach
+  Windows (it opens Widgets) and nothing could close them. Run `winarchy game-setup` once (Omarchy
+  menu → Setup → Admin Games; one admin prompt): a small helper then runs as administrator at login
+  and does just this: Super+W / Super+Q close admin windows, closing from the bar works, and Super
+  alone doesn't open Start there. It runs from an admin-only copy; `winarchy doctor` says when it's
+  needed or out of date, and `winarchy game-setup remove` (or uninstall) takes it away.
 * **Gamepad:** controller input counts as activity, so the screensaver never starts mid-game,
   and a button press ends it.
 * **Turn it off:** `"gameMode": false` in `config.json` (games are then tiled like any window).

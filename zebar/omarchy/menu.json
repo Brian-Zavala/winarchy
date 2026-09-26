@@ -111,6 +111,7 @@
       { "label": "Input", "icon": "", "action": ["settings", "ms-settings:typing"] },
       { "label": "Settings", "icon": "", "action": ["edit", "config"] },
       { "label": "Keybindings", "icon": "", "action": ["edit", "keybindings"] },
+      { "label": "Admin Games", "icon": "󰊗", "action": ["game-setup"] },
       { "label": "GlazeWM", "icon": "", "action": ["edit", "glaze-config"] }
     ]
   },

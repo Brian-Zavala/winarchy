@@ -49,6 +49,7 @@ GAMES   (automatic for every game Windows' Game Bar knows; add others in config.
                                 nothing pops over it (bar restarts, display changes and
                                 the screensaver wait until you leave or close the game)
   Super + W  or  Super + Q      Close the game (again within 15 s: force-quit)
+                                (games that run as administrator: winarchy game-setup once)
   Bar gamepad icon              Shown while a game is open. Click: back to the game,
                                 right click: close it (twice: force-quit)
   Gamepad buttons / sticks      Count as activity: no screensaver mid-game; they also end it
