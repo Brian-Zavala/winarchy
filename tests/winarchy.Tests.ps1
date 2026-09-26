@@ -224,9 +224,14 @@ Describe 'Background landing' {
         Set-Content $wall 'jpg'
         Mock Save-Wallpaper {}; Mock Save-LockScreen {}; Mock Save-State {}; Mock Start-Hidden {}; Mock Log {}
         Mock Get-Paths { @{ powershell = 'powershell.exe' } }
-        Mock Set-DesktopWallpaper { $script:seen = (Read-Json (Join-Path $Pack 'status.json'))?.background; $script:cov = $covered }
+        Mock Set-DesktopWallpaper {
+            $script:seen = (Read-Json (Join-Path $Pack 'status.json'))?.background; $script:cov = $covered
+            & $after                                   # the wallpaper is set (reveal still playing)
+            $script:set = (Read-Json (Join-Path $Pack 'status.json'))?.background
+        }
         Set-Background $wall @{ theme = 't'; background = 'old'; perTheme = @{} } @(10, 20)
         $script:seen | Should -Not -Be $wall
+        $script:set | Should -Be $wall
         $script:cov | Should -Be @(10, 20)
         (Read-Json (Join-Path $Pack 'status.json')).background | Should -Be $wall
     }
@@ -272,5 +277,25 @@ Describe 'Browser color task' {
         Mock New-Object { New-FakeScheduler @() } -ParameterFilter { $ComObject -eq 'Schedule.Service' }
         Test-BrowserTask | Should -BeFalse
         (Get-BrowserTask).dir | Should -Be (Join-Path $env:ProgramData 'winarchy')
+    }
+}
+
+Describe 'Theme set order' {
+    It 'themes what is on screen, then the status and the background, then the rest' {
+        $script:order = [Collections.Generic.List[string]]::new()
+        Mock Read-Colors { @{} }; Mock Save-State {}; Mock Log {}
+        Mock Get-Config { @{ themeTargets = @{ off = $false } } }
+        Mock Read-State { @{ theme = 'old'; perTheme = @{ t = $TestDrive } } }
+        Mock Get-ThemeTargets {
+            [ordered]@{
+                slow = @{ label = 'slow'; run = { $script:order.Add('slow') } }
+                bar  = @{ label = 'bar'; fast = $true; run = { $script:order.Add('bar') } }
+                off  = @{ label = 'off'; fast = $true; run = { $script:order.Add('off') } }
+            }
+        }
+        Mock Write-Status { $script:order.Add("status:$([bool]$BumpTheme)") }
+        Mock Set-Background { $script:order.Add('background') }
+        Invoke-ThemeSet 't'
+        $script:order -join ' ' | Should -Be 'bar status:True background slow'
     }
 }

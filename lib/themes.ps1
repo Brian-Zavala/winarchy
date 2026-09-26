@@ -126,26 +126,34 @@ function Update-Index {
 
 # --- backgrounds ------------------------------------------------------------------
 # $covered: a point on the monitor the background picker covers (it reveals that one itself).
-function Set-DesktopWallpaper([string]$path, [int[]]$covered) {
+# $after: runs as soon as the wallpaper is set, while the reveal is still playing.
+function Set-DesktopWallpaper([string]$path, [int[]]$covered, [scriptblock]$after) {
     Initialize-Native
     Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value '10'   # Fill
     Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value '0'
     # SPI_SETDESKWALLPAPER, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE, under Omarchy's reveal
     # animation (lib/transition.ps1) when it can play.
-    $set = { if (-not [Winarchy.Native]::SystemParametersInfo(0x14, 0, $path, 3)) { throw "SystemParametersInfo failed for $path" } }.GetNewClosure()
+    $set = {
+        if (-not [Winarchy.Native]::SystemParametersInfo(0x14, 0, $path, 3)) { throw "SystemParametersInfo failed for $path" }
+        if ($after) { & $after }
+    }.GetNewClosure()
     if (Get-Command Invoke-BackgroundReveal -ErrorAction SilentlyContinue) { Invoke-BackgroundReveal $path $set $covered } else { & $set }
 }
 
 function Set-Background([string]$path, $state, [int[]]$covered) {
     $path = (Resolve-Path -LiteralPath $path).Path
     Save-Wallpaper; Save-LockScreen
-    Set-DesktopWallpaper $path $covered
-    # Status last: the background picker holds the new wallpaper over its monitor until
-    # status.json names it, then fades to a desktop that already shows it.
-    $state.background = $path
-    $state.perTheme[$state.theme] = $path
-    Save-State $state
-    Write-Status $state
+    # Status once the wallpaper is set: the background picker holds the new wallpaper over
+    # its monitor until status.json names it, then fades to a desktop that already shows
+    # it. Written while the other monitors' reveal still plays, so both end together.
+    # (No GetNewClosure: it runs in this function's scope chain and finds its commands here.)
+    $done = {
+        $state.background = $path
+        $state.perTheme[$state.theme] = $path
+        Save-State $state
+        Write-Status $state
+    }
+    Set-DesktopWallpaper $path $covered $done
     # Lock screen follows (WinRT API needs Windows PowerShell 5.1); detached so the picker
     # feels instant. lockscreen.ps1 skips itself if a newer pick has landed meanwhile.
     $p = Get-Paths
@@ -323,10 +331,12 @@ function Set-NeovimTheme([string]$theme, $c) {
 
 function Get-ThemeTargets {
     # name -> scriptblock(theme, colors); config.themeTargets switches each one off.
+    # fast: what the user is looking at, applied before the background; the rest after it
+    # (the accent broadcast and Flow's restart take a second or two each).
     [ordered]@{
-        bar      = @{ label = 'bar + menu'; run = { param($t, $c) Set-BarTheme $c } }
-        glazewm  = @{ label = 'GlazeWM borders'; run = { param($t, $c) Set-GlazeTheme $c } }
-        terminal = @{ label = 'Windows Terminal'; run = { param($t, $c) Set-TerminalTheme $c } }
+        bar      = @{ label = 'bar + menu'; fast = $true; run = { param($t, $c) Set-BarTheme $c } }
+        glazewm  = @{ label = 'GlazeWM borders'; fast = $true; run = { param($t, $c) Set-GlazeTheme $c } }
+        terminal = @{ label = 'Windows Terminal'; fast = $true; run = { param($t, $c) Set-TerminalTheme $c } }
         accent   = @{ label = 'Windows accent'; run = { param($t, $c) Set-WindowsAccent $c } }
         neovim   = @{ label = 'Neovim'; run = { param($t, $c) Set-NeovimTheme $t $c } }
         vscode   = @{ label = 'VS Code'; run = { param($t, $c) Set-VSCodeTheme $t $c } }
@@ -344,17 +354,22 @@ function Invoke-ThemeSet([string]$theme) {
     $state.theme = $theme
     Save-State $state
     $targets = Get-ThemeTargets
-    foreach ($name in $targets.Keys) {
-        if ($cfg.themeTargets[$name] -eq $false) { continue }
-        $t = $targets[$name]
-        try {
-            $r = & $t.run $theme $c
-            Log "theme $theme -> $($t.label)$(if ($r -eq 'skipped') { ' (skipped: not installed)' })"
-        } catch { Log "theme $theme -> $($t.label) FAILED: $($_.Exception.Message)" }
+    $apply = {
+        param([bool]$fast)
+        foreach ($name in $targets.Keys) {
+            $t = $targets[$name]
+            if ([bool]$t.fast -ne $fast -or $cfg.themeTargets[$name] -eq $false) { continue }
+            try {
+                $r = & $t.run $theme $c
+                Log "theme $theme -> $($t.label)$(if ($r -eq 'skipped') { ' (skipped: not installed)' })"
+            } catch { Log "theme $theme -> $($t.label) FAILED: $($_.Exception.Message)" }
+        }
     }
+    & $apply $true
     Write-Status $state -BumpTheme
     # Background: the one last used with this theme, else the theme's first (omarchy-theme-set).
     $bg = $state.perTheme[$theme]
     if (-not $bg -or -not (Test-Path -LiteralPath $bg)) { $bg = Get-ThemeBackgrounds $theme | Select-Object -First 1 }
     if ($bg) { Set-Background $bg $state }
+    & $apply $false
 }
