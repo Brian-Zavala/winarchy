@@ -280,6 +280,41 @@ Describe 'Browser color task' {
     }
 }
 
+Describe 'AutoHotkey settings ini' {
+    BeforeAll {
+        function BaseCfg($over) {
+            Merge-Hashtable @{
+                apps = @{ editor = 'notepad.exe'; terminal = 'auto'; browser = 'auto'; files = 'explorer.exe' }
+                takeOverWinSpace = $true; launchers = $true; hideTaskbar = $true; gap = 10; barHeight = 26
+                syncAtLogin = $true; screensaver = @{ enabled = $false; idleSeconds = 150 }; weather = $true
+                gameMode = $true; games = @(); gameDirs = @(); blockMinimize = $true; minimizeAllowed = @()
+            } $over
+        }
+        function IniText { Get-Content -Raw (Join-Path $Generated 'winarchy.ini') }
+    }
+    It 'writes gameDirs, blockMinimize and minimizeAllowed' {
+        $Generated = Join-Path $TestDrive ([guid]::NewGuid())
+        Write-AhkIni @{} (BaseCfg @{ games = @('Foo', 'Bar.exe'); gameDirs = @('C:\Games', '', 'G:\'); minimizeAllowed = @('Spotify') })
+        IniText | Should -Match 'games=Foo\|Bar'
+        IniText | Should -Match 'gameDirs=C:\\Games\|G:\\'
+        IniText | Should -Match 'blockMinimize=1'
+        IniText | Should -Match 'minimizeAllowed=Spotify'
+    }
+    It 'turns blockMinimize off' {
+        $Generated = Join-Path $TestDrive ([guid]::NewGuid())
+        Write-AhkIni @{} (BaseCfg @{ blockMinimize = $false })
+        IniText | Should -Match 'blockMinimize=0'
+    }
+    It 'defaults openOnHoveredMonitor on, and turns it off' {
+        $Generated = Join-Path $TestDrive ([guid]::NewGuid())
+        Write-AhkIni @{} (BaseCfg @{})
+        IniText | Should -Match 'openOnHoveredMonitor=1'
+        $Generated = Join-Path $TestDrive ([guid]::NewGuid())
+        Write-AhkIni @{} (BaseCfg @{ openOnHoveredMonitor = $false })
+        IniText | Should -Match 'openOnHoveredMonitor=0'
+    }
+}
+
 Describe 'Theme set order' {
     It 'themes what is on screen, then the status and the background, then the rest' {
         $script:order = [Collections.Generic.List[string]]::new()

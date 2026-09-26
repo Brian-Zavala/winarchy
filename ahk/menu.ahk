@@ -7,6 +7,7 @@
 ; and for winarchy.ahk hotkeys that open the menu.
 ;   menu.ahk open <route>        open/toggle the Omarchy menu (root, system, keys, background, theme, ...)
 ;   menu.ahk launcher | start | terminal | calendar
+;   menu.ahk run-app <AppsFolder AppID> | apps-refresh    (Apps route; refresh -> winarchy CLI)
 ;   menu.ahk send <keys> | run <target> [args] | url <url> | settings <ms-settings:...>
 ;   menu.ahk edit <file | glaze-config | bar-css | config | launchers | keybindings>
 ;   menu.ahk bg-set <path> [landing name] | bg-next | theme-set <name> | sync | apply | doctor   (-> winarchy CLI)
@@ -24,12 +25,15 @@ arg := A_Args.Length > 1 ? A_Args[2] : ""
 ; Keystrokes and window commands must land on the window the menu covered,
 ; so wait for the menu to finish closing first. The picker verbs send no keys: they start
 ; right away while the menu plays its apply animation (and waits for the new background).
-if !(verb ~= "^(open|log|bar-start|bg-set|theme-set|font-set)$")
+if !(verb ~= "^(open|log|bar-start|bg-set|theme-set|font-set|apps-refresh)$")
     WinWaitClose MenuTitle, , 1
 
 switch verb {
     case "open": OpenMenu(arg || "root")
     case "launcher": Send Env("flowHotkey", "!{Space}")
+    ; Apps route: one AppsFolder AppID launches a desktop program or a Store app alike.
+    case "run-app": try Run 'explorer.exe "shell:AppsFolder\' arg '"'
+    case "apps-refresh": OmarchyCmd("apps")
     case "start": Send "^{Esc}"
     case "terminal": Run Env("terminal", "wt.exe")
     case "calendar": OpenCalendar()
@@ -212,7 +216,7 @@ SignalWm(name) {
     static ids := Map("bar", 1, "gaps", 2, "awake", 3, "transparency", 4, "colorpicker", 5,
         "panel-audio", 6, "panel-bluetooth", 7, "screensaver", 8, "screensaver-toggle", 9,
         "ocr", 10, "nightlight", 11, "dnd", 12, "weather", 13, "activity", 14, "uac", 15,
-        "game", 16, "game-close", 17, "bar-on", 18, "bar-off", 19)
+        "game", 16, "game-close", 17, "bar-on", 18, "bar-off", 19, "restore-all", 20)
     DetectHiddenWindows true
     if ids.Has(name) && (hwnd := WinExist("winarchy.ahk ahk_class AutoHotkey"))
         PostMessage 0x5555, ids[name], 0, , hwnd

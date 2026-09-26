@@ -36,7 +36,7 @@ Then press **Super + K** for every key. Super is the Windows key.
 
 | | |
 |---|---|
-| **Tiling** | GlazeWM with Omarchy's keys: Super+1..0 workspaces (split across your monitors), Super+arrows, Super+Shift+arrows, Super+F, Super+T, Super+J, Super+-/=, Super+drag to move/resize |
+| **Tiling** | GlazeWM with Omarchy's keys: Super+1..0 workspaces (split across your monitors), Super+arrows, Super+Shift+arrows, Super+F, Super+T, Super+J, Super+-/=, Super+drag to move/resize. Nothing minimizes (there's no taskbar to bring it back from) - Super+M / Super+Home restores everything, just in case |
 | **Top bar** | Omarchy logo (menu), workspaces, indicators, clock, weather, updates, tray, Bluetooth, network, audio, CPU, battery. Always above windows (except fullscreen ones and games); tiles and maximized windows never go under it. Super+Shift+Space turns it off until you turn it back on |
 | **Gaming** | Games get out of the way by themselves: GlazeWM doesn't tile them, the bar hides on the game's monitor, and nothing pops over a game while you play. A gamepad icon in the bar switches to the game or closes it; Super+W closes it too. Gamepad input keeps the screensaver away. See [Games](#games) |
 | **Menus** | Super+Alt+Space (Omarchy menu), Super+Escape (system), Super+K (keys), Super+Ctrl+C/O/H (capture/toggle/setup) |
@@ -84,11 +84,18 @@ and again (black screen, blinking bar). So Winarchy steps aside for games, with 
 (Steam, Epic, GOG, Battle.net, EA, Ubisoft, Xbox, Playnite, emulators):
 
 * **What counts as a game:** everything Windows' Game Bar has recognised as one (Windows keeps
-  that list for every game you've run), plus the process names you list in `config.json`:
-  `"games": ["MyGame"]`. Playnite's fullscreen mode and Steam Big Picture are left alone too.
+  that list for every game you've run); anything installed under Steam/Epic/Xbox/GOG/EA/Ubisoft's
+  own folders, or under a folder you list in `"gameDirs"`; anything started by Playnite; and the
+  process names you list in `"games": ["MyGame"]`. Playnite's fullscreen mode and Steam Big
+  Picture are left alone too. Missed one? Super+Ctrl+G marks the focused window by hand.
 * **While a game is in front:** GlazeWM doesn't tile it, the top bar hides on its monitor (the
   other monitors keep theirs), and display changes, bar restarts and the screensaver wait until
   you leave or close the game. A game played in a window is left untiled as well.
+* **Switching away and back:** the game itself is left alone (no re-tiling redraw, no workspace
+  repair) for as long as it's still open, even minimized or on another workspace - that's what a
+  streamed session (Apollo/Sunshine, a virtual display replacing your monitors) used to leave
+  black once the stream ended and you'd switched workspaces. The bar still comes back on your
+  monitors promptly; switching back to the game's own workspace brings the game back to front.
 * **Closing a game:** Super+W / Super+Q, or right-click the gamepad icon in the bar. Doing it
   again within 15 s force-quits a game that doesn't close. Clicking the icon switches back to the game.
 * **Games that run as administrator** (the "Run this program as an administrator" compatibility
@@ -128,9 +135,14 @@ text, color).
 **Docking / undocking.** When a monitor is added, workspaces re-split across the monitors automatically. A monitor that sleeps or is unplugged keeps its workspaces: they wait on the other monitors and go back when it returns. If you removed a monitor for good, run `winarchy apply -MonitorsOnly -Resplit`.
 
 **A game gets tiled, or the bar shows over it.** Windows adds a game to its list the first time
-Game Bar notices it; until then, add its process name (Task Manager > Details, without `.exe`) to
-`"games"` in config.json. The log (`%USERPROFILE%\.winarchy\logs\winarchy.log`) says
-`game: <name>` when a game is recognised.
+Game Bar notices it; the folder/Playnite checks (see [Games](#games)) catch most others right
+away. Still missed? Super+Ctrl+G marks the focused window, or add its process name (Task
+Manager > Details, without `.exe`) to `"games"` in config.json. The log
+(`%USERPROFILE%\.winarchy\logs\winarchy.log`) says `game: <name>` when a game is recognised.
+
+**A window minimized and I can't get it back.** Super+M (or Super+Home) restores every
+minimized window. `"blockMinimize": false` in config.json turns off the no-minimize policy
+entirely (or add just that one program's process name to `"minimizeAllowed"`).
 
 **Something looks wrong.** Run `winarchy doctor`. Logs: `%USERPROFILE%\.winarchy\logs`.
 

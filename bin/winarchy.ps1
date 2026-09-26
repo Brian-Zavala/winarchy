@@ -17,13 +17,18 @@
   winarchy sync [-Offline]             download Omarchy themes + backgrounds, rebuild pickers
   winarchy font [<family> | list]      terminal, bar, menus and launcher font
   winarchy font-install <Name>         install a Nerd Font (CascadiaMono, Meslo, FiraCode, ...)
+  winarchy apps                        rebuild the menu's Apps list from what Windows has installed
   winarchy browser-setup               tint Chrome/Brave's toolbar with the theme (one admin prompt)
   winarchy game-setup [remove]         let Super+W / the bar close games that run as administrator
                                           (one admin prompt: a small helper that runs as admin)
+  winarchy game-add <name>             add a game process name to config.json (Super+Ctrl+G does
+                                          this for the focused window, then applies it)
   winarchy weather | update-check      refresh the bar's weather / update indicator
   winarchy bar [on|off|toggle]         the top bar (Super+Shift+Space); off stays off
   winarchy animations [on|off|toggle|build|status]
                                           window animations (experimental GlazeWM build)
+  winarchy autotile [on|off|toggle|status]
+                                          Hyprland-style auto-tiling (dwindle emulation)
   winarchy config                      open your settings file
   winarchy keys                        print the keybindings
   winarchy status | version | help
@@ -53,7 +58,9 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\lib\uninstall.ps1"
 . "$PSScriptRoot\..\lib\doctor.ps1"
 . "$PSScriptRoot\..\lib\extras.ps1"
+. "$PSScriptRoot\..\lib\apps.ps1"
 . "$PSScriptRoot\..\lib\animations.ps1"
+. "$PSScriptRoot\..\lib\autotile.ps1"
 . "$PSScriptRoot\..\lib\transition.ps1"
 
 $version = (Get-Content -Raw (Join-Path $Code 'VERSION') -ErrorAction SilentlyContinue)?.Trim()
@@ -85,10 +92,15 @@ switch ($Verb) {
     'bg-next' { Use-Lock { Invoke-BackgroundNext } }
     'browser-setup' { Enable-BrowserPolicy }
     'game-setup' { if ($Arg -eq 'remove') { Disable-GameHelper } else { Enable-GameHelper } }
+    'game-add' {
+        if (-not $Arg) { throw 'usage: winarchy game-add <process name>' }
+        Use-Lock { Add-ConfigGame $Arg; Invoke-Apply -MonitorsOnly }
+    }
     'extras' { Install-Extras; Use-Lock { Invoke-Apply } }
     'weather' { Update-Weather }
     'update-check' { Invoke-UpdateCheck }
     'animations' { Invoke-Animations $Arg }
+    'autotile' { Invoke-AutoTile $Arg }
     'bar' {
         # The running winarchy.ahk owns the bar (Omarchy: Super+Shift+Space).
         $wm = @{ '' = 'bar'; 'toggle' = 'bar'; 'on' = 'bar-on'; 'off' = 'bar-off' }[[string]$Arg]
@@ -104,6 +116,8 @@ switch ($Verb) {
         if (-not $Arg) { "fonts: $($NerdFonts.Keys -join ', ')"; return }
         Use-Lock { $family = Install-NerdFont $Arg; [void](Update-FontList); Invoke-FontSet $family }
     }
+    # The Apps route's list; the menu refreshes it in the background each time it opens.
+    'apps' { Update-AppList | ForEach-Object { $_.name } }
     'config' {
         if (-not (Test-Path $ConfigFile)) { Write-Json $ConfigFile ([ordered]@{ _help = 'Only the settings you change. See docs/config.md, then run: winarchy apply' }) }
         $p = Get-Paths

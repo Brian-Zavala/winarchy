@@ -2,7 +2,7 @@
   "root": {
     "title": "Go",
     "items": [
-      { "label": "Apps", "icon": "", "action": ["launcher"] },
+      { "label": "Apps", "icon": "", "route": "apps" },
       { "label": "Learn", "icon": "", "route": "learn" },
       { "label": "Trigger", "icon": "", "route": "trigger" },
       { "label": "Style", "icon": "", "route": "style" },
@@ -55,7 +55,8 @@
       { "label": "Top Bar", "icon": "", "action": ["wm", "bar"] },
       { "label": "Window Gaps", "icon": "", "action": ["wm", "gaps"] },
       { "label": "Window Transparency", "icon": "", "action": ["wm", "transparency"] },
-      { "label": "Window Animations", "icon": "󰗘", "action": ["animations", "toggle"] }
+      { "label": "Window Animations", "icon": "󰗘", "action": ["animations", "toggle"] },
+      { "label": "Restore All Windows", "icon": "", "action": ["wm", "restore-all"] }
     ]
   },
   "style": {

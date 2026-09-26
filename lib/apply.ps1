@@ -148,6 +148,21 @@ function Get-GameProcesses($cfg, [string[]]$exePaths) {
     @($names | Where-Object { $_ -notmatch '^(explorer|WindowsTerminal|pwsh|powershell|cmd|Code|chrome|msedge|firefox|zebar|glazewm)$' })
 }
 
+# Super+Ctrl+G (winarchy.ahk MarkAsGame) / `winarchy game-add <name>`: add one process
+# name to config.json's own "games" list, so it's caught from the next apply/restart on
+# (winarchy.ahk already registered the window itself for this session).
+function Add-ConfigGame([string]$name) {
+    $name = ($name -replace '(?i)\.exe$', '').Trim()
+    if (-not $name) { return }
+    $user = Read-Json $ConfigFile -AsHashtable
+    if (-not $user) { $user = @{} }
+    $games = @(@($user.games) | Where-Object { $_ })
+    if ($games -contains $name) { return }
+    $user.games = $games + $name
+    Write-Json $ConfigFile $user
+    Log "games: added '$name' to config.json"
+}
+
 function ConvertTo-GamesYaml([string[]]$names) {
     if (-not $names) { return '      # (none yet)' }
     ($names | ForEach-Object { "      - window_process: { equals: '$($_ -replace "'", "''")' }" }) -join "`n"
@@ -217,6 +232,10 @@ function Write-AhkIni($p, $cfg) {
             animations = [int]($p.glazewm -and $p.glazewm -ne $p.glazewmOfficial)
             gameMode = [int]($cfg.gameMode -ne $false)
             games = (@($cfg.games) | Where-Object { $_ }) -join '|'
+            gameDirs = (@($cfg.gameDirs) | Where-Object { $_ }) -join '|'
+            blockMinimize = [int]($cfg.blockMinimize -ne $false)
+            minimizeAllowed = (@($cfg.minimizeAllowed) | Where-Object { $_ }) -join '|'
+            openOnHoveredMonitor = [int]($cfg.openOnHoveredMonitor -ne $false)
         }
     }
     $text = foreach ($section in $ini.Keys) {
@@ -405,6 +424,18 @@ function Initialize-Branding {
     }
 }
 
+# blockMinimize also turns off Aero Shake (dragging a window's title bar shakes it to
+# minimize every other window) - the one other built-in way to end up with a minimized
+# window besides the ones winarchy.ahk's hook already catches (it fires no minimize
+# event of its own to catch; this is Explorer's own setting, restored on uninstall).
+function Set-DisallowShaking($cfg) {
+    $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+    $want = if ($cfg.blockMinimize -eq $false) { 0 } else { 1 }
+    if ((Get-ItemProperty $key -Name DisallowShaking -ErrorAction SilentlyContinue).DisallowShaking -eq $want) { return }
+    Save-Reg $key 'DisallowShaking'
+    Set-ItemProperty $key -Name DisallowShaking -Value $want -Type DWord
+}
+
 # The Omarchy screensaver replaces Windows' own (restored on uninstall).
 function Set-WindowsScreensaver($cfg) {
     if (-not $cfg.screensaver.enabled) { return }
@@ -478,8 +509,10 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Respli
     Set-Autostart $p $cfg
     try { Set-TerminalProfiles $p } catch { Log "terminal profiles FAILED: $($_.Exception.Message)" }
     Set-WindowsScreensaver $cfg
+    try { Set-DisallowShaking $cfg } catch { Log "Aero Shake setting FAILED: $($_.Exception.Message)" }
     if (-not (Test-Path (Join-Path $Pack 'font.css'))) { Write-FontCss }
     try { [void](Update-FontList) } catch { Log "font list FAILED: $($_.Exception.Message)" }
+    try { [void](Update-AppList) } catch { Log "app list FAILED: $($_.Exception.Message)" }
     # The pickers' index.json format follows the code, so rebuild it here too (not only on sync).
     try { Update-Index } catch { Log "picker index FAILED: $($_.Exception.Message)" }
     if (-not (Test-Path (Join-Path $Pack 'theme.css'))) {

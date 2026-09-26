@@ -31,3 +31,24 @@ Describe 'Game ignore rules' {
         $yaml | Should -Match "Playnite\.FullscreenApp' \}\s+- window_title: \{ equals: 'Steam Big Picture Mode' \}\s+- window_process: \{ equals: 'CrashBandicoot4' \}"
     }
 }
+
+Describe 'Add-ConfigGame (Super+Ctrl+G / winarchy game-add)' {
+    BeforeAll { Mock Log {} }
+    BeforeEach { $ConfigFile = Join-Path $TestDrive ([guid]::NewGuid()) }
+    It 'adds a game to a config.json that does not exist yet' {
+        Add-ConfigGame 'Townfall-Win64-Shipping.exe'
+        (Read-Json $ConfigFile -AsHashtable).games | Should -Be @('Townfall-Win64-Shipping')
+    }
+    It 'keeps your other keys and games, and never adds one twice' {
+        Write-Json $ConfigFile @{ gap = 4; games = @('Existing') }
+        Add-ConfigGame 'Existing'
+        Add-ConfigGame 'New.exe'
+        $cfg = Read-Json $ConfigFile -AsHashtable
+        $cfg.gap | Should -Be 4
+        $cfg.games | Should -Be @('Existing', 'New')
+    }
+    It 'does nothing with an empty name' {
+        Add-ConfigGame ''
+        Test-Path $ConfigFile | Should -BeFalse
+    }
+}

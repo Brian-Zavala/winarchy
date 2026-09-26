@@ -34,6 +34,10 @@
   "backgroundTransition": "reveal",
   "gameMode": true,
   "games": [],
+  "gameDirs": [],
+  "blockMinimize": true,
+  "minimizeAllowed": [],
+  "openOnHoveredMonitor": true,
   "animations": {
     "enabled": false,
     "moveMs": 379,
@@ -46,6 +50,9 @@
       "version": "3.10.1",
       "fallbackToolchain": "nightly-2026-07-20"
     }
+  },
+  "autoTiling": {
+    "enabled": true
   },
   "weather": true,
   "location": null,

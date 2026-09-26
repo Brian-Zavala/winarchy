@@ -41,15 +41,24 @@ WINDOWS
   Super + Backspace             Toggle window transparency
   Super + Shift + Backspace     Toggle window gaps
   Super + Shift + Space         Toggle top bar (stays off until toggled back; also: winarchy bar on|off)
+  Super + M  or  Super + Home   Restore every minimized window (the taskbar is hidden: this is
+                                the way back if one ever gets minimized)
 
 {{ apps }}
 
-GAMES   (automatic for every game Windows' Game Bar knows; add others in config.json "games")
+GAMES   (automatic: Windows' Game Bar, Steam/Epic/Xbox/GOG/EA/Ubisoft's own folders,
+         Playnite's own games, config.json "gameDirs" and "games")
   A game in front               Not tiled by GlazeWM; the top bar hides on its monitor;
                                 nothing pops over it (bar restarts, display changes and
                                 the screensaver wait until you leave or close the game)
+  Switch away and back          The game itself is left alone until it closes (workspace
+                                repair and a re-tiling redraw wait for that; the bar still
+                                comes back on its own). Switching to its own workspace
+                                again brings the game back to front
   Super + W  or  Super + Q      Close the game (again within 15 s: force-quit)
                                 (games that run as administrator: winarchy game-setup once)
+  Super + Ctrl + G              Mark the focused window as a game by hand (missed by the
+                                checks above) and remember it in config.json
   Bar gamepad icon              Shown while a game is open. Click: back to the game,
                                 right click: close it (twice: force-quit)
   Gamepad buttons / sticks      Count as activity: no screensaver mid-game; they also end it
