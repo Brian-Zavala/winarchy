@@ -163,7 +163,8 @@ function Write-GlazeConfig([int]$monitorCount) {
     $gap = [int]$cfg.gap
     if ($old -match "inner_gap:\s*'0px'\s*# gaps") { $gap = 0 }
     # The bar's strip lives in GlazeWM's top gap (scaled per monitor like the bar itself).
-    $gapTop = [int]$cfg.barHeight + $gap
+    # (None while the bar is turned off: Super+Shift+Space / winarchy bar off.)
+    $gapTop = if (Test-Path (Join-Path $Generated 'bar-off')) { $gap } else { [int]$cfg.barHeight + $gap }
     $border = if ($old -match "color:\s*'(#[0-9A-Fa-f]{6})'\s*# theme:focused-border") { $Matches[1] } else {
         try { (Read-Colors (Read-State).theme).accent } catch { '#7aa2f7' }
     }

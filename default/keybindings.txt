@@ -25,7 +25,7 @@ WORKSPACES   (1-0 are split across your monitors, left to right)
   Ctrl + Alt + Tab              Focus next monitor (+ Shift: previous)
 
 WINDOWS
-  Super + W  or  Super + Q      Close window
+  Super + W  or  Super + Q      Close window (a game too; twice on a game: force-quit)
   Super + Arrows                Move focus
   Super + Shift + Arrows        Swap / move window (crosses monitors)
   Super + T                     Toggle floating / tiling
@@ -40,7 +40,7 @@ WINDOWS
   Super + Right drag            Resize window
   Super + Backspace             Toggle window transparency
   Super + Shift + Backspace     Toggle window gaps
-  Super + Shift + Space         Toggle top bar
+  Super + Shift + Space         Toggle top bar (stays off until toggled back; also: winarchy bar on|off)
 
 {{ apps }}
 
@@ -76,6 +76,7 @@ SYSTEM
   Bar clock: left / right click Calendar / date format
   Bar indicators                Click to turn off (stay awake, nightlight, do not disturb)
   Bar weather / update icons    Click: weather details / update everything
+  Bar gamepad icon (game open)  Click: switch to the game, right click: close it (twice: force-quit)
   Bar audio icon                Click: audio panel, right click: mute, scroll: volume
   Bar bluetooth icon            Click: Bluetooth panel
   Idle 2.5 minutes              Screensaver (any key or mouse move ends it)

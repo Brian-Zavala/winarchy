@@ -210,7 +210,8 @@ ResetBranding(which) {
 SignalWm(name) {
     static ids := Map("bar", 1, "gaps", 2, "awake", 3, "transparency", 4, "colorpicker", 5,
         "panel-audio", 6, "panel-bluetooth", 7, "screensaver", 8, "screensaver-toggle", 9,
-        "ocr", 10, "nightlight", 11, "dnd", 12, "weather", 13, "activity", 14, "uac", 15)
+        "ocr", 10, "nightlight", 11, "dnd", 12, "weather", 13, "activity", 14, "uac", 15,
+        "game", 16, "game-close", 17, "bar-on", 18, "bar-off", 19)
     DetectHiddenWindows true
     if ids.Has(name) && (hwnd := WinExist("winarchy.ahk ahk_class AutoHotkey"))
         PostMessage 0x5555, ids[name], 0, , hwnd

@@ -19,6 +19,7 @@
   winarchy font-install <Name>         install a Nerd Font (CascadiaMono, Meslo, FiraCode, ...)
   winarchy browser-setup               tint Chrome/Brave's toolbar with the theme (one admin prompt)
   winarchy weather | update-check      refresh the bar's weather / update indicator
+  winarchy bar [on|off|toggle]         the top bar (Super+Shift+Space); off stays off
   winarchy animations [on|off|toggle|build|status]
                                           window animations (experimental GlazeWM build)
   winarchy config                      open your settings file
@@ -85,6 +86,13 @@ switch ($Verb) {
     'weather' { Update-Weather }
     'update-check' { Invoke-UpdateCheck }
     'animations' { Invoke-Animations $Arg }
+    'bar' {
+        # The running winarchy.ahk owns the bar (Omarchy: Super+Shift+Space).
+        $wm = @{ '' = 'bar'; 'toggle' = 'bar'; 'on' = 'bar-on'; 'off' = 'bar-off' }[[string]$Arg]
+        if (-not $wm) { throw "usage: winarchy bar [on|off|toggle]" }
+        $p = Get-Paths
+        Start-Process -FilePath $p.ahk -ArgumentList "`"$Code\ahk\menu.ahk`"", 'wm', $wm
+    }
     { $_ -in 'font', 'font-set' } {
         if (-not $Arg -or $Arg -eq 'list') { Update-FontList | ForEach-Object { "$(if ($_.name -eq (Get-FontFamily)) { '*' } else { ' ' }) $($_.name)" } }
         else { Use-Lock { Invoke-FontSet $Arg } }

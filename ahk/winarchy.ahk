@@ -15,7 +15,9 @@ Zebar := Env("zebar")
 Pack := Env("pack")
 BarTitle := "Zebar - omarchy / bar ahk_exe zebar.exe"
 
-BarEnabled := true
+; Super+Shift+Space / `winarchy bar off` turns the top bar off until it's turned on again.
+BarFlag := Env("data") "\generated\bar-off"
+BarEnabled := !FileExist(BarFlag)
 Awake := false
 Transparent := Map()
 
@@ -70,6 +72,9 @@ BusyUntil := 0            ; a game / fullscreen app was in front until a moment 
 DisplayPending := false   ; a display change (or bar restart) waits for it to close
 LastPad := 0              ; A_TickCount of the last gamepad input
 SetTimer FullscreenWatch, 400
+OnExit ShowHiddenBars
+if !BarEnabled                        ; bar turned off: no strip kept free for it
+    SetTimer () => ApplyGaps(GapsOn(), false), -3000
 ; Bring the bar back if Zebar dies or a monitor lost its bar; reopen the bars
 ; after Explorer restarts or the display layout changes (monitor wake, dock).
 SetTimer BarGuard, 5000
@@ -696,21 +701,38 @@ FullscreenWatch() {
         DisplayPending := false
         SetTimer OnDisplayChange, -500      ; what waited for the game to close
     }
-    if !BarEnabled
+    DetectHiddenWindows true
+    if !BarEnabled {                        ; off: close any bar Zebar (re)opened
+        if WinExist(BarTitle)
+            CloseBar()
         return
+    }
     for m, bar in BarWindows() {
         try {
-            onTop := WinGetExStyle(bar.hwnd) & 0x8
-            if !covered.Has(m) {
-                if !onTop
+            shown := WinGetStyle(bar.hwnd) & 0x10000000          ; WS_VISIBLE
+            if covered.Has(m) {
+                ; Hidden, not just put behind: a game in exclusive fullscreen and a
+                ; topmost bar take turns on screen (the bar blinks over the game).
+                if shown
+                    DllCall("ShowWindow", "ptr", bar.hwnd, "int", 0)  ; SW_HIDE
+            } else {
+                if !shown
+                    DllCall("ShowWindow", "ptr", bar.hwnd, "int", 8)  ; SW_SHOWNA
+                if !(WinGetExStyle(bar.hwnd) & 0x8)
                     WinSetAlwaysOnTop 1, bar.hwnd
-            } else if onTop {
-                WinSetAlwaysOnTop 0, bar.hwnd
-                ; Leaving topmost lifts it over normal windows: tuck it under the fullscreen one.
-                DllCall("SetWindowPos", "ptr", bar.hwnd, "ptr", covered[m], "int", 0, "int", 0, "int", 0, "int", 0, "uint", 0x13)
             }
         }
     }
+}
+
+; Bars hidden under a fullscreen window come back if this script exits.
+ShowHiddenBars(*) {
+    global BarEnabled
+    if !BarEnabled
+        return
+    DetectHiddenWindows true
+    for m, bar in BarWindows()
+        try DllCall("ShowWindow", "ptr", bar.hwnd, "int", 8)
 }
 
 ; --- Games and fullscreen apps: stand back ------------------------------------------
@@ -769,26 +791,30 @@ FullscreenState() {
 ; (the apply-time rules already cover games Windows knew about then).
 IsGame(hwnd) {
     global Games, GameMode
-    static checked := Map()                ; hwnd -> when it was found not to be a game
+    static byPid := Map()        ; pid -> {name: game process name or "", t: when checked}
     if !GameMode || !hwnd
         return false
     if Games.Has(hwnd)
         return true
-    if checked.Has(hwnd) && A_TickCount - checked[hwnd] < 30000
-        return false
-    if checked.Count > 300
-        checked.Clear()
-    checked[hwnd] := A_TickCount
     try {
-        name := RegExReplace(WinGetProcessName(hwnd), "i)\.exe$")
-        if !GameNames().Has(name) || !(WinGetStyle(hwnd) & 0x10000000)  ; WS_VISIBLE
+        ; By process, so a game's window counts as soon as it shows (it may start hidden).
+        pid := WinGetPID(hwnd)
+        if !byPid.Has(pid) || (byPid[pid].name = "" && A_TickCount - byPid[pid].t > 30000) {
+            if byPid.Count > 300
+                byPid.Clear()
+            name := RegExReplace(WinGetProcessName(hwnd), "i)\.exe$")
+            byPid[pid] := {name: GameNames().Has(name) ? name : "", t: A_TickCount}
+        }
+        name := byPid[pid].name
+        if name = "" || !(WinGetStyle(hwnd) & 0x10000000)                 ; WS_VISIBLE
             return false
     } catch
         return false
     Games[hwnd] := name
-    WmLog("game: " name " (GlazeWM leaves it alone, the bar stays behind it)")
+    WmLog("game: " name " (GlazeWM leaves it alone; the bar hides behind it)")
     if info := GlazeWindowInfo(hwnd)
         try Run('"' GlazeCli '" command --id ' info.id ' ignore', , "Hide")
+    SetTimer WriteIndicators, -10                     ; the game icon in the bar
     return true
 }
 
@@ -797,16 +823,69 @@ GameRunning() {
     global Games
     running := false
     for hwnd, name in Games.Clone() {
-        try minmax := WinGetMinMax(hwnd)
-        catch {                              ; closed
+        if !DllCall("IsWindow", "ptr", hwnd) {
             Games.Delete(hwnd)
             WmLog("game closed: " name)
-            continue
-        }
-        if minmax != -1
+            SetTimer WriteIndicators, -10
+        } else if DllCall("IsWindowVisible", "ptr", hwnd) && !DllCall("IsIconic", "ptr", hwnd)
             running := true
     }
     return running
+}
+
+; The game window the bar's game icon stands for: the focused one, else any open one.
+GameWindow() {
+    global Games
+    if Games.Has(fg := WinExist("A"))
+        return fg
+    for hwnd in Games
+        if DllCall("IsWindow", "ptr", hwnd)
+            return hwnd
+    return 0
+}
+
+GameTitle(hwnd) {
+    global Games
+    title := ""
+    DetectHiddenWindows true                          ; a game may hide its window
+    try title := Trim(WinGetTitle(hwnd))
+    return title != "" ? title : Games.Has(hwnd) ? Games[hwnd] : ""
+}
+
+; Bar game icon, click: back to the game (the taskbar is hidden, and GlazeWM ignores it).
+FocusGame() {
+    if !(hwnd := GameWindow())
+        return
+    DetectHiddenWindows true
+    try {
+        if WinGetMinMax(hwnd) = -1
+            WinRestore hwnd
+        WinActivate hwnd
+    }
+}
+
+; Bar game icon right-click / Super+W / Super+Q on a game: close it like its own
+; window's X (it may ask to save); again within 15 s: force-quit it.
+CloseGame(hwnd := 0) {
+    static asked := 0, askedPid := 0
+    if !hwnd && !(hwnd := GameWindow()) {
+        Osd("No game running")
+        return
+    }
+    try pid := WinGetPID(hwnd), title := GameTitle(hwnd)
+    catch
+        return
+    if pid = askedPid && A_TickCount - asked < 15000 {
+        askedPid := 0
+        ProcessClose pid
+        WmLog("game force-quit: " title)
+        Osd(title ": force-quit")
+        return
+    }
+    asked := A_TickCount, askedPid := pid
+    PostMessage 0x10, 0, 0, , hwnd                    ; WM_CLOSE
+    WmLog("game close: " title)
+    Osd("Closing " title "  (again: force-quit)", 3000)
 }
 
 ; Process names (no .exe) of games: Windows' Game Bar list + config "games".
@@ -905,6 +984,10 @@ OnMenuCommand(wParam, *) {
         case 13: ShowWeather()
         case 14: Activity()
         case 15: SetTimer ShowUacPrompt, -10
+        case 16: FocusGame()
+        case 17: CloseGame()
+        case 18: ToggleBar("on")
+        case 19: ToggleBar("off")
     }
 }
 
@@ -913,6 +996,13 @@ OnMenuCommand(wParam, *) {
 ; the Start menu. The unassigned vkE8 key masks the lone Win press.
 ; Start menu is still on Ctrl+Esc.
 ~LWin::Send "{Blind}{vkE8}"
+
+; GlazeWM's close (Super+W / Super+Q) can't reach a game (GlazeWM ignores games):
+; close it here. (Games is filled by FullscreenWatch, so this check stays instant.)
+#HotIf Games.Has(WinExist("A"))
+#w::
+#q::CloseGame(WinExist("A"))
+#HotIf
 
 ; Win+Space and its Ctrl/Shift variants are Windows' keyboard-layout switch.
 ; Omarchy uses them, so they are only taken over when config allows it
@@ -1072,13 +1162,20 @@ OpenBrowser(private := false) {
 }
 
 ; --- Toggles ----------------------------------------------------------------
-ToggleBar() {
-    global BarEnabled, Zebar
-    BarEnabled := !BarEnabled
-    if BarEnabled {
-        try Run('"' Zebar '" startup', , "Hide")
-    } else {
-        CloseBar()
+; Omarchy's Super+Shift+Space: the top bar on/off. Off stays off (flag file, across
+; restarts and applies) until it's turned on again. state: "" toggles, "on", "off".
+ToggleBar(state := "") {
+    global BarEnabled, Zebar, BarFlag
+    want := state = "" ? !BarEnabled : state = "on"
+    if want != BarEnabled {
+        BarEnabled := want
+        if BarEnabled {
+            try FileDelete BarFlag
+            try Run('"' Zebar '" startup', , "Hide")
+        } else {
+            try FileAppend "", BarFlag
+            CloseBar()
+        }
     }
     ApplyGaps(GapsOn(), BarEnabled)
     Osd("Top bar " (BarEnabled ? "on" : "off"))
@@ -1167,8 +1264,9 @@ WriteIndicators() {
     global Pack, Awake, UacPending
     static last := ""
     b := v => v ? "true" : "false"
+    game := (g := GameWindow()) ? GameTitle(g) : ""
     json := '{"awake":' b(Awake) ',"nightlight":' b(NightlightOn()) ',"dnd":' b(DndProfile() > 0)
-        . ',"uac":"' JsonEscape(UacPending) '"}'
+        . ',"uac":"' JsonEscape(UacPending) '","game":"' JsonEscape(game) '"}'
     if json = last
         return
     try {
