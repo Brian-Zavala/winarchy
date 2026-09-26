@@ -62,7 +62,6 @@ html, body {
 .workspace.empty { opacity: 0.5; }
 .workspace.focused { color: var(--accent); }
 
-#clock { cursor: pointer; }
 .indicator { color: var(--alert); }
 
 .tray { display: flex; align-items: center; gap: 8px; }

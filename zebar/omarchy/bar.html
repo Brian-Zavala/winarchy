@@ -18,7 +18,7 @@
         <span class="indicator hidden" id="dnd" title="Do not disturb is on (Super+Ctrl+, / click)"></span>
         <span class="indicator hidden" id="nightlight" title="Nightlight is on (Super+Ctrl+N / click)"></span>
         <span class="indicator hidden" id="awake" title="Stay awake is on (Super+Ctrl+I / click)"></span>
-        <span id="clock" title="Left: calendar, right: date format"></span>
+        <span id="clock" title="Right-click: date format"></span>
         <span class="module hidden" id="weather"></span>
         <span class="module update hidden" id="update"></span>
       </div>
@@ -208,8 +208,7 @@
       $('logo').onclick = () => act('open', 'root');
       $('logo').oncontextmenu = e => { e.preventDefault(); act('terminal'); };
 
-      // Clock: left click = calendar, right click = alternate format.
-      $('clock').onclick = () => act('calendar');
+      // Clock: left click does nothing; right click = next date/time format.
       $('clock').oncontextmenu = e => {
         e.preventDefault();
         clockFormat = (clockFormat + 1) % CLOCK_FORMATS.length;
