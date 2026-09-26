@@ -86,7 +86,7 @@ function ConvertTo-AhkHotkey([string]$flow) {
 function Get-MonitorLayout {
     Add-Type -AssemblyName System.Windows.Forms
     # Physical pixels, like GlazeWM (otherwise mixed-DPI monitors come back scaled).
-    Add-Type -Namespace Winarchy -Name Dpi -MemberDefinition '[DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr c);' -ErrorAction SilentlyContinue
+    Add-NativeType Dpi '[DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr c);'
     [void][Winarchy.Dpi]::SetThreadDpiAwarenessContext([IntPtr]-4)
     # Same order GlazeWM and Zebar use: left to right, then top to bottom.
     @([System.Windows.Forms.Screen]::AllScreens | Sort-Object { $_.Bounds.X }, { $_.Bounds.Y } | ForEach-Object {

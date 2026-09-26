@@ -11,7 +11,7 @@
 
 function Initialize-Reveal {
     if (-not ('Winarchy.Reveal' -as [type])) {
-        Add-Type -Namespace Winarchy -Name Reveal -MemberDefinition @'
+        Add-NativeType Reveal @'
 [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr ctx);
 [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int hgt, uint flags);
 [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr h, int i);

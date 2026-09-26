@@ -117,9 +117,33 @@ function Use-Lock([scriptblock]$body) {
 }
 
 # --- native -----------------------------------------------------------------------
+# Add-Type -MemberDefinition for [Winarchy.<name>], compiled once: the C# compiler costs
+# ~250 ms per process, loading the compiled DLL ~20 ms. The DLL's name carries a hash of
+# the source, so an edited definition compiles afresh.
+function Add-NativeType([string]$name, [string]$members) {
+    if ("Winarchy.$name" -as [type]) { return }
+    $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($members))).Substring(0, 16)
+    $dir = Join-Path $Generated 'native'
+    $dll = Join-Path $dir "Winarchy.$name.$hash.dll"
+    try {
+        if (-not (Test-Path -LiteralPath $dll)) {
+            New-Item -ItemType Directory -Force $dir | Out-Null
+            $tmp = Join-Path $dir "Winarchy.$name.$hash.$PID.tmp"
+            Add-Type -Namespace Winarchy -Name $name -MemberDefinition $members -OutputAssembly $tmp -OutputType Library
+            try { Move-Item -LiteralPath $tmp $dll -ErrorAction Stop }
+            catch { Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue }   # another process won
+            Get-ChildItem $dir -Filter "Winarchy.$name.*.dll" | Where-Object Name -ne (Split-Path -Leaf $dll) |
+                Remove-Item -ErrorAction SilentlyContinue                             # older sources
+        }
+        Add-Type -LiteralPath $dll
+    } catch {
+        if (-not ("Winarchy.$name" -as [type])) { Add-Type -Namespace Winarchy -Name $name -MemberDefinition $members }
+    }
+}
+
 function Initialize-Native {
     if (-not ('Winarchy.Native' -as [type])) {
-        Add-Type -Namespace Winarchy -Name Native -MemberDefinition @'
+        Add-NativeType Native @'
 [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
 public static extern bool SystemParametersInfo(uint action, uint param, string vparam, uint winIni);
 [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW")]
