@@ -992,10 +992,13 @@ OnMenuCommand(wParam, *) {
 }
 
 ; --- Keys -------------------------------------------------------------------
-; Tapping Super alone (or a quick Super+N handled by GlazeWM) must not open
-; the Start menu. The unassigned vkE8 key masks the lone Win press.
+; Tapping or holding Super alone (or a quick Super+N handled by GlazeWM) must not
+; open the Start menu. The unassigned vkE8 key masks the lone Win press: on press,
+; and again on release, right before the Win key-up this hotkey sends (held down,
+; Win auto-repeats after the first mask, and Windows then opened Start on release).
 ; Start menu is still on Ctrl+Esc.
 ~LWin::Send "{Blind}{vkE8}"
+LWin up::Send "{Blind}{vkE8}{LWin up}"
 
 ; GlazeWM's close (Super+W / Super+Q) can't reach a game (GlazeWM ignores games):
 ; close it here. (Games is filled by FullscreenWatch, so this check stays instant.)
