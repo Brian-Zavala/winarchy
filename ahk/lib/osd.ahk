@@ -2,10 +2,11 @@
 ; theme's colors and font. Shared by winarchy.ahk and menu.ahk.
 ;   Osd(text)        shows it for 1.2 s
 ;   Osd(text, 0)     keeps it until the next Osd / OsdHide
+;   Osd(text, ms, "top")  just under the bar instead of at the bottom
 
 global OsdGui := 0
 
-Osd(text, ms := 1200) {
+Osd(text, ms := 1200, where := "bottom") {
     global OsdGui
     colors := ThemeColors()
     OsdHide()
@@ -19,8 +20,15 @@ Osd(text, ms := 1200) {
     g.AddText(, text)
     g.Show("Hide AutoSize")
     g.GetPos(, , &w, &h)
-    MonitorGetWorkArea(mon, &l, &t, &r, &b)
-    g.Show("NoActivate x" (l + (r - l - w) // 2) " y" (b - h - Round(60 * scale)))
+    if where = "top" {
+        ; The bar sits at the monitor's top edge (it reserves no work area).
+        MonitorGet(mon, &l, &t, &r, &b)
+        y := t + Round((Env("barHeight", 26) + Env("gap", 10)) * scale)
+    } else {
+        MonitorGetWorkArea(mon, &l, &t, &r, &b)
+        y := b - h - Round(60 * scale)
+    }
+    g.Show("NoActivate x" (l + (r - l - w) // 2) " y" y)
     SetTimer OsdHide, ms ? -ms : 0
 }
 

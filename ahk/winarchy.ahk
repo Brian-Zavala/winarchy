@@ -504,11 +504,11 @@ ShowWeather() {
     try {
         json := FileRead(Env("pack") "\weather.json", "UTF-8")
         if RegExMatch(json, '"text":\s*"([^"]*)"', &m) {
-            Osd(m[1])
+            Osd(m[1], 3000, "top")
             return
         }
     }
-    Osd("No weather yet")
+    Osd("No weather yet", 3000, "top")
     OmarchyCmd("weather")
 }
 
