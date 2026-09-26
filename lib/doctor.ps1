@@ -63,8 +63,21 @@ function Invoke-Doctor([switch]$Fix) {
     $crashes = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; ProviderName = 'Application Error'; StartTime = (Get-Date).AddHours(-1) } -MaxEvents 500 -ErrorAction SilentlyContinue |
         Where-Object { $_.Message -match 'ttfx' }).Count
     & $check "screensaver effects engine: $crashes crash(es) in the last hour" ($crashes -eq 0) 'winarchy update (older versions crash-looped ttfx on Windows)'
-    $maxBound = ([regex]::Matches($yaml, 'bind_to_monitor:\s*(\d+)') | ForEach-Object { [int]$_.Groups[1].Value } | Measure-Object -Maximum).Maximum
-    & $check "workspaces fit $(@($p.monitors).Count) monitor(s)" ($null -eq $maxBound -or $maxBound -lt [Math]::Max(1, @($p.monitors).Count)) 'winarchy apply -MonitorsOnly'
+    $bindings = @(Get-WorkspaceBindings $yaml)
+    if ($bindings -and $cfg.glazewmManaged -ne $false -and $p.glazewmCli -and (Get-Process glazewm -ErrorAction SilentlyContinue)) {
+        $live = try { (& $p.glazewmCli query monitors | ConvertFrom-Json).data.monitors } catch { $null }
+        if ($live) {
+            $off = @(Get-MisplacedWorkspaces $live $bindings | ForEach-Object name)
+            & $check "workspaces on their monitors$(if ($off) { " (not: $($off -join ', '))" })" (-not $off) 'winarchy apply -MonitorsOnly'
+        }
+    }
+    # Bound to a monitor that is off or gone: fine while it sleeps (they return with it).
+    $bound = Get-BoundMonitorCount $yaml
+    $connected = @($p.monitors).Count
+    if ($bound -gt [Math]::Max(1, $connected)) {
+        Write-Host "  note  workspaces are split over $bound monitors, $connected connected; they open on the focused one until it's back" -ForegroundColor DarkGray
+        Write-Host "        -> removed a monitor for good? winarchy apply -MonitorsOnly -Resplit" -ForegroundColor DarkGray
+    }
 
     Write-Host "`nThemes"
     $themeDirs = @(Get-ChildItem $Themes -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName 'colors.toml') })

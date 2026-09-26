@@ -27,6 +27,45 @@ Describe 'Workspace split' {
     }
 }
 
+Describe 'Workspace monitors' {
+    BeforeAll {
+        $yaml = "general:`n  x: 1`n`nworkspaces:`n" + (ConvertTo-WorkspacesYaml (Get-WorkspaceLayout 2 'auto')) +
+            "`n  - name: 'scratch'`n    display_name: 'S'`n`nwindow_rules:`n  - name: 'not-a-workspace'`n    bind_to_monitor: 7`n"
+        function Mon($x, $w, [string[]]$names, [switch]$focus) {
+            [pscustomobject]@{ x = $x; y = 0; width = $w; height = 1440; hasFocus = [bool]$focus
+                children = @($names | ForEach-Object { [pscustomobject]@{ name = $_; isDisplayed = $false } }) }
+        }
+    }
+    It 'reads the bindings from the workspaces section only' {
+        $b = @(Get-WorkspaceBindings $yaml)
+        ($b | ForEach-Object { "$($_.name)@$($_.monitor)" }) -join ' ' | Should -Be '1@0 2@0 3@0 4@0 5@0 6@1 7@1 8@1 9@1 10@1'
+        @($b | Where-Object keepAlive).Count | Should -Be 10
+        Get-BoundMonitorCount $yaml | Should -Be 2
+        Get-BoundMonitorCount '' | Should -Be 0
+    }
+    It 'keeps the split while a monitor sleeps, unless asked to re-split' {
+        Get-LayoutMonitorCount 1 2 | Should -Be 2
+        Get-LayoutMonitorCount 3 2 | Should -Be 3
+        Get-LayoutMonitorCount 1 2 -Resplit | Should -Be 1
+        Get-LayoutMonitorCount 0 0 | Should -Be 1
+    }
+    It 'finds workspaces stranded after a monitor woke up' {
+        # 2026-09-25: 6, 9 and 10 stayed on monitor 0 and 8 was not open yet.
+        $live = @((Mon 0 3840 '1', '2', '3', '4', '5', '6', '9', '10' -focus), (Mon 3840 2560 '7'))
+        $off = @(Get-MisplacedWorkspaces $live (Get-WorkspaceBindings $yaml))
+        ($off | ForEach-Object { "$($_.name):$($_.from)>$($_.to)" }) -join ' ' | Should -Be '6:0>1 8:>1 9:0>1 10:0>1'
+    }
+    It 'leaves workspaces of a sleeping monitor where GlazeWM parked them' {
+        $live = @(Mon 0 3840 (1..10 | ForEach-Object { "$_" }))
+        @(Get-MisplacedWorkspaces $live (Get-WorkspaceBindings $yaml)).Count | Should -Be 0
+    }
+    It 'points move-workspace at the target monitor' {
+        Get-MonitorDirection (Mon 0 3840 @()) (Mon 3840 2560 @()) | Should -Be 'right'
+        Get-MonitorDirection (Mon 3840 2560 @()) (Mon 0 3840 @()) | Should -Be 'left'
+        Get-MonitorDirection ([pscustomobject]@{ x = 0; y = 0; width = 100; height = 100 }) ([pscustomobject]@{ x = 0; y = 100; width = 100; height = 100 }) | Should -Be 'down'
+    }
+}
+
 Describe 'Templates' {
     BeforeAll { $c = @{ background = '#1a1b26'; foreground = '#a9b1d6'; accent = '#7aa2f7'; mode = 'dark'; theme_type = 'dark' } }
     It 'fills plain, _strip and _rgb placeholders' {

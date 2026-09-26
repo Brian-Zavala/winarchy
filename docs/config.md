@@ -17,7 +17,7 @@ Put only the keys you want to change; everything else comes from
 |---|---|---|
 | `clock` | `"auto"` | `"12h"`, `"24h"` or `"auto"` (from your Windows region format) |
 | `units` | `"auto"` | Weather in `"C"` or `"F"`; `"auto"` follows your region |
-| `workspaces` | `"auto"` | 10 workspaces split over your monitors left to right. Or a map of monitor position (1 = leftmost) to workspace names: `{ "1": ["1","2","3"], "2": ["4","5"] }` |
+| `workspaces` | `"auto"` | 10 workspaces split over your monitors left to right. Or a map of monitor position (1 = leftmost) to workspace names: `{ "1": ["1","2","3"], "2": ["4","5"] }`. The split grows when a monitor is added but never shrinks by itself (a sleeping monitor looks unplugged); `winarchy apply -MonitorsOnly -Resplit` fits it to the monitors connected now |
 | `gap` | `10` | Gap between windows and around the edges, in pixels at 100 % scaling |
 | `hideTaskbar` | `true` | Hide the Windows taskbar while GlazeWM runs (it comes back if GlazeWM stops) |
 | `takeOverWinSpace` | `true` | Super+Space = launcher, Super+Ctrl(+Shift)+Space = pickers, Super+Shift+Space = bar. `false` leaves Win+Space to Windows' layout switching |

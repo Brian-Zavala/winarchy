@@ -97,7 +97,7 @@ the launcher. The installer asks. Alt+Shift still switches layouts either way, a
 **Laptop without a PrtScn key.** Super+Ctrl+C opens the Capture menu (screenshot, recording,
 text, color).
 
-**Docking / undocking.** Workspaces re-split across the monitors automatically.
+**Docking / undocking.** When a monitor is added, workspaces re-split across the monitors automatically. A monitor that sleeps or is unplugged keeps its workspaces: they wait on the other monitors and go back when it returns. If you removed a monitor for good, run `winarchy apply -MonitorsOnly -Resplit`.
 
 **Something looks wrong.** Run `winarchy doctor`. Logs: `%USERPROFILE%\.winarchy\logs`.
 

@@ -7,7 +7,9 @@
   winarchy uninstall [-KeepApps] [-DryRun] [-Purge]
                                           undo every change, from the backup journal
   winarchy update                      pull the latest winarchy, re-apply, upgrade apps
-  winarchy apply [-MonitorsOnly]       regenerate configs from config.json (after editing it)
+  winarchy apply [-MonitorsOnly] [-Resplit]
+                                          regenerate configs from config.json (after editing it);
+                                          -Resplit: split workspaces over the monitors connected now
   winarchy doctor [-Fix]               check the setup and explain what's wrong
   winarchy detect                      re-detect apps, paths, monitors (paths.json)
   winarchy theme <name> | theme list   switch theme (bar, borders, terminal, Flow, accent, ...)
@@ -29,7 +31,7 @@ param(
     [Parameter(Position = 0)][string]$Verb = 'help',
     [Parameter(Position = 1)][string]$Arg,
     [switch]$Yes, [switch]$Adopt, [switch]$KeepApps, [switch]$DryRun, [switch]$Purge,
-    [switch]$Offline, [switch]$MonitorsOnly, [switch]$Fix, [switch]$NoRestart,
+    [switch]$Offline, [switch]$MonitorsOnly, [switch]$Resplit, [switch]$Fix, [switch]$NoRestart,
     # Wait for a key at the end (verbs the menu runs in a terminal window).
     [switch]$Pause,
     # bg: "x,y" on the monitor the background picker covers (it plays the reveal there).
@@ -61,7 +63,7 @@ switch ($Verb) {
     'install' { Invoke-Install -Yes:$Yes -Adopt:$Adopt }
     { $_ -in 'uninstall', 'revert' } { Invoke-Uninstall -KeepApps:$KeepApps -DryRun:$DryRun -Purge:$Purge }
     'update' { Invoke-Update }
-    'apply' { Use-Lock { Invoke-Apply -MonitorsOnly:$MonitorsOnly -NoRestart:$NoRestart } }
+    'apply' { Use-Lock { Invoke-Apply -MonitorsOnly:$MonitorsOnly -NoRestart:$NoRestart -Resplit:$Resplit } }
     'doctor' { Invoke-Doctor -Fix:$Fix }
     'detect' { $p = Update-Paths; $p | ConvertTo-Json -Depth 4 }
     'sync' { Use-Lock { Invoke-Sync -Offline:$Offline } }

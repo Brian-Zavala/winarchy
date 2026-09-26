@@ -39,6 +39,97 @@ function ConvertTo-WorkspacesYaml($layout) {
     }) -join "`n"
 }
 
+# The workspaces a GlazeWM config binds to a monitor: [{name; monitor; keepAlive}], read
+# from the YAML itself so a custom glazewm.yaml.tpl is honoured too.
+function Get-WorkspaceBindings([string]$yaml) {
+    if ($yaml -notmatch '(?ms)^workspaces:\s*$(.*?)(?=^\S|\z)') { return }
+    foreach ($m in [regex]::Matches($Matches[1], "(?m)^\s*- name:\s*'([^']+)'((?:\r?\n[ \t]+(?!- )\S.*)*)")) {
+        $body = $m.Groups[2].Value
+        if ($body -match 'bind_to_monitor:\s*(\d+)') {
+            [pscustomobject]@{ name = $m.Groups[1].Value; monitor = [int]$Matches[1]; keepAlive = $body -match 'keep_alive:\s*true' }
+        }
+    }
+}
+
+# How many monitors a GlazeWM config spreads the workspaces over (0: none bound).
+function Get-BoundMonitorCount([string]$yaml) {
+    $max = (@(Get-WorkspaceBindings $yaml) | Measure-Object monitor -Maximum).Maximum
+    if ($null -eq $max) { 0 } else { [int]$max + 1 }
+}
+
+# Monitors to split the workspaces over. The split never shrinks by itself: a monitor in
+# power-save (screensaver, sleep) looks unplugged to Windows, and GlazeWM only puts its
+# workspaces back on wake if the config still binds them to it. Meanwhile GlazeWM opens
+# workspaces bound to a missing monitor on the focused one. -Resplit: size the split to
+# the monitors connected right now (a monitor removed for good).
+function Get-LayoutMonitorCount([int]$connected, [int]$bound, [switch]$Resplit) {
+    if ($Resplit) { [Math]::Max(1, $connected) } else { [Math]::Max(1, [Math]::Max($connected, $bound)) }
+}
+
+# Workspaces GlazeWM holds on another monitor than the one they are bound to (from/to are
+# monitor indexes), plus keep-alive ones missing from a connected monitor (from = $null).
+# $monitors: `glazewm query monitors` data, in GlazeWM's index order (left to right).
+function Get-MisplacedWorkspaces($monitors, $bindings) {
+    $monitors = @($monitors)
+    $where = @{}
+    for ($i = 0; $i -lt $monitors.Count; $i++) {
+        foreach ($ws in $monitors[$i].children) { $where[$ws.name] = $i }
+    }
+    foreach ($b in $bindings) {
+        if ($b.monitor -ge $monitors.Count) { continue }   # its monitor isn't connected
+        if ($where.ContainsKey($b.name)) {
+            if ($where[$b.name] -ne $b.monitor) { [pscustomobject]@{ name = $b.name; from = $where[$b.name]; to = $b.monitor } }
+        } elseif ($b.keepAlive) { [pscustomobject]@{ name = $b.name; from = $null; to = $b.monitor } }
+    }
+}
+
+# Which way monitor $to lies from monitor $from (GlazeWM's move-workspace directions).
+function Get-MonitorDirection($from, $to) {
+    $dx = ($to.x + $to.width / 2) - ($from.x + $from.width / 2)
+    $dy = ($to.y + $to.height / 2) - ($from.y + $from.height / 2)
+    if ([Math]::Abs($dx) -ge [Math]::Abs($dy)) { if ($dx -gt 0) { 'right' } else { 'left' } }
+    elseif ($dy -gt 0) { 'down' } else { 'up' }
+}
+
+# Puts every workspace back on the monitor it is bound to. GlazeWM does that itself when
+# a monitor appears, but only with the config loaded at that moment, and reloading the
+# config never moves workspaces; so after the split changes (or a monitor woke up before
+# its bindings were back) they stay where they were. Changes nothing when all are in place;
+# otherwise the moved workspaces flash by and each monitor then shows what it did before.
+function Repair-WorkspaceMonitors([string]$cli, $bindings) {
+    $query = { @((& $cli query monitors | ConvertFrom-Json).data.monitors) }
+    $monitors = & $query
+    $todo = @(Get-MisplacedWorkspaces $monitors $bindings)
+    if (-not $todo) { return }
+    $shown = @(for ($i = 0; $i -lt $monitors.Count; $i++) {
+        $ws = $monitors[$i].children | Where-Object isDisplayed | Select-Object -First 1
+        if ($ws) { [pscustomobject]@{ name = $ws.name; monitor = $i; focused = [bool]$monitors[$i].hasFocus } }
+    })
+    foreach ($t in $todo) {
+        # Focusing a workspace that doesn't exist yet opens it on its bound monitor.
+        & $cli command focus --workspace $t.name | Out-Null
+        for ($hop = 0; $hop -lt $monitors.Count; $hop++) {
+            $monitors = & $query
+            $at = @(for ($i = 0; $i -lt $monitors.Count; $i++) { if ($monitors[$i].children.name -contains $t.name) { $i } })[0]
+            if ($null -eq $at -or $at -eq $t.to -or $t.to -ge $monitors.Count) { break }
+            & $cli command move-workspace --direction (Get-MonitorDirection $monitors[$at] $monitors[$t.to]) | Out-Null
+        }
+    }
+    # Show each monitor's previous workspace again (if it is still there), the focused one last.
+    $monitors = & $query
+    foreach ($s in $shown | Sort-Object focused) {
+        if ($s.monitor -lt $monitors.Count -and $monitors[$s.monitor].children.name -contains $s.name) {
+            & $cli command focus --workspace $s.name | Out-Null
+        }
+    }
+    $done = @()
+    $moved = @($todo | Where-Object { $null -ne $_.from } | ForEach-Object name)
+    $opened = @($todo | Where-Object { $null -eq $_.from } | ForEach-Object name)
+    if ($moved) { $done += "moved $($moved -join ',') to their monitors" }
+    if ($opened) { $done += "opened $($opened -join ',')" }
+    Log "workspaces: $($done -join '; ')"
+}
+
 function Write-GlazeConfig([int]$monitorCount) {
     $cfg = Get-Config
     if ($cfg.glazewmManaged -eq $false) { Log 'GlazeWM config: not managed (glazewmManaged=false)'; return $false }
@@ -317,14 +408,20 @@ function Restart-Bar($p) {
     else { Start-Hidden $p.zebar @('startup') }
 }
 
-function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart) {
+function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Resplit) {
     $p = Update-Paths
     $cfg = Get-Config
-    $monitors = @($p.monitors).Count
+    $old = if (Test-Path $GlazeConfig) { Get-Content -Raw $GlazeConfig } else { '' }
+    $monitors = Get-LayoutMonitorCount @($p.monitors).Count (Get-BoundMonitorCount $old) -Resplit:$Resplit
     $glazeChanged = Write-GlazeConfig $monitors
-    if ($glazeChanged -and $p.glazewmCli -and (Get-Process glazewm -ErrorAction SilentlyContinue)) {
-        & $p.glazewmCli command wm-reload-config | Out-Null
+    if ($p.glazewmCli -and (Get-Process glazewm -ErrorAction SilentlyContinue)) {
+        if ($glazeChanged) { & $p.glazewmCli command wm-reload-config | Out-Null }
+        if ($cfg.glazewmManaged -ne $false) {
+            try { Repair-WorkspaceMonitors $p.glazewmCli (Get-WorkspaceBindings (Get-Content -Raw $GlazeConfig)) }
+            catch { Log "workspaces: repair FAILED: $($_.Exception.Message)" }
+        }
     }
+
     if ($MonitorsOnly) { return }
     # Window animations on/off switches between the official GlazeWM and the animation build.
     Switch-GlazeWM $p
