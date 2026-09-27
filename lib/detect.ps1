@@ -23,6 +23,27 @@ function Find-AutoHotkey {
     Find-First ($dirs | ForEach-Object { Join-Path $_ "v2\$exe"; Join-Path $_ $exe })
 }
 
+# A real Python 3, for the agent-usage collectors (lib/agents). Two traps on Windows:
+# `python.exe` in WindowsApps is a Store stub that opens the Microsoft Store instead of
+# running anything, and it is often first on PATH; and a python.org install may not be on
+# PATH at all. The py launcher knows every python.org install, so ask it first and store
+# the interpreter it names, not the launcher.
+function Find-Python {
+    $py = Find-First @((Join-Path $env:LOCALAPPDATA 'Programs\Python\Launcher\py.exe'), (Join-Path $env:SystemRoot 'py.exe'))
+    if (-not $py) { $py = Find-Program py.exe }
+    if ($py) {
+        try {
+            $exe = (& $py -3 -c 'import sys; print(sys.executable)' 2>$null | Select-Object -First 1)
+            if ($exe -and (Test-Path -LiteralPath $exe.Trim())) { return $exe.Trim() }
+        } catch {}
+    }
+    foreach ($c in @(Get-Command python.exe, python3.exe -CommandType Application -All -ErrorAction SilentlyContinue)) {
+        if ($c.Source -like '*\WindowsApps\*') { continue }   # the Store stub
+        return $c.Source
+    }
+    $null
+}
+
 function Find-Pwsh {
     # The Program Files / App Execution Alias paths survive pwsh updates; the MSIX
     # package path (WindowsApps\Microsoft.PowerShell_7.x.y...) does not.
@@ -145,6 +166,10 @@ function Update-Paths {
                             (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\aristocratos.btop4win_*\btop4win\btop4win.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName,
                             (Find-Program btop4win.exe))) -ErrorAction SilentlyContinue
         fastfetch      = Find-Program fastfetch.exe
+        # Herdr installs itself outside winget, at a stable alias path plus the PATH entry
+        # its own installer adds (which a shell started before the install won't have).
+        herdr          = Find-First @((Join-Path $env:LOCALAPPDATA 'Programs\Herdr\bin\herdr.exe'), (Find-Program herdr.exe))
+        python         = Find-Python
         ttfx           = Find-First @((Join-Path $env:USERPROFILE '.cargo\bin\ttfx.exe'), (Join-Path $Data 'bin\ttfx.exe'), (Find-Program ttfx.exe), (Find-Program tte.exe))
         browser        = $browser.exe
         browserName    = $browser.name

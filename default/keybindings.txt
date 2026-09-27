@@ -104,10 +104,23 @@ SYSTEM
   Super + Shift + Alt + R       Reload GlazeWM config
   Super + Shift + Alt + P       Pause / resume GlazeWM (escape hatch)
 
+HERDR AND CODING AGENTS
+  hdl <agent> [<agent2>]        Dev layout: editor, agent right (30%), terminal below (15%)
+  hds                           Dev square: editor, diff watch, terminal, agent
+  hdlm <agent> [<agent2>]       One hdl tab per subdirectory of the current folder
+  hsl <count> <command>         Swarm: N panes in a grid, all running the same command
+  Ctrl + Space                  Herdr's prefix (then ? for help) - full list in Learn > Herdr keys
+  Menu > Trigger > Herdr        Open or re-attach the Herdr session
+  Menu > Trigger > Agent        Start the default coding agent, unattended
+  Menu > Setup > Default Agent  Choose it (Claude, Codex, Copilot, OpenCode, ...)
+  Bar robot icon                Click: agent usage and limits, right-click: start the agent
+
 TERMINAL COMMANDS
   winarchy doctor               Check everything, explain problems (-Fix to repair)
   winarchy theme <name>         Switch theme (winarchy theme list)
   winarchy font <family>        Switch font (winarchy font list)
   winarchy apply                Re-apply after editing your config.json
   winarchy update               Update Winarchy, themes and apps
+  winarchy herdr status         Herdr: where it is, its config, its theme (herdr install)
+  winarchy agent list           The coding agents, and which one is the default
   winarchy uninstall            Back to normal Windows (-DryRun to preview, -KeepApps)

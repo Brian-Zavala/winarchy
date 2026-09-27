@@ -2,6 +2,10 @@
 #
 #   irm https://raw.githubusercontent.com/Brian-Zavala/winarchy/main/install.ps1 | iex
 #
+# Unattended (every question takes its recommended answer, nothing waits for a key):
+#
+#   $env:WINARCHY_YES = 1; irm https://raw.githubusercontent.com/Brian-Zavala/winarchy/main/install.ps1 | iex
+#
 # It gets PowerShell 7 if missing, downloads winarchy to %LOCALAPPDATA%\winarchy
 # (git clone when git is available, else the release zip) and starts the installer,
 # which asks a few questions and explains every change. Undo: winarchy uninstall
@@ -12,6 +16,11 @@ $ErrorActionPreference = 'Stop'
 $repo = if ($env:WINARCHY_REPO) { $env:WINARCHY_REPO } else { 'Brian-Zavala/winarchy' }
 $ref = if ($env:WINARCHY_REF) { $env:WINARCHY_REF } else { 'main' }
 $dest = Join-Path $env:LOCALAPPDATA 'winarchy'
+# Piped into iex this script gets no arguments, so -Yes can only arrive this way.
+$yes = if ($env:WINARCHY_YES) { @('-Yes') } else { @() }
+# Public repo over HTTPS: a git credential prompt would only ever be a hang.
+$env:GIT_TERMINAL_PROMPT = '0'
+$env:GCM_INTERACTIVE = 'never'
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 Write-Host 'Winarchy: Omarchy''s look, keys and themes for Windows 11 (unofficial)' -ForegroundColor Green
@@ -25,7 +34,7 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
 $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
 if (-not $pwsh) {
     Write-Host '==> Installing PowerShell 7'
-    winget install -e --id Microsoft.PowerShell --silent --accept-source-agreements --accept-package-agreements | Out-Host
+    winget install -e --id Microsoft.PowerShell --silent --accept-source-agreements --accept-package-agreements --disable-interactivity | Out-Host
     $pwsh = Join-Path $env:ProgramFiles 'PowerShell\7\pwsh.exe'
     if (-not (Test-Path $pwsh)) { throw 'PowerShell 7 did not install; install it from https://aka.ms/powershell and run this again.' }
 }
@@ -34,9 +43,12 @@ if (-not $pwsh) {
 if (Test-Path (Join-Path $dest '.git')) {
     Write-Host "==> Updating $dest"
     git -C $dest pull --ff-only | Out-Host
+    # The copy already there still installs; it just isn't the newest.
+    if ($LASTEXITCODE) { Write-Warning "Could not update $dest (git pull failed); installing the copy that is there." }
 } elseif (Get-Command git -ErrorAction SilentlyContinue) {
     Write-Host "==> Downloading winarchy to $dest"
     git clone --depth 1 --branch $ref "https://github.com/$repo.git" $dest | Out-Host
+    if ($LASTEXITCODE) { throw "Could not download winarchy (git clone of $repo failed)." }
 } else {
     Write-Host "==> Downloading winarchy to $dest"
     $zip = Join-Path $env:TEMP 'winarchy.zip'
@@ -52,4 +64,4 @@ if (Test-Path (Join-Path $dest '.git')) {
 Get-ChildItem $dest -Recurse -File | Unblock-File
 
 # 3. The installer (questions, backup journal, apps, configs, themes).
-& $pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dest 'bin\winarchy.ps1') install @args
+& $pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $dest 'bin\winarchy.ps1') install @yes @args

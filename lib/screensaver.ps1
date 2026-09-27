@@ -5,8 +5,11 @@
   closes them all on any mouse/keyboard input, sleep or lock.
 
   Safety: ttfx gets an explicit --seed (it reads /dev/urandom otherwise, which doesn't
-  exist on Windows, and aborts). If it still fails fast three times in a row, this falls
-  back to the still logo instead of retrying - it never spins in a crash loop.
+  exist on Windows, and panics). If it still fails three times in a row - a non-zero exit,
+  or a run over before it could draw a frame - this falls back to the still logo instead of
+  retrying, so it never spins in a crash loop. A short effect is not a failure: the random
+  ones run anywhere from about a second to a dozen, and three brief ones in a row used to
+  end the cycle and leave the still logo up for the rest of the session.
 #>
 param(
     [string]$Text = (Join-Path $env:USERPROFILE '.winarchy\branding\screensaver.txt'),
@@ -44,6 +47,9 @@ function Show-StillLogo {
 if (-not (Test-Path $Ttfx) -or -not (Test-Path $Text)) { Show-StillLogo }
 
 $fails = 0
+# Under this, ttfx cannot have drawn anything: the /dev/urandom panic returns in ~0.07 s,
+# while the shortest random effect measured took 1.2 s (the longest, 13 s).
+$AbortSeconds = 0.4
 while ($true) {
     $fx = @('-i', "`"$Text`"", '--seed', (Get-Random -Maximum 2147483647), '--frame-rate', '120',
             '--canvas-width', '0', '--canvas-height', '0', '--reuse-canvas', '--anchor-canvas', 'c', '--anchor-text', 'c',
@@ -54,10 +60,16 @@ while ($true) {
         if ([Console]::KeyAvailable) { try { $p.Kill() } catch {}; exit }
         Start-Sleep -Milliseconds 100
     }
-    # A run that ends within 2 s (or with an error) counts as a failure.
-    if ($p.ExitCode -ne 0 -or ([DateTime]::Now - $started).TotalSeconds -lt 2) {
+    # A failure is a non-zero exit, or a run over before it could draw a frame. An effect
+    # that simply finishes quickly is a normal short effect, not a failure.
+    $ran = ([DateTime]::Now - $started).TotalSeconds
+    if ($p.ExitCode -ne 0 -or $ran -lt $AbortSeconds) {
         $fails++
-        if ($fails -ge 3) { Write-SsLog "ttfx failed $fails times (exit $($p.ExitCode)); showing the still logo"; Show-StillLogo }
+        if ($fails -ge 3) {
+            $why = if ($p.ExitCode -ne 0) { "exit $($p.ExitCode)" } else { "ended in $([Math]::Round($ran, 2))s" }
+            Write-SsLog "ttfx failed $fails times ($why); showing the still logo"
+            Show-StillLogo
+        }
     } else { $fails = 0 }
     Start-Sleep -Milliseconds 400
 }

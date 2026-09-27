@@ -12,6 +12,7 @@
     "terminal": "auto",
     "browser": "auto",
     "editor": "auto",
+    "agent": "auto",
     "files": "explorer.exe"
   },
   "backgroundDirs": ["~\\Pictures\\Wallpapers"],
@@ -25,7 +26,8 @@
     "vscode": true,
     "claude": true,
     "browser": true,
-    "btop": true
+    "btop": true,
+    "herdr": "auto"
   },
   "screensaver": {
     "enabled": true,
@@ -37,7 +39,9 @@
   "gameDirs": [],
   "blockMinimize": true,
   "minimizeAllowed": [],
+  "gameFocusGuard": true,
   "openOnHoveredMonitor": true,
+  "focusFollowsCursor": true,
   "animations": {
     "enabled": false,
     "moveMs": 379,
@@ -53,6 +57,11 @@
   },
   "autoTiling": {
     "enabled": true
+  },
+  "agentUsage": {
+    "enabled": true,
+    "refreshSeconds": 900,
+    "providers": {}
   },
   "weather": true,
   "location": null,

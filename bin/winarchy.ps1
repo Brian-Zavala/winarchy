@@ -18,6 +18,19 @@
   winarchy font [<family> | list]      terminal, bar, menus and launcher font
   winarchy font-install <Name>         install a Nerd Font (CascadiaMono, Meslo, FiraCode, ...)
   winarchy apps                        rebuild the menu's Apps list from what Windows has installed
+  winarchy catalog                     rebuild the menu's Install/Remove lists (and show them)
+  winarchy install-app <key>           install one catalog item (the menu's Install section)
+  winarchy remove-app <key>            remove one again (the menu's Remove section)
+  winarchy herdr [status|install|layout|square|multi|swarm|config|reload|keys|shortcuts]
+                                          Herdr (Omarchy's tmux replacement) and its agent
+                                          layouts; layout/square/multi/swarm run in a Herdr
+                                          pane and are also hdl / hds / hdlm / hsl in a shell
+  winarchy agent [-Inline] [-Pick] [-Prompt <text>] | agent list
+                                          start the default coding agent, unattended
+  winarchy default-agent <name>        pick it (claude, codex, copilot, opencode, ...)
+  winarchy agent-usage [-Force] [<agent>]
+                                          refresh the bar's agent usage (limits, tokens by
+                                          day and model); runs by itself every 15 minutes
   winarchy browser-setup               tint Chrome/Brave's toolbar with the theme (one admin prompt)
   winarchy game-setup [remove]         let Super+W / the bar close games that run as administrator
                                           (one admin prompt: a small helper that runs as admin)
@@ -38,10 +51,19 @@
 param(
     [Parameter(Position = 0)][string]$Verb = 'help',
     [Parameter(Position = 1)][string]$Arg,
+    [Parameter(Position = 2)][string]$Arg2,
+    # herdr layout <agent> <second agent> / herdr swarm <count> <command>
+    [Parameter(Position = 3)][string]$Arg3,
     [switch]$Yes, [switch]$Adopt, [switch]$KeepApps, [switch]$DryRun, [switch]$Purge,
     [switch]$Offline, [switch]$MonitorsOnly, [switch]$Resplit, [switch]$Fix, [switch]$NoRestart,
     # Wait for a key at the end (verbs the menu runs in a terminal window).
     [switch]$Pause,
+    # agent: run it here rather than in its own window (a Herdr pane wants -Inline);
+    # -Pick opens the chooser when no default agent is set yet.
+    [switch]$Inline, [switch]$Pick, [string]$Prompt,
+    # agent-usage: -Force rescans everything and re-asks for limits; -LimitsOnly reuses a
+    # recent scan and only refreshes the limits (what opening the usage panel wants).
+    [switch]$Force, [switch]$LimitsOnly,
     # bg: "x,y" on the monitor the background picker covers (it plays the reveal there).
     [string]$Covered
 )
@@ -59,6 +81,10 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\lib\doctor.ps1"
 . "$PSScriptRoot\..\lib\extras.ps1"
 . "$PSScriptRoot\..\lib\apps.ps1"
+. "$PSScriptRoot\..\lib\catalog.ps1"
+. "$PSScriptRoot\..\lib\agents.ps1"
+. "$PSScriptRoot\..\lib\herdr.ps1"
+. "$PSScriptRoot\..\lib\winicons.ps1"
 . "$PSScriptRoot\..\lib\animations.ps1"
 . "$PSScriptRoot\..\lib\autotile.ps1"
 . "$PSScriptRoot\..\lib\transition.ps1"
@@ -118,6 +144,42 @@ switch ($Verb) {
     }
     # The Apps route's list; the menu refreshes it in the background each time it opens.
     'apps' { Update-AppList | ForEach-Object { $_.name } }
+    # The Install/Remove routes' list, refreshed the same way. '*' marks what is installed.
+    'catalog' { Update-Catalog | ForEach-Object { "$(if ($_.installed) { '*' } else { ' ' }) $($_.group)/$($_.key)  $($_.label)" } }
+    # windows.json's icon cache (bar chevron): one-shot, called by winarchy.ahk at most once per exe.
+    'winicon' { if ($Arg -and $Arg2) { Update-WindowIcon $Arg $Arg2 } }
+    'install-app' {
+        if (-not $Arg) { throw 'usage: winarchy install-app <key>   (winarchy catalog lists them)' }
+        Use-Lock { Install-CatalogItem $Arg }
+    }
+    'remove-app' {
+        if (-not $Arg) { throw 'usage: winarchy remove-app <key>   (winarchy catalog lists them)' }
+        Use-Lock { Uninstall-CatalogItem $Arg }
+    }
+    # Herdr and the agent layouts built on it. The layout verbs are meant to be run from
+    # inside a Herdr pane (hdl / hds / hdlm / hsl do exactly that).
+    'herdr' { Invoke-Herdr $Arg $Arg2 $Arg3 }
+    'agent' {
+        if ($Arg -eq 'list') {
+            Get-AgentState | ForEach-Object {
+                "$(if ($_.current) { '*' } else { ' ' }) $($_.key.PadRight(13)) $($_.label)$(if (-not $_.installed) { '   (not installed)' })"
+            }
+        } else { Invoke-Agent -Inline:$Inline -Pick:$Pick -Prompt $Prompt }
+    }
+    # The bar's agent indicator: run every usage collector and rebuild agents.json.
+    # winarchy.ahk runs this on a timer; -Force rescans and re-asks for limits now.
+    'agent-usage' {
+        $shown = @(Update-AgentUsage -Force:$Force -LimitsOnly:$LimitsOnly -Only $Arg)
+        if (-not $shown) { 'no agent usage to show (winarchy doctor explains why, if you expected some)' }
+        foreach ($a in $shown) {
+            $lim = @($a.limits | ForEach-Object { '{0} {1:0}%' -f $_.label, ([double]$_.percent * 100) }) -join ', '
+            "$($a.name)$(if ($a.tierLabel) { " ($($a.tierLabel))" }): $($a.todayTotalTokens) tokens today$(if ($lim) { "; $lim" })$(if ($a.usageStatusText) { "; $($a.usageStatusText)" })"
+        }
+    }
+    'default-agent' {
+        if (-not $Arg) { "default agent: $((Get-DefaultAgent) ?? 'none yet (winarchy agent list)')" }
+        else { [void](Set-DefaultAgent $Arg); Use-Lock { Invoke-Apply -NoRestart } }
+    }
     'config' {
         if (-not (Test-Path $ConfigFile)) { Write-Json $ConfigFile ([ordered]@{ _help = 'Only the settings you change. See docs/config.md, then run: winarchy apply' }) }
         $p = Get-Paths

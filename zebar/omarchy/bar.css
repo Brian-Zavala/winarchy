@@ -34,7 +34,7 @@ html, body {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   height: 100%;
-  padding: 0 8px;
+  padding: 0 16px 0 8px;
 }
 
 .side, .left, .right, .post, .indicators { display: flex; align-items: center; height: 100%; }
@@ -45,6 +45,7 @@ html, body {
 .indicators { margin-left: auto; }
 .post { gap: 10px; margin-left: 4px; }
 .right { margin-left: auto; padding-left: 14px; gap: 14px; }
+#agents { margin-right: 4px; }
 
 .logo {
   font-family: 'omarchy', 'JetBrainsMono NF', monospace;
@@ -79,8 +80,52 @@ html, body {
 #bar.reveal .indicator.off:hover { opacity: 0.8; }
 @media (prefers-reduced-motion: reduce) { #bar.reveal .indicator.off { transition: none; } }
 
+/* Chevron drawer: running-app windows AND the native systray (background apps' own
+   icons - not a Quattro system module) hide behind it, same off/reveal idiom as the
+   Quattro indicators above, under its own class (winreveal) so hovering the
+   clock/indicators doesn't also unfold this. */
+.drawer { display: flex; align-items: center; gap: 8px; }
+.chevron {
+  background: none;
+  border: 0;
+  color: var(--fg);
+  font-family: 'JetBrainsMono NF', 'JetBrainsMono Nerd Font', monospace;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  opacity: 0.85;
+  transition: opacity 160ms ease;
+}
+.chevron:hover { opacity: 1; }
+/* Open drawer: the icons take the chevron's place (the pointer is already in the drawer). */
+#bar.winreveal .chevron { display: none; }
+
+.winstrip { display: flex; align-items: center; gap: 8px; }
+.winstrip .win { width: 16px; height: 16px; display: none; order: -1; cursor: pointer; }
+.winstrip span.win { font-size: 14px; line-height: 16px; text-align: center; color: var(--fg); }
+#bar.winreveal .winstrip .win {
+  display: block;
+  opacity: 0.55;
+  transition: opacity 140ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+@starting-style { #bar.winreveal .winstrip .win { opacity: 0; } }
+#bar.winreveal .winstrip .win:hover { opacity: 1; }
+.winstrip .win.focused { opacity: 0.9; }
+#bar.winreveal .winstrip .win.focused { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { #bar.winreveal .winstrip .win { transition: none; } }
+
 .tray { display: flex; align-items: center; gap: 8px; }
-.tray img { width: 14px; height: 14px; display: block; cursor: pointer; }
+.tray img { width: 14px; height: 14px; display: none; order: -1; cursor: pointer; }
+#bar.winreveal .tray img {
+  display: block;
+  opacity: 0.85;
+  transition: opacity 140ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+@starting-style { #bar.winreveal .tray img { opacity: 0; } }
+#bar.winreveal .tray img:hover { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { #bar.winreveal .tray img { transition: none; } }
 
 .module { cursor: pointer; }
 .muted { opacity: 0.5; }

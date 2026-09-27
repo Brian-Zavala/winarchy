@@ -8,6 +8,10 @@
 ;   menu.ahk open <route>        open/toggle the Omarchy menu (root, system, keys, background, theme, ...)
 ;   menu.ahk launcher | start | terminal | calendar
 ;   menu.ahk run-app <AppsFolder AppID> | apps-refresh    (Apps route; refresh -> winarchy CLI)
+;   menu.ahk focus-window <hwnd>                          (bar chevron flyout: raise a running window)
+;   menu.ahk install-app <key> | remove-app <key> | catalog-refresh   (Install/Remove routes)
+;   menu.ahk herdr | agent | default-agent <name>                     (Herdr + coding agents)
+;   menu.ahk usage | usage-refresh                                    (bar agent icon: usage panel)
 ;   menu.ahk send <keys> | run <target> [args] | url <url> | settings <ms-settings:...>
 ;   menu.ahk edit <file | glaze-config | bar-css | config | launchers | keybindings>
 ;   menu.ahk bg-set <path> [landing name] | bg-next | theme-set <name> | sync | apply | doctor   (-> winarchy CLI)
@@ -25,7 +29,7 @@ arg := A_Args.Length > 1 ? A_Args[2] : ""
 ; Keystrokes and window commands must land on the window the menu covered,
 ; so wait for the menu to finish closing first. The picker verbs send no keys: they start
 ; right away while the menu plays its apply animation (and waits for the new background).
-if !(verb ~= "^(open|log|bar-start|bg-set|theme-set|font-set|apps-refresh)$")
+if !(verb ~= "^(open|log|bar-start|bg-set|theme-set|font-set|apps-refresh|catalog-refresh)$")
     WinWaitClose MenuTitle, , 1
 
 switch verb {
@@ -34,9 +38,15 @@ switch verb {
     ; Apps route: one AppsFolder AppID launches a desktop program or a Store app alike.
     case "run-app": try Run 'explorer.exe "shell:AppsFolder\' arg '"'
     case "apps-refresh": OmarchyCmd("apps")
+    ; Bar chevron flyout: arg is the target window's hwnd (windows.json).
+    case "focus-window": try WinActivate("ahk_id " arg)
+    case "catalog-refresh": OmarchyCmd("catalog")
     case "start": Send "^{Esc}"
     case "terminal": Run Env("terminal", "wt.exe")
     case "calendar": OpenCalendar()
+    ; The bar's agent icon: the usage panel, and its refresh key (r / Enter).
+    case "usage": OpenUsage()
+    case "usage-refresh": OmarchyCmd("agent-usage", "-Force")
     case "send": Send arg
     case "run": Run(arg (A_Args.Length > 2 ? " " A_Args[3] : ""))
     case "url", "settings": Run arg
@@ -49,6 +59,9 @@ switch verb {
     case "apply":
         Osd("Applying settings…", 0)
         Notify(OmarchyCmdWait("apply") ? "Applying settings failed (Update > Doctor shows why)" : "Settings applied")
+    ; Your herdr.toml.tpl was saved: re-render Herdr's config and reload a running Herdr.
+    case "apply-herdr":
+        Notify(OmarchyCmdWait("herdr", "config") ? "Herdr config failed (Update > Doctor shows why)" : "Herdr config reloaded")
     case "apply-glaze":
         Notify(OmarchyCmdWait("apply", "-MonitorsOnly") ? "GlazeWM config failed (Update > Doctor shows why)" : "GlazeWM config reloaded")
     case "update-check":
@@ -58,6 +71,15 @@ switch verb {
     ; Long downloads get a terminal with progress.
     case "sync": RunInTerminal("Themes & backgrounds", CliInTerminal("sync"))
     case "font-install": RunInTerminal("Install " arg " Nerd Font", CliInTerminal("font-install", arg))
+    ; Install/Remove: winget in a terminal, so the download and any prompts are visible.
+    ; Herdr is a full-screen terminal app: it gets a terminal, and takes it over.
+    case "herdr": RunHerdr()
+    ; The coding agent opens in its own window (winarchy agent picks the flags).
+    case "agent": OmarchyCmd("agent")
+    ; Setup > Default Agent: sets it, then starts it, like Omarchy's menu does.
+    case "default-agent": RunInTerminal("Default agent", CliInTerminal("default-agent", arg))
+    case "install-app": RunInTerminal("Install " arg, CliInTerminal("install-app", arg))
+    case "remove-app": RunInTerminal("Remove " arg, CliInTerminal("remove-app", arg))
     case "animations": ToggleAnimations()
     case "glaze": try Run('"' Env("glazewmCli") '" command ' arg, , "Hide")
     case "activity": SignalWm("activity")
@@ -88,6 +110,7 @@ EditFile(target) {
     startup := A_Startup "\launchers.ahk"
     switch target {
         case "glaze-config": file := GlazeTemplate()
+        case "herdr-config": file := HerdrTemplate()
         case "bar-css": file := Env("pack") "\user.css"
         case "config": file := data "\config.json"
         case "keybindings", "launchers": file := Env("launchers", "1") = "1" ? UserLaunchers() : startup
@@ -105,6 +128,29 @@ EditFile(target) {
         RunInTerminal("nvim", '"' editor '" "' file '"')
     else
         Run '"' editor '" "' file '"'
+}
+
+; Your Herdr config template (winarchy renders it; saving re-renders and reloads Herdr).
+HerdrTemplate() {
+    file := Env("data") "\herdr.toml.tpl"
+    if !FileExist(file) {
+        tpl := FileRead(Env("code") "\templates\herdr.toml.tpl", "UTF-8")
+        f := FileOpen(file, "w", "UTF-8-RAW")
+        f.Write("# YOUR copy of winarchy's Herdr template: saving it rewrites Herdr's config.toml`n"
+            . "# and reloads a running Herdr. Delete this file to go back to the default.`n" tpl)
+        f.Close()
+    }
+    return file
+}
+
+; Launch or attach to the persistent Herdr session (omarchy-launch-terminal-herdr).
+RunHerdr() {
+    herdr := Env("herdr")
+    if !herdr {
+        Notify("Herdr is not installed (Omarchy menu > Install > Terminal)")
+        return
+    }
+    RunInTerminal("Herdr", '"' herdr '"')
 }
 
 ; Your GlazeWM template (winarchy uses it instead of its own; saving applies it).
@@ -222,7 +268,8 @@ SignalWm(name) {
         PostMessage 0x5555, ids[name], 0, , hwnd
 }
 
-; Open the menu widget on the monitor under the cursor. Pressing the key again closes it.
+; Open the menu widget on the monitor you're working on (see WorkingMonitor). Pressing the
+; key again closes it.
 OpenMenu(route) {
     global MenuTitle
     pack := Env("pack")
@@ -232,7 +279,7 @@ OpenMenu(route) {
         return
     }
     PerMonitorDpi()
-    mon := MonitorUnderMouse()
+    mon := WorkingMonitor()
     f := FileOpen(pack "\route.json", "w", "UTF-8-RAW")
     f.Write('{"route":"' route '"}')
     f.Close()
@@ -275,7 +322,30 @@ HiddenMenu(mon) {
     return found
 }
 
-; The clock's calendar (Omarchy Quattro), on the monitor under the mouse; again closes it.
+; The clock's calendar (Omarchy Quattro), on the monitor you're working on; again closes it.
+; The agent usage panel (Omarchy's agents widget), dropped under the bar icon it was
+; opened from: the click's x, in the widget's CSS pixels, goes in usage-anchor.json.
+; Opening it also refreshes the limits, which is what it is usually opened to check.
+OpenUsage() {
+    title := "Zebar - omarchy / usage ahk_exe zebar.exe"
+    if hwnd := WinExist(title) {
+        PostMessage 0x10, 0, 0, , hwnd
+        return
+    }
+    PerMonitorDpi()
+    n := MonitorUnderMouse()
+    CoordMode "Mouse", "Screen"
+    MouseGetPos &mx
+    MonitorGet n, &left
+    f := FileOpen(Env("pack") "\usage-anchor.json", "w", "UTF-8-RAW")
+    f.Write('{"x":' Round((mx - left) * 96 / MonitorDpi(n)) '}')
+    f.Close()
+    OmarchyCmd("agent-usage", "-LimitsOnly")
+    Run '"' Env("zebar") '" start-widget-preset --pack omarchy --widget-name usage --preset u' MonitorPosition(n), , "Hide"
+    if hwnd := WinWait(title, , 3)
+        try WinActivate hwnd
+}
+
 OpenCalendar() {
     title := "Zebar - omarchy / calendar ahk_exe zebar.exe"
     if hwnd := WinExist(title) {
@@ -283,7 +353,7 @@ OpenCalendar() {
         return
     }
     PerMonitorDpi()
-    Run '"' Env("zebar") '" start-widget-preset --pack omarchy --widget-name calendar --preset c' MonitorPosition(MonitorUnderMouse()), , "Hide"
+    Run '"' Env("zebar") '" start-widget-preset --pack omarchy --widget-name calendar --preset c' MonitorPosition(WorkingMonitor()), , "Hide"
     if hwnd := WinWait(title, , 3)
         try WinActivate hwnd
 }

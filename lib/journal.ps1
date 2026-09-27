@@ -40,6 +40,17 @@ function Add-JournalEntry([hashtable]$entry) {
 
 function Test-Journaled([string]$key) { [void](Read-Journal); $script:JournalKeys.Contains($key) }
 
+# Drop a recording because the thing it describes is gone for good (the menu's Remove
+# took a package back out). Without this, uninstall would try to remove it a second time.
+function Remove-JournalEntry([string]$key) {
+    $j = Read-Journal
+    if (-not $script:JournalKeys.Contains($key)) { return $false }
+    $j.entries = @($j.entries | Where-Object { $_.key -ne $key })
+    [void]$script:JournalKeys.Remove($key)
+    Write-Json (Join-Path (Get-JournalDir) 'journal.json') $j 8
+    $true
+}
+
 # --- recorders --------------------------------------------------------------------
 function Save-Reg([string]$path, [string]$name) {
     $key = "reg|$path|$name"
@@ -258,6 +269,9 @@ function Restore-JournalEntry($e, [string]$dir) {
             $new = ($cur -split ';' | Where-Object { $_ -and $_.TrimEnd('\') -ne $e.dir.TrimEnd('\') }) -join ';'
             [Environment]::SetEnvironmentVariable('Path', $new, 'User')
         }
+        # Herdr came from its own installer, not winget, so uninstalling it is our job.
+        # The envpath entry recorded beside this one takes its PATH entry back out.
+        'herdr' { Remove-HerdrFiles $e.bin $e.packages }
         'browsertask' { Disable-BrowserPolicy }
         'gametask' { Disable-GameHelper }
         'cargo' { if (Get-Command cargo -ErrorAction SilentlyContinue) { cargo uninstall $e.crate 2>&1 | Out-Host } }
@@ -266,6 +280,7 @@ function Restore-JournalEntry($e, [string]$dir) {
             Initialize-Native
             [void][Winarchy.Native]::SystemParametersInfoInt(0x11, [uint32]($e.active -eq '1'), [IntPtr]::Zero, 3)   # SPI_SETSCREENSAVEACTIVE
         }
+        'minanimate' { Set-MinimizeAnimation ([int]$e.value) }
         default { }
     }
 }

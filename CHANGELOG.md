@@ -2,6 +2,64 @@
 
 ## Unreleased
 
+- Windows no longer visibly minimize and pop back up. With `blockMinimize` on, windows with a standard title bar lose their minimize button as they open, so a minimize never starts; apps that draw their own title bar (Chrome, Electron, Store apps) are still caught and put back, now the moment the minimize lands instead of 50 ms later, and with Windows' minimize/maximize animation turned off that's a one-frame blink rather than the window shrinking away and growing back. Games, Playnite, dialogs and `minimizeAllowed` keep their button. Turning `blockMinimize` off (or uninstalling) puts the buttons and the animation setting back.
+- Fixed: switching workspaces with a game open left the game in front and holding the focus - Super+2 changed the workspace *behind* it. GlazeWM ignores games (tiling one knocks it out of fullscreen), so it never hid them. winarchy now does: a game belongs to the workspace it was started on, leaving that workspace minimizes it and focuses the one you went to, and coming back brings the game back in front. Alt+Tab to a game, or the bar's gamepad icon, takes you to its workspace. Admin games go through the game helper: rerun `winarchy game-setup` once. Also fixed: Super+0 over an admin game went to a workspace "0" that doesn't exist (it's named 10).
+- Fixed: games minimizing by themselves every so often mid-game (the bar shrinking and growing back as the display mode flipped), until you restored them by hand. A fullscreen game minimizes whenever something else takes the foreground, and nothing stopped background programs from doing that. Now a game that loses the foreground without you asking - no key, click or pad input just before - gets it straight back (admin games through the game helper: rerun `winarchy game-setup`), capped at 4 tries in 20 s so nothing can ping-pong with it. Every loss is logged (`game lost focus: <game> -> <program>`), so the culprit shows. The background refreshes (Bluetooth every 30 s, weather, agent usage, update check, sync, app icons) no longer start PowerShell while a game is in front, and GlazeWM's own `focus_follows_cursor` is off: winarchy's replacement already stood down for games, GlazeWM's didn't. `gameFocusGuard: false` turns the give-back off.
+- Focus follows the mouse again, reliably. GlazeWM's own `focus_follows_cursor` stops following as soon as the pointer touches a window it doesn't manage (glzr-io/glazewm#1326) - which is the bar, Flow Launcher and the pickers, i.e. the whole top strip of every screen - and its cursor warps can re-steal focus (#760). Measured here: the pointer crossed five windows over 5.5 s without focus moving once. winarchy now focuses the window the pointer settles over, the same thing a click does. Only real movement moves focus (never while you type with the pointer parked elsewhere), it waits for the pointer to settle so sweeping the screen doesn't focus every window on the way, and it stands down during games/fullscreen and while Super is held. `focusFollowsCursor: false` turns it off.
+- The auto-tiling watcher no longer stops silently. It was seen to disappear while GlazeWM kept running, after which new windows quietly went back to piling up side by side with nothing on screen to say why. winarchy.ahk now watches it the way it watches the bar and restarts it (backing off if it dies repeatedly), it holds a named mutex so GlazeWM's own start can't leave two running, and anything that ends it is written to the log.
+
+- The menu installs software, like Omarchy Quattro's: new Install and Remove sections with AI, Gaming, Development, Editor, Terminal, Service and Windows groups, 45 packages on winget. Something you already have stays in the Install list, dim and ticked, instead of vanishing from the list it was installed from, so it still reads as a catalog of what's on offer; Remove only lists what is actually there. Installs run in a terminal so you can watch the download, and are recorded in the backup journal, so `winarchy uninstall` takes them out again (removing one from the menu drops that record, so it isn't removed twice). Presence comes from one read of Add/Remove Programs rather than `winget list`, which takes seconds and would stall the menu opening. `winarchy catalog`, `winarchy install-app <key>`, `winarchy remove-app <key>`. Anything installed this way also joins the bar's update count.
+- Herdr, Omarchy Quattro's replacement for tmux, and the agent workflow built on it. `hdl <agent>` lays out your editor, the coding agent (30% on the right) and a terminal (15% along the bottom) in the current Herdr tab; `hds` a 2x2 of editor, diff, terminal and agent; `hdlm` one such tab per subfolder; `hsl <n> <command>` a grid of n panes all running it. They are PowerShell shortcuts in your profile (in a marked block, restored by uninstall) around `winarchy herdr layout|square|multi|swarm`. Herdr gets Omarchy's config - its tmux-shaped keys, prefix Ctrl+Space - with PowerShell 7 as its pane shell (it would otherwise start Windows PowerShell 5.1, which can't run winarchy), and is themed with everything else: Herdr's own built-in theme when one matches your Omarchy theme by name, otherwise your terminal's palette. Setup > Herdr Config gives you your own copy of the template, re-rendered and reloaded when you save it. Learn > Herdr keys lists the bindings Herdr actually loaded. Herdr has no winget package, so install asks before running herdr.dev's own installer (Install > Terminal > Herdr adds it later), `winarchy update` runs Herdr's own updater, and removing it undoes its PATH entry.
+- Coding agents: Trigger > Agent starts the default one, and Setup > Default Agent chooses it (`winarchy agent`, `winarchy default-agent <name>`, `winarchy agent list`). Thirteen agents, each started with Omarchy's per-agent "don't stop to ask" flags. None is chosen for you. Agent windows open in a new 'Omarchy Agent' Windows Terminal profile with a fixed title, so a GlazeWM rule can single them out.
+- AI agent usage in the bar, from Omarchy Quattro's agents widget: a robot icon for every coding subscription on the PC. Hover it for the plan, the rate limits and today's tokens; click it for a panel with a meter and reset time per limit, tokens by day for the last week, and tokens by model (h/l switch subscription, r refreshes). Right-click starts the default agent. Omarchy's own collectors do the counting, ported to Windows: Claude Code's transcripts and its authoritative 5-hour and weekly limits (from Anthropic's usage endpoint, with Claude Code's own sign-in), Codex's sessions and limits (from `codex app-server`), and Fireworks. Nothing names an agent - any collector in `lib/agents` is picked up - and the icon only appears once one has something to show, so a PC with no agent sees no change. Needs Python 3, which doctor checks for (and which is found past the Microsoft Store's `python` stub). `winarchy agent-usage`; config `agentUsage`.
+- `menu.ahk open apps` opened the root menu instead of the Apps list: generated routes have to be named in menu.js, and that one wasn't.
+
+- Fixed: closing a game could stop winarchy with "Item has no value" - a game window
+  GlazeWM never reported (a hidden launcher window, or one closed before GlazeWM saw it)
+  had no remembered home workspace to forget. Fixed too: the script refused to exit at
+  all while `blockMinimize` was on, so a reload never took, `winarchy apply` could leave
+  the old copy running beside the new one, and uninstall's graceful close (which shows
+  the taskbars again) never ran.
+
+- Fixed: with window animations on, workspace switching died whenever a game run as
+  administrator - or any admin window - was in front. Super+1..0 and the other window keys
+  are GlazeWM's own, and the animation build can't have the "UI access" the official build
+  uses to see keys over admin windows (only a signed program under Program Files can). The
+  admin game helper (`winarchy game-setup`) now carries those keys too: it passes the key
+  on to winarchy.ahk as a number and never runs GlazeWM's tool itself, since that lives in
+  your user folder. `winarchy doctor` says when the helper is needed. Re-run
+  `winarchy game-setup` once to pick this up.
+- Fixed: winarchy.ahk no longer dies on an unexpected error. Nothing caught them, so one
+  bad window handle in any of its timers ended the script - and with it every winarchy
+  key and the bar's screen space - until the next login. Errors are now written to the
+  log (and shown by `winarchy doctor`) and only the one failed action is dropped. The
+  admin game helper does the same, logging to its own admin-only folder.
+- Fixed: GlazeWM was only restarted after a crash when the experimental animation build
+  was the one running; the official build stayed down, taking tiling and every workspace
+  key with it. Both are restarted now (backing off after repeated crashes).
+- Fixed: every "is GlazeWM running?" check also counted its command-line tool, which has
+  the same process name - and the auto-tiling watcher keeps one running all the time. So a
+  crashed GlazeWM still looked alive: the taskbar never came back, nothing restarted it,
+  and `winarchy doctor` reported it fine. The same miscount made `winarchy apply` fully
+  restart GlazeWM for no reason (logged as "GlazeWM switched to" the build that was
+  already running).
+
+- Fixed: the screensaver stopped cycling effects and sat on the still logo. Any ttfx run
+  shorter than two seconds counted as a crash, even one that ended perfectly well, and the
+  random effects are often that quick (measured: a second at the short end, thirteen at the
+  long end), so three brief ones in a row ended the cycle for the rest of the session. A
+  failure is now what it was meant to be - ttfx exiting with an error, or quitting before it
+  could draw a frame - and the log says which of the two it saw.
+
+- Hyprland-style auto-tiling: new windows now dwindle-tile automatically (a background
+  watcher wraps each new window that lands next to an existing one into its own
+  perpendicular split, so windows spiral outward instead of piling into one flat row or
+  column, which is what `winarchy`'s GlazeWM used to leave every new window doing). On by
+  default; `winarchy autotile [on|off|toggle|status]`, config `autoTiling.enabled`.
+  GlazeWM has no built-in dwindle layout, so this reacts to each window opening rather
+  than predicting the split ahead of time - it can occasionally need a `Super+J` nudge to
+  match exactly.
+
 - Holding an arrow key in the menu now scrolls at the speed you hold it, with the highlight on
   the row you are actually on. The 260ms glide and the smooth scroll were restarted by every
   key repeat, so neither ever finished and the list trailed a dozen rows behind the selection;

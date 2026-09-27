@@ -3,7 +3,11 @@ winarchy includes or is derived from:
 - Omarchy (https://github.com/omacom/omarchy), MIT License, Copyright (c) David Heinemeier Hansson
   and contributors:
     zebar/omarchy/omarchy.ttf (Omarchy logo font), the menu/keybinding design, and the theme
-    template mapping in lib/render.ps1, lib/targets.ps1, templates/*. Theme files
+    template mapping in lib/render.ps1, lib/targets.ps1, templates/*; the Herdr config
+    (templates/herdr.toml.tpl, from config/herdr/config.toml) and layouts (lib/herdr.ps1, from
+    default/bash/fns/herdr); the coding-agent launch flags (lib/agents.ps1, from
+    bin/omarchy-agent); and the agent usage collectors lib/agents/usage-*.py, ported from
+    bin/omarchy-agent-usage-* with Windows changes marked "winarchy:". Theme files
     (colors.toml, neovim.lua, vscode.json, btop.theme, ...), templates and backgrounds are
     downloaded from the Omarchy repository at install time and are not part of this
     repository. Background artwork remains the property of its respective artists.
@@ -17,4 +21,8 @@ Installed separately (not bundled), each under its own license:
   commit); no binaries are distributed.
 - Flow Launcher (MIT), AutoHotkey (GPL-2.0), PowerShell (MIT), fastfetch (MIT), btop4win (Apache-2.0).
 - ttfx (https://github.com/omacom/ttfx), MIT - built or downloaded at install time.
+- Herdr (https://herdr.dev) - optional; installed at the user's choice from herdr.dev's own
+  installer, not bundled.
+- Python (https://www.python.org), PSF License - installed with winget for the agent usage
+  collectors.
 - Nerd Fonts (https://www.nerdfonts.com) - downloaded at install time, SIL OFL 1.1 / MIT per font.

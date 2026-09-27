@@ -43,14 +43,16 @@ OmarchyCmdLine(args*) {
 }
 
 ; Open a command in the user's terminal (Windows Terminal if present, else its own console).
-RunInTerminal(title, command) {
+; Started in your home folder, the way a new terminal opens: otherwise it inherits this
+; script's own folder (the code's ahk\), and Herdr names its workspace after that repo.
+RunInTerminal(title, command, dir := EnvGet("USERPROFILE")) {
     if Env("wt") {
         try {
-            Run 'wt.exe new-tab --title "' title '" ' command
+            Run 'wt.exe new-tab --title "' title '" -d "' dir '" ' command
             return
         }
     }
-    Run command
+    Run command, dir
 }
 
 ; Windows Terminal with these arguments, or the fallback command line without it.
@@ -106,4 +108,24 @@ MonitorUnderMouse() {
     CoordMode "Mouse", "Screen"
     MouseGetPos &mx, &my
     return MonitorFromPoint(mx, my) || MonitorGetPrimary()
+}
+
+; The monitor you are working on: the one under the pointer, unless keyboard focus has
+; moved to another monitor since the pointer last moved (a workspace key, Super+arrows).
+; The pointer stays put on those (cursor_jump is off), so "under the mouse" alone would
+; open the menu or an OSD on the screen you just left. winarchy.ahk tracks this
+; (WorkMonitor) and sets WorkMonitorFn; other scripts ask it over message 0x5558.
+global WorkMonitorFn := 0
+
+WorkingMonitor() {
+    global WorkMonitorFn
+    if WorkMonitorFn
+        return WorkMonitorFn()
+    prev := A_DetectHiddenWindows
+    DetectHiddenWindows true
+    mon := 0
+    try if hwnd := WinExist("winarchy.ahk ahk_class AutoHotkey")
+        mon := SendMessage(0x5558, 0, 0, , hwnd, , , , 300)
+    DetectHiddenWindows prev
+    return mon >= 1 && mon <= MonitorGetCount() ? mon : MonitorUnderMouse()
 }

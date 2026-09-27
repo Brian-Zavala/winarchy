@@ -147,6 +147,37 @@ Describe 'Backup journal' {
     }
 }
 
+Describe 'Minimize animation (blockMinimize)' {
+    BeforeEach {
+        $script:JournalDir = Join-Path $TestDrive ([guid]::NewGuid())
+        New-Item -ItemType Directory $script:JournalDir | Out-Null
+        Set-Content (Join-Path $script:JournalDir 'journal.json') '{"entries":[]}'
+        $script:JournalCache = $null
+        $script:anim = 1
+        Mock Get-MinimizeAnimation { $script:anim }
+        Mock Set-MinimizeAnimation { $script:anim = $on }
+        Mock Log {}
+    }
+    It 'turns it off, and uninstall puts the original back' {
+        Set-MinimizeAnimationPolicy @{ blockMinimize = $true }
+        $script:anim | Should -Be 0
+        foreach ($e in (Read-Journal).entries) { Restore-JournalEntry $e $script:JournalDir }
+        $script:anim | Should -Be 1
+    }
+    It 'puts the original back when blockMinimize is turned off' {
+        Set-MinimizeAnimationPolicy @{ blockMinimize = $true }
+        Set-MinimizeAnimationPolicy @{ blockMinimize = $false }
+        $script:anim | Should -Be 1
+    }
+    It 'leaves an animation that was already off alone, and records nothing' {
+        $script:anim = 0
+        Set-MinimizeAnimationPolicy @{ blockMinimize = $true }
+        Set-MinimizeAnimationPolicy @{ blockMinimize = $false }
+        $script:anim | Should -Be 0
+        (Read-Journal).entries.Count | Should -Be 0
+    }
+}
+
 Describe 'Bar restart' {
     # Zebar attaches to its parent's console: from `winarchy update` it would log into
     # that terminal and die with it. It must be started through (console-less) AutoHotkey.
@@ -299,6 +330,14 @@ Describe 'AutoHotkey settings ini' {
         IniText | Should -Match 'gameDirs=C:\\Games\|G:\\'
         IniText | Should -Match 'blockMinimize=1'
         IniText | Should -Match 'minimizeAllowed=Spotify'
+    }
+    It 'defaults gameFocusGuard on, and turns it off' {
+        $Generated = Join-Path $TestDrive ([guid]::NewGuid())
+        Write-AhkIni @{} (BaseCfg @{})
+        IniText | Should -Match 'gameFocusGuard=1'
+        $Generated = Join-Path $TestDrive ([guid]::NewGuid())
+        Write-AhkIni @{} (BaseCfg @{ gameFocusGuard = $false })
+        IniText | Should -Match 'gameFocusGuard=0'
     }
     It 'turns blockMinimize off' {
         $Generated = Join-Path $TestDrive ([guid]::NewGuid())

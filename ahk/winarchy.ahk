@@ -10,10 +10,27 @@
 ; Everything machine-specific comes from `winarchy apply` (lib\env.ahk).
 ; Undo everything: winarchy uninstall
 
+; This script watches windows that can close between one call and the next, from a dozen
+; timers. An uncaught error in any of them used to pop a dialog and take the whole daemon
+; down - and with it every key, the bar space and the hidden taskbar, until the next login.
+; So log it and drop that one thread instead. Returning 1 ends the thread; -1 would resume
+; on the line after the failure, carrying on with whatever state caused it. Errors still go
+; to the log, which `winarchy doctor` reads back under "Recent errors".
+OnError LogError
+
+LogError(err, mode) {
+    try WmLog("error: " (err is Error
+        ? Type(err) ": " err.Message " (" RegExReplace(err.File, ".*\\") ":" err.Line ")"
+        : String(err)))
+    return 1
+}
+
 GlazeCli := Env("glazewmCli")
 Zebar := Env("zebar")
 Pack := Env("pack")
 BarTitle := "Zebar - omarchy / bar ahk_exe zebar.exe"
+MenuTitle := "Zebar - omarchy / menu ahk_exe zebar.exe"
+CalendarTitle := "Zebar - omarchy / calendar ahk_exe zebar.exe"
 
 ; Super+Shift+Space / `winarchy bar off` turns the top bar off until it's turned on again.
 BarFlag := Env("data") "\generated\bar-off"
@@ -33,7 +50,7 @@ HideTaskbars() {
         return
     ; Never leave the desktop with no taskbar and no tiling: GlazeWM gone for 10 s
     ; (crashed or quit) -> show the taskbars until it is back.
-    if !ProcessExist("glazewm.exe") {
+    if !GlazeWmRunning() {
         missingSince := missingSince || A_TickCount
         if A_TickCount - missingSince > 10000 {
             ShowTaskbars()
@@ -68,7 +85,8 @@ DllCall("Wtsapi32\WTSRegisterSessionNotification", "ptr", A_ScriptHwnd, "uint", 
 ; Games: see "Games and fullscreen apps" below.
 GameMode := Env("gameMode", "1") = "1"
 Games := Map()            ; game windows seen in front: hwnd -> process name
-GameHome := Map()         ; hwnd -> the workspace id it was ignored from (GlazeWindowInfo)
+GameHome := Map()         ; hwnd -> name of the workspace the game belongs to (HomeWorkspace)
+GameParked := Map()       ; hwnd -> tick: minimized by GameWorkspaceSync (its workspace was left)
 BusyUntil := 0            ; a game / fullscreen app was in front until a moment ago
 DisplayPending := false   ; a display change (or bar restart) waits for it to close
 BlockMinimize := Env("blockMinimize", "1") = "1"
@@ -80,10 +98,16 @@ if !BarEnabled                        ; bar turned off: no strip kept free for i
 ; Bring the bar back if Zebar dies or a monitor lost its bar; reopen the bars
 ; after Explorer restarts or the display layout changes (monitor wake, dock).
 SetTimer BarGuard, 5000
+; Keep these arrow bodies value-less: an arrow returns what its body evaluates to, and a
+; non-empty OnMessage return swallows the message (SetTimer answers ""). Same trap as the
+; OnExit arrow that used to return UnhookWinEvent's 1 - see UnhookMinimize.
 OnMessage DllCall("RegisterWindowMessage", "Str", "TaskbarCreated", "UInt"), (*) => SetTimer(RestartBar, -3000)
 OnMessage 0x007E, (*) => SetTimer(OnDisplayChange, -3000)    ; WM_DISPLAYCHANGE
 ; Commands from menu.ahk (menu widget actions that need this script's state).
 OnMessage 0x5555, OnMenuCommand
+; GlazeWM keys pressed while an admin window was in front, relayed by the admin game
+; helper because GlazeWM's own hook never saw them (see OnRescuedKey).
+OnMessage 0x5557, OnRescuedKey
 ; Admin (UAC) prompts parked in the hidden taskbar: shield in the bar (see UacWatch).
 global UacClass := "ahk_class $$$Secure UAP Dummy Window Class For Interim Dialog"
 global UacPending := ""            ; title of the parked prompt, "" when none
@@ -91,11 +115,42 @@ global UacPending := ""            ; title of the parked prompt, "" when none
 ; minimize the instant it starts, unless the window is one of the exceptions in
 ; IsMinimizeAllowed - games, Playnite/Steam Big Picture, owned/tool windows, config
 ; "minimizeAllowed". Super+M is the rescue key regardless (see the keys below).
+; Windows with a standard title bar lose their minimize button as they appear, so for
+; them a minimize never starts at all (see StripMinimizeBox).
 MinimizeHook := 0
-if BlockMinimize
+ShowHook := 0
+if BlockMinimize {
     MinimizeHook := DllCall("SetWinEventHook", "uint", 0x0016, "uint", 0x0016, "ptr", 0
         , "ptr", CallbackCreate(OnWindowMinimized, "F", 7), "uint", 0, "uint", 0, "uint", 0x0002, "ptr")  ; EVENT_SYSTEM_MINIMIZESTART, WINEVENT_SKIPOWNPROCESS
-OnExit((*) => MinimizeHook ? DllCall("UnhookWinEvent", "ptr", MinimizeHook) : 0)
+    ShowHook := DllCall("SetWinEventHook", "uint", 0x8002, "uint", 0x8002, "ptr", 0
+        , "ptr", CallbackCreate(OnWindowShown, "F", 7), "uint", 0, "uint", 0, "uint", 0x0002, "ptr")      ; EVENT_OBJECT_SHOW
+    SetTimer StripAllMinimizeBoxes, -2000
+} else
+    SetTimer RestoreMinimizeBoxes, -2000     ; blockMinimize just turned off
+OnExit UnhookMinimize
+; A game in exclusive fullscreen minimizes itself the moment it loses the foreground (and
+; its display mode flips back, which the bar shows as a shrink and re-grow). Something
+; taking the foreground from a game without you asking gets it handed straight back -
+; see "Games keep the foreground" below. config "gameFocusGuard": false = off.
+GameFocusGuard := GameMode && Env("gameFocusGuard", "1") = "1"
+LastFg := 0                       ; foreground window before the newest switch
+ForegroundHook := 0
+if GameFocusGuard
+    ForegroundHook := DllCall("SetWinEventHook", "uint", 0x0003, "uint", 0x0003, "ptr", 0
+        , "ptr", CallbackCreate(OnForeground, "F", 7), "uint", 0, "uint", 0, "uint", 0, "ptr")  ; EVENT_SYSTEM_FOREGROUND
+OnExit UnhookForeground
+; GlazeWM ignores games, so it never hides one when you switch away from its workspace:
+; GameWorkspaceSync does (see "Games stay on their workspace"). Woken by focus changes and
+; by GlazeWM cloaking/uncloaking windows (hide_method: cloak) - only while a game is open.
+WorkspaceHooks := []
+if GameMode {
+    cb := CallbackCreate(OnWorkspaceEvent, "F", 7)
+    WorkspaceHooks.Push(DllCall("SetWinEventHook", "uint", 0x0003, "uint", 0x0003, "ptr", 0, "ptr", cb
+        , "uint", 0, "uint", 0, "uint", 0x0002, "ptr"))   ; EVENT_SYSTEM_FOREGROUND, WINEVENT_SKIPOWNPROCESS
+    WorkspaceHooks.Push(DllCall("SetWinEventHook", "uint", 0x8017, "uint", 0x8018, "ptr", 0, "ptr", cb
+        , "uint", 0, "uint", 0, "uint", 0x0002, "ptr"))   ; EVENT_OBJECT_CLOAKED..UNCLOAKED
+}
+OnExit UnhookWorkspace
 ; A new window opens on the monitor under the mouse, not on Windows' primary display
 ; (see "New windows open on the hovered monitor" below). Registered whatever the monitor
 ; count is - a second monitor can be plugged in later; HoverPlaceWindow is the one that
@@ -110,22 +165,68 @@ if HoverPlace {
     DllCall("RegisterShellHookWindow", "ptr", A_ScriptHwnd)
     OnMessage DllCall("RegisterWindowMessage", "Str", "SHELLHOOK", "UInt"), OnShellHook
 }
+; The monitor you are working on - under the pointer, or where keyboard focus went since
+; (see "The monitor you are working on" below). New windows, the menu and OSDs use it.
+PointerMovedAt := 0               ; A_TickCount of the pointer's last movement
+KeyMonitor := 0                   ; monitor keyboard focus moved to while the pointer was still
+KeyMonitorAt := 0
+PointerWatch()
+SetTimer PointerWatch, 100
+FocusMoveHook := DllCall("SetWinEventHook", "uint", 0x0003, "uint", 0x0003, "ptr", 0
+    , "ptr", CallbackCreate(OnFocusMoved, "F", 7), "uint", 0, "uint", 0, "uint", 0x0002, "ptr")  ; EVENT_SYSTEM_FOREGROUND, WINEVENT_SKIPOWNPROCESS
+OnExit UnhookFocusMove
+WorkMonitorFn := WorkMonitor
+OnMessage 0x5558, (*) => WorkMonitor()   ; menu.ahk / OSDs asking (see WorkingMonitor in env.ahk)
+; Hyprland's follow_mouse, re-asserted (see FocusFollowWatch): GlazeWM's own
+; focus_follows_cursor stops following once the pointer touches a window it doesn't
+; manage - the bar, the launcher, a picker - which is most of the top of the screen.
+if Env("focusFollowsCursor", "1") = "1"
+    SetTimer FocusFollowWatch, 110
+; Keep the dwindle auto-tiling watcher alive (see AutoTileGuard).
+if Env("autoTiling", "1") = "1"
+    SetTimer AutoTileGuard, 5000
 WriteIndicators()
 SetTimer WriteIndicators, 5000     ; nightlight / do-not-disturb also change from Quick Settings
 SetTimer UacWatch, 1000
+; Running-windows list for the bar's chevron flyout (bar.html -> windows.json).
+SetTimer WriteWindows, 1000
+; These background refreshes each start a hidden PowerShell. While a game is in front they
+; wait (Quiet skips a periodic tick, Later postpones a one-off): a process starting up is
+; one of the things that can take the foreground off a game, which then minimizes itself.
 ; Weather for the bar (every 15 min) and the update indicator (2 min after start, then 6 h).
 if Env("weather", "1") = "1" {
-    SetTimer () => OmarchyCmd("weather"), -20000
-    SetTimer () => OmarchyCmd("weather"), 900000
+    SetTimer Later.Bind(() => OmarchyCmd("weather")), -20000
+    SetTimer Quiet.Bind(() => OmarchyCmd("weather")), 900000
 }
-SetTimer () => OmarchyCmd("update-check"), -120000
-SetTimer () => OmarchyCmd("update-check"), 21600000
+; AI coding agent usage for the bar (agents.json): once 30 s after start, then on the
+; configured interval (agentUsage.refreshSeconds, default 15 min, like Omarchy's widget).
+if Env("agentUsage", "1") = "1" {
+    SetTimer Later.Bind(() => OmarchyCmd("agent-usage")), -30000
+    SetTimer Quiet.Bind(() => OmarchyCmd("agent-usage")), 1000 * Env("agentUsageSeconds", "900")
+}
+SetTimer Later.Bind(() => OmarchyCmd("update-check")), -120000
+SetTimer Quiet.Bind(() => OmarchyCmd("update-check")), 21600000
 ; Bluetooth on/off for the bar icon (bluetooth.ps1 writes bluetooth.json).
-SetTimer BluetoothStatus, 30000
+SetTimer Quiet.Bind(BluetoothStatus), 30000
 BluetoothStatus()
 ; Pick up new favorite backgrounds after login settles (local only, no downloads).
 if Env("syncAtLogin", "1") = "1"
-    SetTimer () => OmarchyCmd("sync", "-Offline"), -90000
+    SetTimer Later.Bind(() => OmarchyCmd("sync", "-Offline")), -90000
+
+; A periodic background job's tick: skipped while a game / fullscreen app is in front
+; (the next tick catches up).
+Quiet(fn) {
+    if !Busy()
+        fn()
+}
+
+; A one-off background job: postponed a minute at a time while a game is in front.
+Later(fn) {
+    if Busy()
+        SetTimer Later.Bind(fn), -60000
+    else
+        fn()
+}
 ; Project app launchers (Super+Return terminal, ...) unless you use your own.
 ; Your copy (%USERPROFILE%\.winarchy\launchers.ahk, made by Setup > Keybindings) wins;
 ; it gets env.ahk through /include, so it needs no #Include of the code folder.
@@ -142,6 +243,7 @@ StartLaunchers() {
 ; --- Live reload: saved edits take effect (Hyprland reloads its config on save) ----
 ;   config.json          -> winarchy apply
 ;   glazewm.yaml.tpl     -> rewrite GlazeWM's config and reload it
+;   herdr.toml.tpl       -> rewrite Herdr's config.toml and reload a running Herdr
 ;   your keybindings     -> reload that script (the file itself is never touched)
 Watched := Map()
 SetTimer WatchEdits, 2000
@@ -149,7 +251,8 @@ SetTimer WatchEdits, 2000
 WatchEdits() {
     global Watched
     data := Env("data")
-    for path, action in Map(data "\config.json", "apply", data "\glazewm.yaml.tpl", "apply-glaze", KeybindingsFile(), "reload") {
+    for path, action in Map(data "\config.json", "apply", data "\glazewm.yaml.tpl", "apply-glaze",
+        data "\herdr.toml.tpl", "apply-herdr", KeybindingsFile(), "reload") {
         t := FileExist(path) ? FileGetTime(path, "M") : ""
         if !Watched.Has(path) {
             Watched[path] := {seen: t, pending: t, since: 0}
@@ -201,14 +304,40 @@ ReloadScript(path) {
     Osd("Keybindings reloaded")
 }
 
-; --- Window animations build: keep it running, fall back to the official GlazeWM -----
-; (Experimental build: if it quits twice within 5 minutes, animations are switched off.)
+; --- Keep GlazeWM running -------------------------------------------------------------
+; Without it there is no tiling and no Super+1..0 at all (those keys are GlazeWM's own),
+; and the keys you would reach for to fix it are the ones that are gone. So restart it -
+; whichever build is selected. The experimental animations build gets one extra rule: if it
+; quits twice within 5 minutes, animations are switched off and the official build is used.
 SetTimer GlazeGuard, 3000
+
+; GlazeWM is running - as opposed to only its CLI, which is also called glazewm.exe (the
+; auto-tiling watcher keeps one alive for its event subscription, so a bare name check says
+; "running" forever and no watchdog here would ever fire). The CLI lives in a `cli`
+; subfolder; the official GlazeWM's own path reads empty, because it runs with UI access,
+; and that is exactly the one we must count as running.
+GlazeWmRunning() {
+    for pid in ProcessList("glazewm.exe") {
+        path := ""
+        try path := ProcessGetPath(pid)
+        if !InStr(path, "\cli\")
+            return true
+    }
+    return false
+}
+
+ProcessList(name) {
+    pids := []
+    for p in ComObjGet("winmgmts:").ExecQuery("Select ProcessId from Win32_Process"
+        . " where Name='" name "'")
+        pids.Push(p.ProcessId)
+    return pids
+}
 
 GlazeGuard() {
     static gone := 0, deaths := []
     exe := Env("glazewm")
-    if !InStr(exe, "\glazewm-animations\") || ProcessExist("glazewm.exe") {
+    if GlazeWmRunning() {
         gone := 0
         return
     }
@@ -228,15 +357,23 @@ GlazeGuard() {
     deaths := recent
     deaths.Push(now)
     gone := 0
-    if deaths.Length >= 2 {
+    ; The experimental build gets a way out: twice in 5 minutes and it is not worth it.
+    if InStr(exe, "\glazewm-animations\") && deaths.Length >= 2 {
         deaths := []
         WmLog("GlazeWM animation build stopped twice: switching animations off")
         Osd("Window animations off: the animation build stopped", 4000)
         OmarchyCmd("animations", "off")
-    } else {
-        WmLog("GlazeWM animation build stopped: restarting it")
-        try Run('"' exe '"', RegExReplace(exe, "\[^\]+$"))
+        return
     }
+    ; The official build has nothing to fall back to, so keep restarting it - but not
+    ; forever: something that dies this often needs a person, not another restart.
+    if deaths.Length > 5 {
+        if deaths.Length = 6
+            WmLog("GlazeWM stopped " deaths.Length " times in 5 min: leaving it alone")
+        return
+    }
+    WmLog("GlazeWM stopped: restarting it")
+    try Run('"' exe '"', RegExReplace(exe, "\[^\]+$"))
 }
 
 ; --- Screensaver (Omarchy: effects after 2.5 min idle; any input ends it) -----
@@ -724,7 +861,7 @@ GapsOn() {
 
 ; Topmost bar, but a fullscreen window (Super+F, video, game) may cover it.
 FullscreenWatch() {
-    global BarEnabled, BusyUntil, DisplayPending, GameHome
+    global BarEnabled, BusyUntil, DisplayPending, Games
     static lastHomeCheck := 0
     PerMonitorDpi()
     covered := CoveredMonitors()
@@ -737,15 +874,16 @@ FullscreenWatch() {
         WmLog("display change applied (was held for a game)")
         SetTimer OnDisplayChange, -500      ; what waited for the game to close
     }
-    ; A game that isn't in front, on the workspace you just switched back to: GlazeWM
-    ; ignored it, so it has nothing of its own to focus there. `glazewm query` only when
-    ; it might apply (desktop in front, or nothing) - not on every 400ms tick.
-    if GameHome.Count && !covered.Count && A_TickCount - lastHomeCheck > 1000 {
-        fgCls := ""
+    ; Games and their workspaces (GameWorkspaceSync): the event hooks cover almost every
+    ; switch, but going from a workspace that held only the game to an empty one cloaks
+    ; nothing and may not move the focus. So also look now and then while a game is in
+    ; front, or while the desktop is (a game to bring back) - not on every 400ms tick.
+    if Games.Count && A_TickCount - lastHomeCheck > 1500 {
+        fg := WinExist("A"), fgCls := ""
         try fgCls := WinGetClass("A")
-        if fgCls = "" || fgCls ~= "^(Progman|WorkerW)$" {
+        if Games.Has(fg) || fgCls = "" || fgCls ~= "^(Progman|WorkerW)$" {
             lastHomeCheck := A_TickCount
-            ReturnToGame()
+            GameWorkspaceSync()
         }
     }
     DetectHiddenWindows true
@@ -784,29 +922,113 @@ ShowHiddenBars(*) {
 
 ; --- Windows stay put: no minimizing -------------------------------------------------
 ; blockMinimize (config.json, default on): the taskbar is hidden, so a minimized window
-; has no way back on its own. SetWinEventHook undoes a minimize the instant it starts
-; (a game / fullscreen app snapping back on Alt+Tab, then re-fullscreening, would loop
-; the same way the old bar/GlazeWM redraw loop did - IsMinimizeAllowed excuses those).
+; has no way back on its own. Two layers:
+;   - Windows with a standard title bar lose WS_MINIMIZEBOX as they appear: the button
+;     greys out and the title-bar menu's Minimize with it, so a minimize never starts.
+;     Chrome/Electron/Store apps draw their own buttons and minimize themselves, so
+;     the style doesn't stop them - the next layer does.
+;   - SetWinEventHook undoes any minimize that does happen the moment it's done. apply
+;     turns off the minimize animation (Set-MinimizeAnimationPolicy), so that's a
+;     one-frame blink rather than the window shrinking away and growing back.
+; (A game / fullscreen app snapping back on Alt+Tab, then re-fullscreening, would loop
+; the same way the old bar/GlazeWM redraw loop did - IsMinimizeAllowed excuses those.)
 ; Super+M is the rescue key: it restores everything, allowed or not.
+
+; Drop the hooks and put the minimize buttons back on the way out (uninstall, or a
+; reload). A named function, and no value returned: a
+; non-zero return from an OnExit callback cancels the exit, and UnhookWinEvent answers
+; 1 - as a one-liner here it kept the script from ever exiting (so Reload never took).
+UnhookMinimize(*) {
+    global MinimizeHook, ShowHook
+    if MinimizeHook
+        DllCall("UnhookWinEvent", "ptr", MinimizeHook)
+    if ShowHook
+        DllCall("UnhookWinEvent", "ptr", ShowHook)
+    MinimizeHook := ShowHook := 0
+    RestoreMinimizeBoxes()
+}
 
 ; EVENT_SYSTEM_MINIMIZESTART callback (idObject/idChild/idEventThread/dwmsEventTime
 ; unused: only top-level windows, object 0, matter here).
 OnWindowMinimized(hWinEventHook, event, hwnd, idObject, idChild, *) {
     if idObject != 0 || idChild != 0 || !hwnd
         return
-    SetTimer(RestoreBlocked.Bind(hwnd), -50)   ; let the minimize finish before undoing it
+    SetTimer(RestoreBlocked.Bind(hwnd), -1)
 }
 
-RestoreBlocked(hwnd) {
+; Undo it as soon as the window is minimized (the event can arrive a moment before
+; that's finished: check again a few times rather than waiting a fixed while).
+RestoreBlocked(hwnd, tries := 0) {
     global BlockMinimize
     if !BlockMinimize
         return
     try {
-        if !DllCall("IsWindow", "ptr", hwnd) || !DllCall("IsIconic", "ptr", hwnd) || IsMinimizeAllowed(hwnd)
+        if !DllCall("IsWindow", "ptr", hwnd)
+            return
+        if !DllCall("IsIconic", "ptr", hwnd) {
+            if tries < 5
+                SetTimer(RestoreBlocked.Bind(hwnd, tries + 1), -10)
+            return
+        }
+        if IsMinimizeAllowed(hwnd)
             return
         WinRestore hwnd
         WinActivate hwnd
     }
+}
+
+; EVENT_OBJECT_SHOW callback: fires for every control too, so only top-level windows
+; go on (to a timer: the style check wants a moment and this callback must be quick).
+OnWindowShown(hWinEventHook, event, hwnd, idObject, idChild, *) {
+    if idObject != 0 || idChild != 0 || !hwnd
+        return
+    if DllCall("GetAncestor", "ptr", hwnd, "uint", 2, "ptr") != hwnd    ; GA_ROOT: top-level only
+        return
+    SetTimer(StripMinimizeBox.Bind(hwnd), -1)
+}
+
+; Take the minimize button off one window, unless it's allowed to minimize (games,
+; Playnite, dialogs, config "minimizeAllowed") or has no normal title bar to change.
+; The window keeps a property saying so, so a later instance of this script can put the
+; button back even after this one was force-stopped (apply restarts it that way).
+StripMinimizeBox(hwnd) {
+    global BlockMinimize
+    if !BlockMinimize
+        return
+    try {
+        style := WinGetStyle(hwnd)
+        if !(style & 0x20000) || (style & 0xC00000) != 0xC00000 || !(style & 0x80000)   ; WS_MINIMIZEBOX, WS_CAPTION, WS_SYSMENU
+            return
+        if IsMinimizeAllowed(hwnd)
+            return
+        WinSetStyle "-0x20000", hwnd
+        DllCall("SetPropW", "ptr", hwnd, "str", "winarchy.nomin", "ptr", 1)
+    }
+}
+
+; Windows already open when this script starts; one that lost its button earlier but may
+; minimize now (config "minimizeAllowed" changed, recognised as a game) gets it back.
+StripAllMinimizeBoxes() {
+    for hwnd in WinGetList() {
+        try {
+            if DllCall("GetPropW", "ptr", hwnd, "str", "winarchy.nomin", "ptr") && IsMinimizeAllowed(hwnd)
+                RestoreMinimizeBox(hwnd)
+            else
+                StripMinimizeBox(hwnd)
+        }
+    }
+}
+
+RestoreMinimizeBoxes(*) {
+    for hwnd in WinGetList() {
+        if DllCall("GetPropW", "ptr", hwnd, "str", "winarchy.nomin", "ptr")
+            RestoreMinimizeBox(hwnd)
+    }
+}
+
+RestoreMinimizeBox(hwnd) {
+    try WinSetStyle "+0x20000", hwnd
+    DllCall("RemovePropW", "ptr", hwnd, "str", "winarchy.nomin", "ptr")
 }
 
 ; Windows this script leaves free to minimize: tool/owned windows (dialogs, popups -
@@ -861,6 +1083,103 @@ RestoreAll(*) {
     if fg && DllCall("IsWindow", "ptr", fg)
         try WinActivate fg
     Osd(n ? "Restored " n " window" (n = 1 ? "" : "s") : "Nothing minimized")
+}
+
+; --- Games keep the foreground -----------------------------------------------------
+; A game lost the foreground: always logged (what took it is the one thing worth knowing
+; when a game keeps minimizing), and handed back unless you asked for the switch - a key,
+; a click or pad input just before it - or the new window is one that may cover a game
+; (the game's own windows, another game, UAC, Game Bar, Steam's overlay, Playnite, the
+; screensaver, config "minimizeAllowed"). Background programs starting up, GlazeWM
+; re-syncing its own focus, ... are what's left, and those are what minimized games.
+; Capped: a window that keeps taking it back wins after 4 tries in 20 s (for a minute),
+; rather than the two ping-ponging - the same kind of loop as the old bar/redraw one.
+
+UnhookForeground(*) {
+    global ForegroundHook
+    if ForegroundHook
+        DllCall("UnhookWinEvent", "ptr", ForegroundHook)
+    ForegroundHook := 0
+}
+
+; EVENT_SYSTEM_FOREGROUND callback: no work here, just remember and hand it on. The idle
+; time is read now, before anything else can happen: physical input only (the keyboard
+; and mouse hooks are installed), so GlazeWM's own synthetic Alt press doesn't count.
+OnForeground(hWinEventHook, event, hwnd, idObject, idChild, *) {
+    global LastFg
+    if idObject != 0 || !hwnd
+        return
+    prev := LastFg, LastFg := hwnd
+    if prev && prev != hwnd
+        SetTimer(GameFocusLost.Bind(prev, hwnd, A_TimeIdlePhysical), -1)
+}
+
+GameFocusLost(game, taker, idle) {
+    global Games, LastPad, GameParked
+    static tries := Map(), pausedUntil := Map()     ; game hwnd -> [ticks] / tick
+    if !Games.Has(game) || !DllCall("IsWindow", "ptr", game)
+        return
+    if GameParked.Has(game)                        ; you left its workspace: meant to go
+        return
+    try {
+        gamePid := WinGetPID(game)
+        DetectHiddenWindows true
+        exe := WinGetProcessName(taker), cls := WinGetClass(taker), title := WinGetTitle(taker)
+        takerPid := WinGetPID(taker)
+    } catch
+        return                                     ; the new window is already gone
+    if takerPid = gamePid || Games.Has(taker)
+        return
+    admin := IsElevated(gamePid)
+    ; An admin game hides your keys and clicks from this script (its hooks are blind while
+    ; that game is in front): the helper, which does see them, makes the call instead.
+    asked := (!admin && idle < 1000) || A_TickCount - LastPad < 1500
+    WmLog("game lost focus: " Games[game] " -> " exe " [" cls "] '" SubStr(title, 1, 60) "'"
+        . (admin ? " (admin game)" : ", " idle " ms after your last input"))
+    if asked || FocusMayCoverGame(taker, exe, cls)
+        return
+    if pausedUntil.Has(game) && A_TickCount < pausedUntil[game]
+        return
+    recent := []
+    for t in (tries.Has(game) ? tries[game] : [])
+        if A_TickCount - t < 20000
+            recent.Push(t)
+    if recent.Length >= 4 {
+        tries.Delete(game)
+        pausedUntil[game] := A_TickCount + 60000
+        WmLog("game focus: " exe " took it " recent.Length " times in 20 s; leaving it for a minute")
+        return
+    }
+    recent.Push(A_TickCount)
+    tries[game] := recent
+    SetTimer(GiveFocusBack.Bind(game, admin), -150)
+}
+
+; Windows allowed to come in front of a game without it being taken back.
+FocusMayCoverGame(hwnd, exe, cls) {
+    global SsActive, UacClass
+    if SsActive || (cls != "" && InStr(UacClass, cls))
+        return true
+    name := RegExReplace(exe, "i)\.exe$")
+    return name ~= "i)^(consent|GameBar|GameBarFTServer|GameBarPresenceWriter|gameoverlayui|gameoverlayui64|Playnite\.FullscreenApp|Playnite\.DesktopApp)$"
+        || GameNames().Has(name)
+        || MinimizeAllowedNames().Has(name)
+}
+
+GiveFocusBack(game, admin) {
+    global Games
+    if !DllCall("IsWindow", "ptr", game) || WinExist("A") = game
+        return
+    if admin {
+        if helper := GameHelper() {
+            PostMessage 0x5556, 3, game, , helper     ; restore + activate, unless you asked
+            WmLog("game focus: asked the admin helper to give it back to " Games[game])
+        } else
+            WmLog("game focus: " Games[game] " runs as administrator: run 'winarchy game-setup' once so it can be given back")
+        return
+    }
+    RestoreAndActivate(game)
+    WmLog("game focus: gave it back to " Games[game])
 }
 
 ; --- Games and fullscreen apps: stand back ------------------------------------------
@@ -949,8 +1268,8 @@ IsGame(hwnd) {
         return false
     Games[hwnd] := name
     info := GlazeWindowInfo(hwnd)          ; also used below, so read it just once
-    if info
-        GameHome[hwnd] := info.workspace
+    if home := HomeWorkspace(hwnd, info)   ; also when GlazeWM never managed it (apply rules)
+        GameHome[hwnd] := home
     admin := IsElevated(pid)
     WmLog("game: " name " (GlazeWM leaves it alone; the bar hides behind it)"
         . (admin ? "; runs as administrator" (GameHelper() ? "" : ": run 'winarchy game-setup' once so Super+W and the bar can close it") : ""))
@@ -1008,11 +1327,14 @@ ProcessNameByPid(pid) {
 
 ; Drops closed games (and their remembered home workspace), logging each.
 PruneGames() {
-    global Games, GameHome
+    global Games, GameHome, GameParked
     for hwnd, name in Games.Clone() {
         if !DllCall("IsWindow", "ptr", hwnd) {
             Games.Delete(hwnd)
-            GameHome.Delete(hwnd)
+            if GameHome.Has(hwnd)                     ; not set while its workspace was unknown
+                GameHome.Delete(hwnd)
+            if GameParked.Has(hwnd)
+                GameParked.Delete(hwnd)
             WmLog("game closed: " name)
             SetTimer WriteIndicators, -10
         }
@@ -1059,13 +1381,19 @@ GameTitle(hwnd) {
 }
 
 ; Bar game icon, click: back to the game (the taskbar is hidden, and GlazeWM ignores it).
+; A game parked on a workspace you left: go to that workspace, which brings it back.
 FocusGame() {
-    if hwnd := GameWindow()
-        RestoreAndActivate(hwnd)
+    global GameHome, GameParked
+    if !(hwnd := GameWindow())
+        return
+    if GameParked.Has(hwnd) && GameHome.Has(hwnd) {
+        Glaze("focus --workspace " GameHome[hwnd])
+        SetTimer GameWorkspaceSync, -400
+    } else
+        GameShow(hwnd, true)
 }
 
-; Un-minimize (if needed) and activate a game window; shared by the bar's game icon
-; and ReturnToGame (switching back to the workspace a game was ignored from).
+; Un-minimize (if needed) and activate a game window (GameShow, GiveFocusBack).
 RestoreAndActivate(hwnd) {
     DetectHiddenWindows true
     try {
@@ -1075,29 +1403,165 @@ RestoreAndActivate(hwnd) {
     }
 }
 
-; A game that isn't in front, on the workspace you just switched back to: GlazeWM
-; ignored it, so it has nothing of its own to focus there - bring the game itself back,
-; the same as the bar's game icon (FocusGame) does.
-ReturnToGame() {
-    global GameHome
-    if !GameHome.Count
-        return
-    json := GlazeQuery("workspaces")
-    if !json
-        return
-    for hwnd, ws in GameHome.Clone() {
-        if !DllCall("IsWindow", "ptr", hwnd) {
-            GameHome.Delete(hwnd)
-            continue
-        }
-        ; "isDisplayed" is a workspace-only field (never a window/split-container one),
-        ; so the first one found after this workspace's id is unambiguously its own.
-        if RegExMatch(json, '"type":"workspace","id":"' ws '"[\s\S]*?"isDisplayed":(true|false)', &m) && m[1] = "true" {
-            if WinExist("A") != hwnd
-                RestoreAndActivate(hwnd)
-            return
-        }
+; --- Games stay on their workspace -------------------------------------------------
+; GlazeWM ignores games (tiling one knocks it out of fullscreen), and so it never hides
+; one when you switch away from its workspace: the game stayed in front and kept the
+; focus. So this does what GlazeWM would have: a game whose workspace is no longer shown
+; is minimized ("parked"), and GlazeWM's focused window gets the foreground; showing that
+; workspace again brings the game back in front. Admin games go through the game helper.
+; A parked game you bring back yourself (Alt+Tab) takes you to its workspace instead.
+
+; The name of the workspace a game belongs to: the one GlazeWM had it in (info from
+; GlazeWindowInfo), else the one shown where the window is (games the apply-time rules
+; ignore were never managed at all). "" when neither can be told (window minimized).
+HomeWorkspace(hwnd, info := 0) {
+    list := WorkspaceList(GlazeQuery("workspaces"))
+    if info
+        for w in list
+            if w.id = info.workspace
+                return w.name
+    try {
+        PerMonitorDpi()
+        if WinGetMinMax(hwnd) = -1
+            return ""
+        WinGetPos &x, &y, &ww, &hh, hwnd
+        cx := x + ww // 2, cy := y + hh // 2
+        for w in list
+            if w.displayed && cx >= w.x && cx < w.x + w.w && cy >= w.y && cy < w.y + w.h
+                return w.name
     }
+    return ""
+}
+
+; [{id, name, displayed, x, y, w, h}] from `glazewm query workspaces`. A workspace's own
+; fields follow its children: "isDisplayed" is workspace-only (a window has
+; "displayState"), so the first one after a workspace's id is that workspace's.
+WorkspaceList(json) {
+    list := [], p := 1
+    while p := RegExMatch(json, '"type":"workspace","id":"([^"]+)","name":"([^"]+)"[\s\S]*?"isDisplayed":(true|false),"width":(-?\d+),"height":(-?\d+),"x":(-?\d+),"y":(-?\d+)', &m, p) {
+        list.Push({id: m[1], name: m[2], displayed: m[3] = "true"
+            , w: Integer(m[4]), h: Integer(m[5]), x: Integer(m[6]), y: Integer(m[7])})
+        p += m.Len
+    }
+    return list
+}
+
+UnhookWorkspace(*) {
+    global WorkspaceHooks
+    for h in WorkspaceHooks
+        if h
+            DllCall("UnhookWinEvent", "ptr", h)
+    WorkspaceHooks := []
+}
+
+; Focus changed or GlazeWM (un)cloaked a window: maybe a workspace switch. Nothing to do
+; unless a game is open; a burst of events (a switch cloaks every window) is one check.
+OnWorkspaceEvent(hWinEventHook, event, hwnd, idObject, idChild, *) {
+    global Games
+    if idObject = 0 && Games.Count
+        SetTimer GameWorkspaceSync, -150
+}
+
+GameWorkspaceSync() {
+    global Games, GameHome, GameParked
+    static running := false
+    if running {                                  ; a query is in flight: look again after
+        SetTimer GameWorkspaceSync, -300
+        return
+    }
+    PruneGames()
+    if !Games.Count
+        return
+    running := true
+    try {
+        list := WorkspaceList(GlazeQuery("workspaces"))
+        shown := Map()
+        for w in list
+            shown[w.name] := w.displayed
+        fg := WinExist("A"), fgCls := ""
+        try fgCls := WinGetClass("A")
+        desktop := fgCls = "" || fgCls ~= "^(Progman|WorkerW)$"
+        parked := false
+        DetectHiddenWindows true
+        for hwnd, name in (list.Length ? Games.Clone() : Map()) {
+            if !DllCall("IsWindow", "ptr", hwnd)
+                continue
+            minimized := DllCall("IsIconic", "ptr", hwnd)
+            if !GameHome.Has(hwnd) {                  ; not known yet (it was minimized)
+                if !minimized && (home := HomeWorkspace(hwnd))
+                    GameHome[hwnd] := home
+                continue
+            }
+            ws := GameHome[hwnd]
+            if !shown.Has(ws)                         ; that workspace is gone (config changed)
+                continue
+            if !shown[ws] {
+                if !GameParked.Has(hwnd) {
+                    ; Left its workspace. Also when it minimized itself on losing the focus:
+                    ; it is still parked, so it comes back with its workspace.
+                    GameParked[hwnd] := A_TickCount
+                    if !minimized {
+                        GameShow(hwnd, false)
+                        parked := true
+                    }
+                    WmLog("game parked: " name " (left workspace " ws ")")
+                } else if !minimized && A_TickCount - GameParked[hwnd] > 1500 {
+                    ; Brought back by hand (Alt+Tab, a click): follow it to its workspace.
+                    GameParked.Delete(hwnd)
+                    WmLog("game brought back: " name " -> workspace " ws)
+                    Glaze("focus --workspace " ws)
+                    SetTimer GameShow.Bind(hwnd, true), -300
+                }
+            } else if GameParked.Has(hwnd) {
+                GameParked.Delete(hwnd)
+                GameShow(hwnd, true)
+                WmLog("game restored: " name " (workspace " ws " shown again)")
+            } else if desktop && fg != hwnd {
+                ; Its workspace is shown and nothing else is in front there: GlazeWM has
+                ; nothing of its own to focus on it, so the game gets it.
+                GameShow(hwnd, true)
+                desktop := false
+            }
+        }
+        if parked
+            SetTimer FocusGlazeWindow, -250
+    }
+    running := false
+}
+
+; After a game is parked, Windows hands the foreground to whatever is next in z-order
+; (maybe a cloaked window on another workspace): give it to GlazeWM's focused window, or
+; the desktop when the workspace is empty.
+FocusGlazeWindow() {
+    json := GlazeQuery("focused")
+    if RegExMatch(json, '"handle":(\d+)', &m) && DllCall("IsWindow", "ptr", Integer(m[1])) {
+        try WinActivate Integer(m[1])
+    } else
+        try WinActivate "ahk_class Progman"
+}
+
+; Minimize (show = false) or restore and activate a game - through the admin game helper
+; when the game runs as administrator (this script can't touch its windows then).
+GameShow(hwnd, show) {
+    static warned := false
+    if !DllCall("IsWindow", "ptr", hwnd)
+        return
+    try pid := WinGetPID(hwnd)
+    catch
+        return
+    if IsElevated(pid) {
+        if helper := GameHelper()
+            PostMessage 0x5556, show ? 5 : 4, hwnd, , helper
+        else if !warned {
+            warned := true
+            WmLog("game workspaces: " GameTitle(hwnd) " runs as administrator: run 'winarchy game-setup' once so it can be hidden and brought back")
+        }
+        return
+    }
+    if show
+        RestoreAndActivate(hwnd)
+    else
+        try WinMinimize hwnd
 }
 
 ; Super + Ctrl + G: the focused window's process wasn't caught by IsGame's checks (not
@@ -1121,10 +1585,11 @@ MarkAsGame() {
     }
     if !Games.Has(hwnd) {
         Games[hwnd] := name
-        if info := GlazeWindowInfo(hwnd) {
-            GameHome[hwnd] := info.workspace
+        info := GlazeWindowInfo(hwnd)
+        if home := HomeWorkspace(hwnd, info)
+            GameHome[hwnd] := home
+        if info
             try Run('"' GlazeCli '" command --id ' info.id ' ignore', , "Hide")
-        }
         WmLog("game: " name " (marked by hand, Super+Ctrl+G)")
         SetTimer WriteIndicators, -10
     }
@@ -1333,12 +1798,21 @@ LWin up::Send "{Blind}{vkE8}{LWin up}"
 ; Win+Space and its Ctrl/Shift variants are Windows' keyboard-layout switch.
 ; Omarchy uses them, so they are only taken over when config allows it
 ; (the installer asks when more than one layout / an IME is installed).
+; Winarchy swaps Omarchy's pair: Super+Space is the menu, Super+Alt+Space the launcher.
+; Left to Windows, Super+Space keeps switching layouts and the menu stays on
+; Super+Alt+Space, so it is always one key away (the launcher is still Alt+Space).
 if Env("takeOverWinSpace", "1") = "1" {
-    Hotkey "#Space", (*) => Send(Env("flowHotkey", "!{Space}"))   ; app launcher (Flow Launcher)
+    Hotkey "#Space", (*) => OpenMenu("root")                       ; Omarchy menu
+    Hotkey "#!Space", (*) => Send(Env("flowHotkey", "!{Space}"))   ; app launcher (Flow Launcher)
     Hotkey "#^Space", (*) => OpenMenu("background")                ; background picker
     Hotkey "#^+Space", (*) => OpenMenu("theme")                    ; theme picker
     Hotkey "#+Space", (*) => ToggleBar()                           ; top bar
-}
+} else
+    Hotkey "#!Space", (*) => OpenMenu("root")                      ; Omarchy menu
+
+; Herdr (Omarchy's terminal workspace). Windows keeps Super+Ctrl+Return for Narrator,
+; so winarchy apply switches that shortcut off (Set-NarratorShortcut) for this to win.
+#^Enter::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" herdr')
 
 ; Nothing minimizes (blockMinimize): Windows' own minimize-everything keys are retaken
 ; too, or a window minimized before the hook could catch it (or one of the exceptions)
@@ -1351,7 +1825,6 @@ if BlockMinimize {
 }
 
 ; Omarchy menus (Zebar menu widget)
-#!Space::OpenMenu("root")             ; Omarchy menu
 #Escape::OpenMenu("system")           ; lock / suspend / restart / shutdown
 #k::OpenMenu("keys")                  ; keybindings
 #^c::OpenMenu("capture")              ; capture (also the way in without a PrtScn key)
@@ -1586,6 +2059,52 @@ Glaze(cmd) {
     try Run('"' GlazeCli '" command ' cmd, , "Hide")
 }
 
+; A GlazeWM key the admin game helper caught on our behalf. Windows stops GlazeWM's
+; keyboard hook from seeing anything while an elevated window is in front, and the winarchy
+; animations build has no uiAccess manifest to lift that (an unsigned build outside Program
+; Files cannot have one), so while an admin game was up nothing switched workspaces at all.
+; The helper is elevated, so it must not run the CLI - that lives under %USERPROFILE%,
+; which the user can write to - and sends just an action code for this normal process to
+; carry out. Any process here could post 0x5557, and the most that buys is a workspace
+; switch it could have had by running the CLI itself, so the code need only be a known one.
+OnRescuedKey(wParam, *) {
+    static dirs := ["left", "right", "up", "down"]
+        , cycles := ["--next-active-workspace", "--prev-active-workspace", "--recent-workspace"]
+    kind := wParam // 100, arg := Mod(wParam, 100)
+    name := arg                           ; the workspaces are named 1..10 (Super+0 = "10")
+    ws := arg >= 1 && arg <= 10, dir := arg >= 1 && arg <= 4
+    cmds := []
+    if kind = 1 && ws
+        cmds.Push("focus --workspace " name)
+    else if kind = 2 && ws                ; take the window along and follow it
+        cmds.Push("move --workspace " name, "focus --workspace " name)
+    else if kind = 3 && ws                ; send the window over, stay put
+        cmds.Push("move --workspace " name)
+    else if kind = 4 && dir
+        cmds.Push("focus --direction " dirs[arg])
+    else if kind = 5 && dir
+        cmds.Push("move --direction " dirs[arg])
+    else if kind = 6 && dir
+        cmds.Push("move-workspace --direction " dirs[arg])
+    else if kind = 7 && arg >= 1 && arg <= 3
+        cmds.Push("focus " cycles[arg])
+    else if kind = 8 && arg = 1
+        cmds.Push("focus --workspace scratch")
+    else if kind = 8 && arg = 2
+        cmds.Push("move --workspace scratch")
+    else if kind = 8 && arg = 3
+        cmds.Push("toggle-fullscreen --maximized=false")
+    else if kind = 8 && arg = 4
+        cmds.Push("toggle-fullscreen --maximized")
+    else
+        return 1                          ; not one of ours: ignore it quietly
+    for c in cmds
+        Glaze(c)
+    WmLog("admin window in front: " cmds[1] " (relayed by the game helper)")
+    SetTimer GameWorkspaceSync, -300      ; an admin game on the workspace just left
+    return 1
+}
+
 ; GlazeWM numbers monitors left to right, then top to bottom.
 FocusMonitor(step) {
     PerMonitorDpi()
@@ -1622,6 +2141,82 @@ WriteIndicators() {
         f.Close()
         last := json
     }
+}
+
+; DWM hides a UWP window (suspended, on another virtual desktop, or a leftover
+; ApplicationFrameHost shell) without unmapping it, so IsRestorableWindow alone still sees
+; it - this is why Settings shows up twice (ApplicationFrameHost.exe + SystemSettings.exe).
+IsCloaked(hwnd) {
+    if !DllCall("dwmapi\DwmGetWindowAttribute", "ptr", hwnd, "int", 14, "int*", &cloaked := 0, "int", 4)
+        return !!cloaked
+    return false
+}
+
+; windows.json feeds the bar's chevron flyout: one entry per running app (its most
+; recently active window), collapsed from every restorable top-level window. Icons are
+; extracted lazily by a one-shot PowerShell verb (winicon), cached forever under
+; Pack\icons\<key>.png, so this loop only ever asks for a given exe's icon once.
+WriteWindows() {
+    global Pack, BarTitle, MenuTitle, CalendarTitle
+    static last := "", requested := 0
+    if !requested
+        requested := Map()
+    apps := Map()          ; exe (lower) -> {exe, icon, title, minimized, focused, hwnd}
+    order := []
+    fg := WinExist("A")
+    for hwnd in WinGetList() {
+        try {
+            if !IsRestorableWindow(hwnd) || IsCloaked(hwnd)
+                continue
+            title := WinGetTitle(hwnd)
+            if !title || title = BarTitle || title = MenuTitle || title = CalendarTitle
+                continue
+            exe := WinGetProcessName(hwnd)
+            if !exe || exe ~= "i)^(glazewm|zebar)\.exe$"
+                continue
+            key := StrLower(exe)
+            focused := (hwnd = fg)
+            ; WinGetList is z-order (topmost first): keep the first window of an exe seen,
+            ; unless a later one turns out to be the focused one.
+            if apps.Has(key) {
+                if focused
+                    apps[key].title := title, apps[key].hwnd := hwnd, apps[key].focused := true
+                continue
+            }
+            iconKey := RegExReplace(RegExReplace(exe, "i)\.exe$"), "[^\w.-]", "_")
+            entry := { exe: exe, icon: iconKey, title: title, hwnd: hwnd,
+                focused: focused, minimized: !!DllCall("IsIconic", "ptr", hwnd) }
+            apps[key] := entry
+            order.Push(entry)
+            iconPath := Pack "\icons\" iconKey ".png"
+            ; (not while a game is in front: see Quiet - asked again on a later tick)
+            if !requested.Has(iconKey) && !FileExist(iconPath) && !Busy() {
+                requested[iconKey] := true
+                try OmarchyCmd("winicon", WinGetProcessPath(hwnd), iconKey)
+            }
+        }
+    }
+    parts := []
+    for entry in order
+        parts.Push('{"exe":"' JsonEscape(entry.exe) '","icon":"' JsonEscape(entry.icon)
+            . '","title":"' JsonEscape(entry.title) '","minimized":' (entry.minimized ? "true" : "false")
+            . ',"focused":' (entry.focused ? "true" : "false") ',"hwnd":' entry.hwnd '}')
+    json := '{"windows":[' Join(parts, ",") ']}'
+    if json = last
+        return
+    try {
+        f := FileOpen(Pack "\windows.json", "w", "UTF-8-RAW")
+        f.Write(json)
+        f.Close()
+        last := json
+    }
+}
+
+Join(arr, sep) {
+    out := ""
+    for i, v in arr
+        out .= (i = 1 ? "" : sep) v
+    return out
 }
 
 JsonEscape(s) {
@@ -1719,7 +2314,7 @@ GlazeWindowInfo(hwnd) {
 ; monitor. So catch the window as it is created and re-home it to the workspace
 ; displayed on the monitor under the mouse.
 ;
-; The catch: cursor_jump (generated config, trigger window_focus) warps the cursor
+; The catch: cursor_jump (off by default now; trigger window_focus if re-enabled) warps the cursor
 ; onto every newly focused window, so by the time this runs the cursor has already
 ; been teleported to the wrong monitor and reading it would always answer "here".
 ; HoverSample therefore keeps the last cursor position from *before* the window
@@ -1739,6 +2334,174 @@ HoverSample() {
     HoverPoint := {x: x, y: y}
 }
 
+; --- The monitor you are working on --------------------------------------------
+; Hyprland opens things on the focused monitor, and its follow_mouse keeps that the one
+; under the pointer. Here the pointer stays put when keyboard focus changes monitor (a
+; workspace key, Super+arrows: GlazeWM's cursor_jump is off, so the cursor never jerks),
+; so "under the mouse" alone would put a new window, the menu or an OSD on the screen you
+; just left. Whichever moved last wins: the pointer (PointerWatch) or keyboard focus
+; (KeyFocusCheck, only counted while the pointer was still, so a click or focus following
+; the mouse never counts as the keyboard).
+
+PointerWatch() {
+    global PointerMovedAt
+    static lastX := "", lastY := ""
+    CoordMode "Mouse", "Screen"
+    MouseGetPos &x, &y
+    if x != lastX || y != lastY
+        PointerMovedAt := A_TickCount
+    lastX := x, lastY := y
+}
+
+OnFocusMoved(hWinEventHook, event, hwnd, idObject, idChild, *) {
+    if idObject = 0
+        SetTimer KeyFocusCheck, -200
+}
+
+KeyFocusCheck() {
+    global PointerMovedAt, KeyMonitor, KeyMonitorAt, HoverHold
+    ; The pointer moved just now (a click, focus following it), or a new window is
+    ; taking focus where it appeared - that one is being placed, not chosen.
+    if A_TickCount - PointerMovedAt < 600 || HoverHold > 0
+        return
+    PerMonitorDpi()
+    mon := 0
+    try {
+        fg := WinExist("A")
+        if WinGetClass(fg) ~= "^(Progman|WorkerW)$"
+            mon := GlazeFocusedMonitor()     ; an empty workspace: GlazeWM focuses the desktop
+        else if FocusFollowEligible(fg)
+            mon := MonitorOfWindow(fg)
+    }
+    if mon
+        KeyMonitor := mon, KeyMonitorAt := A_TickCount
+}
+
+; Monitor of GlazeWM's focused window or (empty) workspace, 0 if unknown.
+GlazeFocusedMonitor() {
+    if RegExMatch(GlazeQuery("focused"), '"focused":\{[\s\S]*?"width":(-?\d+),"height":(-?\d+),"x":(-?\d+),"y":(-?\d+)', &m)
+        return MonitorFromPoint(Integer(m[3]) + Integer(m[1]) // 2, Integer(m[4]) + Integer(m[2]) // 2)
+    return 0
+}
+
+WorkMonitor() {
+    global PointerMovedAt, KeyMonitor, KeyMonitorAt
+    if KeyMonitorAt > PointerMovedAt && KeyMonitor >= 1 && KeyMonitor <= MonitorGetCount()
+        return KeyMonitor
+    PerMonitorDpi()
+    return MonitorUnderMouse()
+}
+
+UnhookFocusMove(*) {
+    global FocusMoveHook
+    if FocusMoveHook
+        DllCall("UnhookWinEvent", "ptr", FocusMoveHook)
+    FocusMoveHook := 0
+}
+
+; --- Focus follows cursor (fallback for GlazeWM's own) --------------------------
+; GlazeWM has focus_follows_cursor, but it stops following once the pointer touches a
+; window it doesn't manage (glzr-io/glazewm#1326) - and winarchy tells it to ignore the
+; bar, Flow Launcher and the pickers, so the strip along the top of every screen is
+; exactly that; its cursor_jump warps can re-steal focus too (#760). Measured on this
+; PC: the pointer crossed five windows over 5.5 s without focus moving once. Clicking a
+; managed window is what unsticks GlazeWM, so that is what this does - when the pointer
+; genuinely moves and then settles over another ordinary window, focus it.
+FocusFollowWatch() {
+    static lastX := -1, lastY := -1, pending := 0, pendingAt := 0
+    ; A game or fullscreen window owns its own focus; Super is held while dragging or
+    ; resizing, where the pointer is carrying a window rather than choosing one.
+    if Busy() || GetKeyState("LWin", "P") {
+        pending := 0
+        return
+    }
+    PerMonitorDpi()
+    CoordMode "Mouse", "Screen"
+    MouseGetPos &x, &y, &hwnd
+    moved := (x != lastX || y != lastY)
+    lastX := x, lastY := y
+    ; Focus may only follow real movement: never take focus off the window being typed
+    ; in because the pointer happens to be resting somewhere else.
+    if !moved || !hwnd {
+        pending := 0
+        return
+    }
+    hwnd := DllCall("GetAncestor", "ptr", hwnd, "uint", 2, "ptr")      ; GA_ROOT
+    if !hwnd || hwnd = WinExist("A") || !FocusFollowEligible(hwnd) {
+        pending := 0
+        return
+    }
+    ; Settle first, so sweeping the pointer across the screen focuses the window it
+    ; comes to rest over, not every window on the way.
+    if hwnd != pending {
+        pending := hwnd, pendingAt := A_TickCount
+        return
+    }
+    if A_TickCount - pendingAt < 150
+        return
+    pending := 0
+    try WinActivate "ahk_id " hwnd
+}
+
+; --- Auto-tiling watcher guard -------------------------------------------------
+; lib/autotile-watch.ps1 (Hyprland-style dwindle) is started by GlazeWM's
+; startup_commands, but it has been seen to vanish while GlazeWM itself kept running -
+; and a dead watcher means new windows quietly pile up side by side again, with nothing
+; on screen to say so. Watched like the bar is. The watcher takes a named mutex, so
+; racing GlazeWM's own start can't leave two of them running.
+AutoTileGuard() {
+    static gone := 0, starts := []
+    if !GlazeWmRunning()                     ; nothing to subscribe to yet
+        return
+    if AutoTileRunning() {
+        gone := 0
+        return
+    }
+    if !gone {                               ; confirm on a second look before restarting
+        gone := A_TickCount
+        return
+    }
+    now := A_TickCount
+    recent := []
+    for s in starts
+        if now - s < 300000
+            recent.Push(s)
+    starts := recent
+    gone := 0
+    if starts.Length >= 5                    ; dying in a loop: stop fighting it
+        return
+    starts.Push(now)
+    Run('"' Env("pwsh", "pwsh.exe") '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "' Env("code") '\lib\autotile-watch.ps1" -Cli "' GlazeCli '"', , "Hide")
+}
+
+AutoTileRunning() {
+    try {
+        for proc in ComObjGet("winmgmts:").ExecQuery("SELECT CommandLine FROM Win32_Process WHERE Name='pwsh.exe'")
+            if InStr(proc.CommandLine, "autotile-watch.ps1")
+                return true
+    }
+    return false
+}
+
+; Windows the pointer may hand focus to: ordinary, restorable, not cloaked or minimized,
+; and not one GlazeWM ignores (hovering the bar or a picker must not move focus - and
+; touching them is what breaks GlazeWM's own following in the first place).
+FocusFollowEligible(hwnd) {
+    try {
+        if !IsRestorableWindow(hwnd) || IsCloaked(hwnd) || WinGetMinMax(hwnd) = -1
+            return false
+        exe := WinGetProcessName(hwnd)
+        if !exe || exe ~= "i)^(zebar|glazewm|Flow\.Launcher|PickerHost|consent)\.exe$"
+            return false
+        if WinGetClass(hwnd) ~= "^(Progman|WorkerW|Shell_TrayWnd|Shell_SecondaryTrayWnd)$"
+            return false
+        if IsGame(hwnd) || IsFullscreenWindow(hwnd)
+            return false
+        return true
+    }
+    return false
+}
+
 HoverRelease() {
     global HoverHold
     if HoverHold > 0
@@ -1751,45 +2514,62 @@ OnShellHook(wParam, lParam, *) {
         return
     HoverHold++
     HoverHoldUntil := A_TickCount + 2500
-    SetTimer HoverPlaceWindow.Bind(lParam, 1), -120
+    SetTimer HoverPlaceWindow.Bind(lParam, 1, HoverTarget()), -120
 }
 
-; Moves a just-created window to the workspace on the hovered monitor. Runs off a
-; timer (not the hook) so nothing blocks the shell, and retries while GlazeWM has yet
-; to take the window under management - the shell hook fires before it does, so the
+; Where a new window belongs, fixed as it appears: the hovered point, or - when keyboard
+; focus moved to another monitor since the pointer last moved - the middle of that one.
+HoverTarget() {
+    global HoverPoint, KeyMonitor, KeyMonitorAt, PointerMovedAt
+    if KeyMonitorAt > PointerMovedAt && KeyMonitor >= 1 && KeyMonitor <= MonitorGetCount() {
+        MonitorGet KeyMonitor, &l, &t, &r, &b
+        return {x: (l + r) // 2, y: (t + b) // 2}
+    }
+    return {x: HoverPoint.x, y: HoverPoint.y}
+}
+
+; Moves a just-created window to the workspace on the monitor at `pt` (HoverTarget). Runs
+; off a timer (not the hook) so nothing blocks the shell, and retries while GlazeWM has
+; yet to take the window under management - the shell hook fires before it does, so the
 ; first GlazeWindowInfo always misses.
-HoverPlaceWindow(hwnd, attempt) {
-    global HoverPlace, HoverPoint, GlazeCli
+HoverPlaceWindow(hwnd, attempt, pt) {
+    global HoverPlace, GlazeCli
     if !HoverPlace || MonitorGetCount() < 2 {
         HoverRelease()
         return
     }
     PerMonitorDpi()
+    again := false                           ; too early to tell: look again in a moment
     try {
         if !DllCall("IsWindow", "ptr", hwnd)
             throw Error("gone")
+        if !(WinGetStyle(hwnd) & 0x10000000) {   ; WS_VISIBLE: the hook can beat the first paint
+            again := true
+            throw Error("not shown yet")
+        }
         ; Owned windows and tool windows keep their parent's monitor: a Save/Print
         ; dialog belongs next to the window that opened it, not under the mouse.
         if !IsRestorableWindow(hwnd) || IsGame(hwnd) || IsFullscreenWindow(hwnd)
             throw Error("skip")
-        target := MonitorFromPoint(HoverPoint.x, HoverPoint.y)
+        target := MonitorFromPoint(pt.x, pt.y)
         if !target || target = MonitorOfWindow(hwnd)
             throw Error("already there")     ; no pointless move (and no move animation)
-    } catch {
-        HoverRelease()
-        return
-    }
-    if !(info := GlazeWindowInfo(hwnd)) {
-        if attempt < 8 {                     ; ~1.3 s, then give up (GlazeWM ignores it, or is gone)
-            SetTimer HoverPlaceWindow.Bind(hwnd, attempt + 1), -150
-            return
+        ; GlazeWM takes the window under management a moment after it appears, so the
+        ; first look always misses; one that it ignores never turns up at all.
+        if !(info := GlazeWindowInfo(hwnd)) {
+            again := true
+            throw Error("not managed yet")
         }
-        HoverRelease()
+    } catch {
+        if again && attempt < 8              ; ~1.3 s, then give up
+            SetTimer HoverPlaceWindow.Bind(hwnd, attempt + 1, pt), -150
+        else
+            HoverRelease()
         return
     }
     try Run('"' Env("pwsh", "pwsh.exe") '" -NoProfile -NonInteractive -ExecutionPolicy Bypass'
         . ' -WindowStyle Hidden -File "' Env("code") '\lib\drop.ps1" -Id ' info.id
-        . ' -X ' HoverPoint.x ' -Y ' HoverPoint.y ' -Cli "' GlazeCli '" -WorkspaceOnly', , "Hide")
-    try WmLog("opened on the hovered monitor: " WindowProcessName(hwnd))
+        . ' -X ' pt.x ' -Y ' pt.y ' -Cli "' GlazeCli '" -WorkspaceOnly', , "Hide")
+    try WmLog("opened on the working monitor: " WindowProcessName(hwnd))
     HoverRelease()
 }

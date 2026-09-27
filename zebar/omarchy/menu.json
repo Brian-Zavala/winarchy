@@ -2,149 +2,703 @@
   "root": {
     "title": "Go",
     "items": [
-      { "label": "Apps", "icon": "", "route": "apps" },
-      { "label": "Learn", "icon": "", "route": "learn" },
-      { "label": "Trigger", "icon": "", "route": "trigger" },
-      { "label": "Style", "icon": "", "route": "style" },
-      { "label": "Setup", "icon": "", "route": "setup" },
-      { "label": "Update", "icon": "", "route": "update" },
-      { "label": "About", "icon": "", "action": ["about"] },
-      { "label": "System", "icon": "", "route": "system" }
+      {
+        "label": "Apps",
+        "icon": "",
+        "route": "apps"
+      },
+      {
+        "label": "Learn",
+        "icon": "",
+        "route": "learn"
+      },
+      {
+        "label": "Trigger",
+        "icon": "",
+        "route": "trigger"
+      },
+      {
+        "label": "Style",
+        "icon": "",
+        "route": "style"
+      },
+      {
+        "label": "Setup",
+        "icon": "",
+        "route": "setup"
+      },
+      {
+        "label": "Install",
+        "icon": "󰉉",
+        "route": "install"
+      },
+      {
+        "label": "Remove",
+        "icon": "󰭌",
+        "route": "remove"
+      },
+      {
+        "label": "Update",
+        "icon": "",
+        "route": "update"
+      },
+      {
+        "label": "About",
+        "icon": "",
+        "action": [
+          "about"
+        ]
+      },
+      {
+        "label": "System",
+        "icon": "",
+        "route": "system"
+      }
     ]
   },
   "learn": {
     "title": "Learn",
     "items": [
-      { "label": "Keybindings", "icon": "", "route": "keys" },
-      { "label": "Omarchy", "icon": "", "action": ["url", "https://omarchy.org/manual/"] },
-      { "label": "GlazeWM", "icon": "", "action": ["url", "https://github.com/glzr-io/glazewm#readme"] },
-      { "label": "Zebar", "icon": "", "action": ["url", "https://github.com/glzr-io/zebar#readme"] },
-      { "label": "Neovim", "icon": "", "action": ["url", "https://www.lazyvim.org/keymaps"] },
-      { "label": "PowerShell", "icon": "", "action": ["url", "https://learn.microsoft.com/powershell/"] }
+      {
+        "label": "Keybindings",
+        "icon": "",
+        "route": "keys"
+      },
+      {
+        "label": "Herdr keys",
+        "icon": "",
+        "route": "herdr-keys"
+      },
+      {
+        "label": "Omarchy",
+        "icon": "",
+        "action": [
+          "url",
+          "https://omarchy.org/manual/"
+        ]
+      },
+      {
+        "label": "GlazeWM",
+        "icon": "",
+        "action": [
+          "url",
+          "https://github.com/glzr-io/glazewm#readme"
+        ]
+      },
+      {
+        "label": "Zebar",
+        "icon": "",
+        "action": [
+          "url",
+          "https://github.com/glzr-io/zebar#readme"
+        ]
+      },
+      {
+        "label": "Neovim",
+        "icon": "",
+        "action": [
+          "url",
+          "https://www.lazyvim.org/keymaps"
+        ]
+      },
+      {
+        "label": "PowerShell",
+        "icon": "",
+        "action": [
+          "url",
+          "https://learn.microsoft.com/powershell/"
+        ]
+      }
     ]
   },
   "trigger": {
     "title": "Trigger",
     "items": [
-      { "label": "Capture", "icon": "", "route": "capture" },
-      { "label": "Emoji", "icon": "", "action": ["send", "#{vkBE}"] },
-      { "label": "Toggle", "icon": "", "route": "toggle" },
-      { "label": "Calculator", "icon": "", "action": ["run", "calc.exe"] },
-      { "label": "Activity", "icon": "", "action": ["activity"] },
-      { "label": "Task Manager", "icon": "", "action": ["run", "taskmgr.exe"] },
-      { "label": "Clipboard", "icon": "", "action": ["send", "#v"] },
-      { "label": "Weather", "icon": "", "action": ["wm", "weather"] }
+      {
+        "label": "Capture",
+        "icon": "",
+        "route": "capture"
+      },
+      {
+        "label": "Emoji",
+        "icon": "",
+        "action": [
+          "send",
+          "#{vkBE}"
+        ]
+      },
+      {
+        "label": "Toggle",
+        "icon": "",
+        "route": "toggle"
+      },
+      {
+        "label": "Calculator",
+        "icon": "",
+        "action": [
+          "run",
+          "calc.exe"
+        ]
+      },
+      {
+        "label": "Activity",
+        "icon": "",
+        "action": [
+          "activity"
+        ]
+      },
+      {
+        "label": "Agent",
+        "icon": "󰚩",
+        "action": [
+          "agent"
+        ]
+      },
+      {
+        "label": "Herdr",
+        "icon": "",
+        "action": [
+          "herdr"
+        ]
+      },
+      {
+        "label": "Task Manager",
+        "icon": "",
+        "action": [
+          "run",
+          "taskmgr.exe"
+        ]
+      },
+      {
+        "label": "Clipboard",
+        "icon": "",
+        "action": [
+          "send",
+          "#v"
+        ]
+      },
+      {
+        "label": "Weather",
+        "icon": "",
+        "action": [
+          "wm",
+          "weather"
+        ]
+      }
     ]
   },
   "capture": {
     "title": "Capture",
     "items": [
-      { "label": "Screenshot", "icon": "", "action": ["send", "#+s"] },
-      { "label": "Screenrecord", "icon": "", "action": ["send", "#+r"] },
-      { "label": "Text", "icon": "", "action": ["wm", "ocr"] },
-      { "label": "Color", "icon": "", "action": ["wm", "colorpicker"] }
+      {
+        "label": "Screenshot",
+        "icon": "",
+        "action": [
+          "send",
+          "#+s"
+        ]
+      },
+      {
+        "label": "Screenrecord",
+        "icon": "",
+        "action": [
+          "send",
+          "#+r"
+        ]
+      },
+      {
+        "label": "Text",
+        "icon": "",
+        "action": [
+          "wm",
+          "ocr"
+        ]
+      },
+      {
+        "label": "Color",
+        "icon": "",
+        "action": [
+          "wm",
+          "colorpicker"
+        ]
+      }
     ]
   },
   "toggle": {
     "title": "Toggle",
     "items": [
-      { "label": "Stay Awake", "icon": "", "action": ["wm", "awake"] },
-      { "label": "Screensaver", "icon": "", "action": ["wm", "screensaver-toggle"] },
-      { "label": "Nightlight", "icon": "", "action": ["wm", "nightlight"] },
-      { "label": "Do Not Disturb", "icon": "", "action": ["wm", "dnd"] },
-      { "label": "Top Bar", "icon": "", "action": ["wm", "bar"] },
-      { "label": "Window Gaps", "icon": "", "action": ["wm", "gaps"] },
-      { "label": "Window Transparency", "icon": "", "action": ["wm", "transparency"] },
-      { "label": "Window Animations", "icon": "󰗘", "action": ["animations", "toggle"] },
-      { "label": "Restore All Windows", "icon": "", "action": ["wm", "restore-all"] }
+      {
+        "label": "Stay Awake",
+        "icon": "",
+        "action": [
+          "wm",
+          "awake"
+        ]
+      },
+      {
+        "label": "Screensaver",
+        "icon": "",
+        "action": [
+          "wm",
+          "screensaver-toggle"
+        ]
+      },
+      {
+        "label": "Nightlight",
+        "icon": "",
+        "action": [
+          "wm",
+          "nightlight"
+        ]
+      },
+      {
+        "label": "Do Not Disturb",
+        "icon": "",
+        "action": [
+          "wm",
+          "dnd"
+        ]
+      },
+      {
+        "label": "Top Bar",
+        "icon": "",
+        "action": [
+          "wm",
+          "bar"
+        ]
+      },
+      {
+        "label": "Window Gaps",
+        "icon": "",
+        "action": [
+          "wm",
+          "gaps"
+        ]
+      },
+      {
+        "label": "Window Transparency",
+        "icon": "",
+        "action": [
+          "wm",
+          "transparency"
+        ]
+      },
+      {
+        "label": "Window Animations",
+        "icon": "󰗘",
+        "action": [
+          "animations",
+          "toggle"
+        ]
+      },
+      {
+        "label": "Restore All Windows",
+        "icon": "",
+        "action": [
+          "wm",
+          "restore-all"
+        ]
+      }
     ]
   },
   "style": {
     "title": "Style",
     "items": [
-      { "label": "Theme", "icon": "", "route": "theme" },
-      { "label": "Background", "icon": "", "route": "background" },
-      { "label": "Next Background", "icon": "", "action": ["bg-next"] },
-      { "label": "Font", "icon": "", "route": "font" },
-      { "label": "Screensaver", "icon": "", "route": "style-screensaver" },
-      { "label": "About", "icon": "", "route": "style-about" },
-      { "label": "Browser Toolbar", "icon": "", "action": ["browser-setup"] },
-      { "label": "Top Bar (your CSS)", "icon": "", "action": ["edit", "bar-css"] },
-      { "label": "GlazeWM", "icon": "", "action": ["edit", "glaze-config"] }
+      {
+        "label": "Theme",
+        "icon": "",
+        "route": "theme"
+      },
+      {
+        "label": "Background",
+        "icon": "",
+        "route": "background"
+      },
+      {
+        "label": "Next Background",
+        "icon": "",
+        "action": [
+          "bg-next"
+        ]
+      },
+      {
+        "label": "Font",
+        "icon": "",
+        "route": "font"
+      },
+      {
+        "label": "Screensaver",
+        "icon": "",
+        "route": "style-screensaver"
+      },
+      {
+        "label": "About",
+        "icon": "",
+        "route": "style-about"
+      },
+      {
+        "label": "Browser Toolbar",
+        "icon": "",
+        "action": [
+          "browser-setup"
+        ]
+      },
+      {
+        "label": "Top Bar (your CSS)",
+        "icon": "",
+        "action": [
+          "edit",
+          "bar-css"
+        ]
+      },
+      {
+        "label": "GlazeWM",
+        "icon": "",
+        "action": [
+          "edit",
+          "glaze-config"
+        ]
+      }
     ]
   },
   "style-screensaver": {
     "title": "Screensaver",
     "items": [
-      { "label": "Preview", "icon": "", "action": ["wm", "screensaver"] },
-      { "label": "Edit Text", "icon": "", "action": ["edit", "screensaver-text"] },
-      { "label": "Restore Default", "icon": "", "action": ["branding-reset", "screensaver"] }
+      {
+        "label": "Preview",
+        "icon": "",
+        "action": [
+          "wm",
+          "screensaver"
+        ]
+      },
+      {
+        "label": "Edit Text",
+        "icon": "",
+        "action": [
+          "edit",
+          "screensaver-text"
+        ]
+      },
+      {
+        "label": "Restore Default",
+        "icon": "",
+        "action": [
+          "branding-reset",
+          "screensaver"
+        ]
+      }
     ]
   },
   "style-about": {
     "title": "About",
     "items": [
-      { "label": "Show", "icon": "", "action": ["about"] },
-      { "label": "Edit Text", "icon": "", "action": ["edit", "about-text"] },
-      { "label": "Restore Default", "icon": "", "action": ["branding-reset", "about"] }
+      {
+        "label": "Show",
+        "icon": "",
+        "action": [
+          "about"
+        ]
+      },
+      {
+        "label": "Edit Text",
+        "icon": "",
+        "action": [
+          "edit",
+          "about-text"
+        ]
+      },
+      {
+        "label": "Restore Default",
+        "icon": "",
+        "action": [
+          "branding-reset",
+          "about"
+        ]
+      }
     ]
   },
   "font-install": {
     "title": "Install Font",
     "items": [
-      { "label": "Cascadia Mono", "icon": "", "action": ["font-install", "CascadiaMono"] },
-      { "label": "Meslo", "icon": "", "action": ["font-install", "Meslo"] },
-      { "label": "Fira Code", "icon": "", "action": ["font-install", "FiraCode"] },
-      { "label": "Victor Mono", "icon": "", "action": ["font-install", "VictorMono"] },
-      { "label": "Bitstream Vera Sans Mono", "icon": "", "action": ["font-install", "BitstreamVeraSansMono"] },
-      { "label": "Iosevka (large download)", "icon": "", "action": ["font-install", "Iosevka"] },
-      { "label": "JetBrains Mono", "icon": "", "action": ["font-install", "JetBrainsMono"] }
+      {
+        "label": "Cascadia Mono",
+        "icon": "",
+        "action": [
+          "font-install",
+          "CascadiaMono"
+        ]
+      },
+      {
+        "label": "Meslo",
+        "icon": "",
+        "action": [
+          "font-install",
+          "Meslo"
+        ]
+      },
+      {
+        "label": "Fira Code",
+        "icon": "",
+        "action": [
+          "font-install",
+          "FiraCode"
+        ]
+      },
+      {
+        "label": "Victor Mono",
+        "icon": "",
+        "action": [
+          "font-install",
+          "VictorMono"
+        ]
+      },
+      {
+        "label": "Bitstream Vera Sans Mono",
+        "icon": "",
+        "action": [
+          "font-install",
+          "BitstreamVeraSansMono"
+        ]
+      },
+      {
+        "label": "Iosevka (large download)",
+        "icon": "",
+        "action": [
+          "font-install",
+          "Iosevka"
+        ]
+      },
+      {
+        "label": "JetBrains Mono",
+        "icon": "",
+        "action": [
+          "font-install",
+          "JetBrainsMono"
+        ]
+      }
     ]
   },
   "setup": {
     "title": "Setup",
     "items": [
-      { "label": "Monitors", "icon": "", "action": ["settings", "ms-settings:display"] },
-      { "label": "Audio", "icon": "", "action": ["settings", "ms-settings:sound"] },
-      { "label": "Bluetooth", "icon": "", "action": ["settings", "ms-settings:bluetooth"] },
-      { "label": "Network", "icon": "", "action": ["settings", "ms-settings:network"] },
-      { "label": "Power", "icon": "", "action": ["settings", "ms-settings:powersleep"] },
-      { "label": "Input", "icon": "", "action": ["settings", "ms-settings:typing"] },
-      { "label": "Settings", "icon": "", "action": ["edit", "config"] },
-      { "label": "Keybindings", "icon": "", "action": ["edit", "keybindings"] },
-      { "label": "Admin Games", "icon": "󰊗", "action": ["game-setup"] },
-      { "label": "GlazeWM", "icon": "", "action": ["edit", "glaze-config"] }
+      {
+        "label": "Monitors",
+        "icon": "",
+        "action": [
+          "settings",
+          "ms-settings:display"
+        ]
+      },
+      {
+        "label": "Audio",
+        "icon": "",
+        "action": [
+          "settings",
+          "ms-settings:sound"
+        ]
+      },
+      {
+        "label": "Bluetooth",
+        "icon": "",
+        "action": [
+          "settings",
+          "ms-settings:bluetooth"
+        ]
+      },
+      {
+        "label": "Network",
+        "icon": "",
+        "action": [
+          "settings",
+          "ms-settings:network"
+        ]
+      },
+      {
+        "label": "Power",
+        "icon": "",
+        "action": [
+          "settings",
+          "ms-settings:powersleep"
+        ]
+      },
+      {
+        "label": "Input",
+        "icon": "",
+        "action": [
+          "settings",
+          "ms-settings:typing"
+        ]
+      },
+      {
+        "label": "Settings",
+        "icon": "",
+        "action": [
+          "edit",
+          "config"
+        ]
+      },
+      {
+        "label": "Keybindings",
+        "icon": "",
+        "action": [
+          "edit",
+          "keybindings"
+        ]
+      },
+      {
+        "label": "Default Agent",
+        "icon": "󰚩",
+        "route": "agent"
+      },
+      {
+        "label": "Herdr Config",
+        "icon": "",
+        "action": [
+          "edit",
+          "herdr-config"
+        ]
+      },
+      {
+        "label": "Admin Games",
+        "icon": "󰊗",
+        "action": [
+          "game-setup"
+        ]
+      },
+      {
+        "label": "GlazeWM",
+        "icon": "",
+        "action": [
+          "edit",
+          "glaze-config"
+        ]
+      }
     ]
   },
   "update": {
     "title": "Update",
     "items": [
-      { "label": "Check for Updates", "icon": "", "action": ["update-check"] },
-      { "label": "Update Winarchy & apps", "icon": "", "action": ["upgrade"] },
-      { "label": "Themes & Backgrounds", "icon": "", "action": ["sync"] },
-      { "label": "Apply Settings", "icon": "", "action": ["apply"] },
-      { "label": "Doctor", "icon": "", "action": ["doctor"] },
-      { "label": "Reload GlazeWM", "icon": "", "action": ["glaze", "wm-reload-config"] }
+      {
+        "label": "Check for Updates",
+        "icon": "",
+        "action": [
+          "update-check"
+        ]
+      },
+      {
+        "label": "Update Winarchy & apps",
+        "icon": "",
+        "action": [
+          "upgrade"
+        ]
+      },
+      {
+        "label": "Themes & Backgrounds",
+        "icon": "",
+        "action": [
+          "sync"
+        ]
+      },
+      {
+        "label": "Apply Settings",
+        "icon": "",
+        "action": [
+          "apply"
+        ]
+      },
+      {
+        "label": "Doctor",
+        "icon": "",
+        "action": [
+          "doctor"
+        ]
+      },
+      {
+        "label": "Reload GlazeWM",
+        "icon": "",
+        "action": [
+          "glaze",
+          "wm-reload-config"
+        ]
+      }
     ]
   },
   "system": {
     "title": "System",
     "items": [
-      { "label": "Screensaver", "icon": "", "action": ["wm", "screensaver"] },
-      { "label": "Lock", "icon": "", "action": ["lock"] },
-      { "label": "Suspend", "icon": "", "action": ["sleep"] },
-      { "label": "Logout", "icon": "", "action": ["logout"] },
-      { "label": "Restart", "icon": "", "action": ["restart"] },
-      { "label": "Shutdown", "icon": "", "action": ["shutdown"] },
-      { "label": "Start Menu", "icon": "", "action": ["start"] },
-      { "label": "Back to normal Windows", "icon": "", "route": "revert" }
+      {
+        "label": "Screensaver",
+        "icon": "",
+        "action": [
+          "wm",
+          "screensaver"
+        ]
+      },
+      {
+        "label": "Lock",
+        "icon": "",
+        "action": [
+          "lock"
+        ]
+      },
+      {
+        "label": "Suspend",
+        "icon": "",
+        "action": [
+          "sleep"
+        ]
+      },
+      {
+        "label": "Logout",
+        "icon": "",
+        "action": [
+          "logout"
+        ]
+      },
+      {
+        "label": "Restart",
+        "icon": "",
+        "action": [
+          "restart"
+        ]
+      },
+      {
+        "label": "Shutdown",
+        "icon": "",
+        "action": [
+          "shutdown"
+        ]
+      },
+      {
+        "label": "Start Menu",
+        "icon": "",
+        "action": [
+          "start"
+        ]
+      },
+      {
+        "label": "Back to normal Windows",
+        "icon": "",
+        "route": "revert"
+      }
     ]
   },
   "revert": {
     "title": "Undo Winarchy?",
     "items": [
-      { "label": "Cancel", "icon": "", "back": true },
-      { "label": "Yes, back to normal Windows", "icon": "", "action": ["uninstall"] }
+      {
+        "label": "Cancel",
+        "icon": "",
+        "back": true
+      },
+      {
+        "label": "Yes, back to normal Windows",
+        "icon": "",
+        "action": [
+          "uninstall"
+        ]
+      }
     ]
   }
 }

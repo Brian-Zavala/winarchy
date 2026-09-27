@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" type="text/css" href="./usage.css" />
+    <link rel="stylesheet" type="text/css" href="./theme.css" />
+    <link rel="stylesheet" type="text/css" href="./font.css" />
+    <link rel="stylesheet" type="text/css" href="./user.css" />
+  </head>
+  <body>
+    <!-- The bar's agent usage panel (Omarchy Quattro's agents widget), dropped under the
+         bar icon. Strictly a display of agents.json; clicking outside it closes it. -->
+    <div id="panel" role="dialog" aria-label="AI coding agent usage">
+      <header id="hero">
+        <span class="glyph" aria-hidden="true"></span>
+        <div class="who">
+          <span id="name"></span>
+          <span id="plan"></span>
+        </div>
+      </header>
+      <div id="status" class="hidden" role="status"></div>
+      <nav id="chips" class="hidden" aria-label="Subscription"></nav>
+
+      <section id="limitsBox" class="hidden">
+        <h2>Limits</h2>
+        <div id="limits"></div>
+      </section>
+
+      <section id="daysBox" class="hidden">
+        <h2>Tokens by day</h2>
+        <div id="days" class="rows"></div>
+      </section>
+
+      <section id="modelsBox" class="hidden">
+        <h2>Tokens by model</h2>
+        <div id="models" class="rows"></div>
+      </section>
+
+      <footer>
+        <span id="totals"></span>
+        <span id="updated"></span>
+      </footer>
+      <div id="tip" class="hidden" role="tooltip"></div>
+    </div>
+    <script type="module" src="./usage.js"></script>
+  </body>
+</html>

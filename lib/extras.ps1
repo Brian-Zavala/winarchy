@@ -64,12 +64,20 @@ function Invoke-UpdateCheck {
         try {
             git -C $Code fetch --quiet 2>$null
             $behind = [int](git -C $Code rev-list --count 'HEAD..@{u}' 2>$null)
-            if ($behind -gt 0) { $items.Add([ordered]@{ name = 'winarchy'; from = 'installed'; to = "$behind new commit(s)" }) }
+            $own = [int](git -C $Code rev-list --count '@{u}..HEAD' 2>$null)
+            # A copy with commits of its own can't fast-forward, so the update button can't
+            # take it anywhere: offering it would light the icon for good.
+            if ($behind -gt 0 -and $own -gt 0) { Log "update-check: $behind new commit(s), not offered: this copy has $own of its own" }
+            elseif ($behind -gt 0) { $items.Add([ordered]@{ name = 'winarchy'; from = 'installed'; to = "$behind new commit(s)" }) }
         } catch {}
     }
     try {
         $out = winget list --upgrade-available --accept-source-agreements 2>$null | Out-String
-        foreach ($id in 'glzr-io.glazewm', 'Flow-Launcher.Flow-Launcher', 'Fastfetch-cli.Fastfetch', 'aristocratos.btop4win', 'AutoHotkey.AutoHotkey') {
+        # winarchy's own prerequisites, plus whatever was installed from the menu's catalog,
+        # so something installed there is not left out of the bar's update count.
+        $ids = @('glzr-io.glazewm', 'Flow-Launcher.Flow-Launcher', 'AutoHotkey.AutoHotkey')
+        try { $ids += @(Get-CatalogState | Where-Object { $_.installed -and $_.winget } | ForEach-Object { $_.id }) } catch {}
+        foreach ($id in ($ids | Select-Object -Unique)) {
             $line = ($out -split "`r?`n") | Where-Object { $_ -match [regex]::Escape($id) } | Select-Object -First 1
             if ($line -and $line -match [regex]::Escape($id) + '\s+(\S+)\s+(\S+)') {
                 $items.Add([ordered]@{ name = $id; from = $Matches[1]; to = $Matches[2] })

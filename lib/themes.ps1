@@ -212,6 +212,28 @@ function Get-FontFamily {
     if ($s.font) { $s.font } else { 'JetBrainsMono Nerd Font' }
 }
 
+# Close Flow the way its tray menu's Exit does (WM_CLOSE to its hidden main window), so it
+# takes its tray icon with it: a killed Flow leaves a dead icon in the bar's tray, one per
+# theme or font change. Killed only if it doesn't exit.
+function Stop-Flow {
+    $procs = @(Get-Process Flow.Launcher -ErrorAction SilentlyContinue)
+    if (-not $procs) { return }
+    Initialize-Native
+    $h = [IntPtr]::Zero
+    while (($h = [Winarchy.Native]::FindWindowEx([IntPtr]::Zero, $h, [NullString]::Value, 'Flow.Launcher')) -ne [IntPtr]::Zero) {
+        $id = [uint32]0
+        [void][Winarchy.Native]::GetWindowThreadProcessId($h, [ref]$id)
+        if ($procs.Id -contains $id) { [void][Winarchy.Native]::PostMessage($h, 0x10, [IntPtr]::Zero, [IntPtr]::Zero) }
+    }
+    foreach ($p in $procs) {
+        if (-not $p.WaitForExit(5000)) {
+            Log "Flow Launcher didn't close; killing it"
+            $p | Stop-Process -Force
+            [void]$p.WaitForExit(2000)
+        }
+    }
+}
+
 function Set-FlowTheme($c) {
     $p = Get-Paths
     if (-not $p.flow -or -not (Test-Path $p.flowSettings)) { return 'skipped' }
@@ -222,9 +244,7 @@ function Set-FlowTheme($c) {
     $xaml = Expand-Template $tpl $c2
     New-Item -ItemType Directory -Force $p.flowThemes | Out-Null
     Save-File $p.flowSettings; Save-File (Join-Path $p.flowThemes 'Omarchy.xaml')
-    # Kill (not close) so Flow can't write its in-memory settings over ours on exit.
-    Get-Process Flow.Launcher -ErrorAction SilentlyContinue | Stop-Process -Force
-    Start-Sleep -Milliseconds 400
+    Stop-Flow                           # before writing: Flow saves its settings on exit
     Write-Utf8 (Join-Path $p.flowThemes 'Omarchy.xaml') $xaml
     $s = Read-Json $p.flowSettings
     $font = Get-FontFamily
@@ -343,6 +363,9 @@ function Get-ThemeTargets {
         claude   = @{ label = 'Claude Code'; run = { param($t, $c) Set-ClaudeTheme $c } }
         browser  = @{ label = 'Browser toolbar'; run = { param($t, $c) Set-BrowserTheme $t $c } }
         btop     = @{ label = 'btop'; run = { param($t, $c) Set-BtopTheme $t $c } }
+        # Herdr draws itself from its own config, so a theme change rewrites that config
+        # and asks a running Herdr to re-read it (Omarchy's omarchy-refresh-herdr).
+        herdr    = @{ label = 'Herdr'; run = { param($t, $c) Set-HerdrTheme $t } }
         flow     = @{ label = 'Flow Launcher'; run = { param($t, $c) Set-FlowTheme $c } }
     }
 }

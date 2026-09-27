@@ -4,3 +4,5 @@ zebar/omarchy/env.js
 zebar/omarchy/zpack.json
 *.part
 *.tmp
+# Python bytecode from the agent-usage collectors (lib/agents)
+__pycache__/

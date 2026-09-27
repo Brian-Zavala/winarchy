@@ -1,4 +1,4 @@
-; Small Omarchy-style OSD at the bottom center of the monitor under the mouse, in the
+; Small Omarchy-style OSD at the bottom center of the monitor you're working on, in the
 ; theme's colors and font. Shared by winarchy.ahk and menu.ahk.
 ;   Osd(text)        shows it for 1.2 s
 ;   Osd(text, 0)     keeps it until the next Osd / OsdHide
@@ -11,7 +11,7 @@ Osd(text, ms := 1200, where := "bottom") {
     colors := ThemeColors()
     OsdHide()
     PerMonitorDpi()   ; size + place it in the monitor's real pixels (mixed-DPI setups)
-    mon := MonitorUnderMouse()
+    mon := WorkingMonitor()
     scale := MonitorDpi(mon) / 96
     OsdGui := g := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20 +Border -DPIScale", "omarchy-osd")
     g.BackColor := colors.bg

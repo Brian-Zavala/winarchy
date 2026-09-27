@@ -71,6 +71,24 @@ function Get-Config {
     $cfg
 }
 
+# Write one setting into the user's config.json by dotted path ("apps.agent"), keeping
+# every other key they have. winarchy.ahk re-applies config.json when it is saved, so the
+# selfwrite stamp tells it this change is already being applied by whoever called this.
+function Set-ConfigValue([string]$path, $value) {
+    $user = Read-Json $ConfigFile -AsHashtable
+    if (-not $user) { $user = [ordered]@{} }
+    $parts = @($path -split '\.')
+    $node = $user
+    foreach ($part in $parts[0..($parts.Count - 2)]) {
+        if ($node[$part] -isnot [hashtable] -and $node[$part] -isnot [System.Collections.Specialized.OrderedDictionary]) { $node[$part] = @{} }
+        $node = $node[$part]
+    }
+    $node[$parts[-1]] = $value
+    Write-Json $ConfigFile $user 8
+    New-Item -ItemType Directory -Force $Generated | Out-Null
+    Write-Utf8 (Join-Path $Generated 'config.selfwrite') (Get-Item $ConfigFile).LastWriteTime.ToString('yyyyMMddHHmmss')
+}
+
 # --- state (what winarchy last applied) ----------------------------------------
 function Read-State {
     $s = Read-Json $StateFile -AsHashtable
@@ -95,7 +113,12 @@ function Write-Status($s, [switch]$BumpTheme) {
     $ver = if ($BumpTheme -or -not $old) { [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() } else { $old.themeVersion }
     # The effective font (the default when none was picked), so the font picker can mark it.
     $font = if (Get-Command Get-FontFamily -ErrorAction SilentlyContinue) { Get-FontFamily } else { $s.font }
-    Write-Json $path ([ordered]@{ theme = $s.theme; background = $s.background; font = $font; themeVersion = $ver })
+    # The current defaults, so Setup > Defaults can tick the one in use. Empty when
+    # nothing is picked: Omarchy chooses no agent for you and leaves the list unchecked.
+    $agent = if (Get-Command Get-DefaultAgent -ErrorAction SilentlyContinue) { Get-DefaultAgent } else { $null }
+    Write-Json $path ([ordered]@{
+        theme = $s.theme; background = $s.background; font = $font; agent = $agent; themeVersion = $ver
+    })
 }
 
 # "0-winding-road.jpg" -> "Winding Road" (omarchy-theme-bg-current naming)
@@ -158,6 +181,12 @@ public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, UIntPtr wP
 public static extern int AddFontResource(string file);
 [DllImport("shell32.dll")]
 public static extern int SHGetKnownFolderPath([MarshalAs(UnmanagedType.LPStruct)] Guid id, uint flags, IntPtr token, out IntPtr path);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)]
+public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
+[DllImport("user32.dll")]
+public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+[DllImport("user32.dll")]
+public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 '@
     }
 }
@@ -167,6 +196,29 @@ function Send-SettingChange([string]$what = 'ImmersiveColorSet') {
     Initialize-Native
     $r = [UIntPtr]::Zero
     [void][Winarchy.Native]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, $what, 2, 1000, [ref]$r)
+}
+
+# "Animate windows when minimizing and maximizing" (SPI_GETANIMATION / SPI_SETANIMATION,
+# ANIMATIONINFO { cbSize, iMinAnimate }): 1 on, 0 off.
+function Get-MinimizeAnimation {
+    Initialize-Native
+    $buf = [Runtime.InteropServices.Marshal]::AllocHGlobal(8)
+    try {
+        [Runtime.InteropServices.Marshal]::WriteInt32($buf, 0, 8)
+        if (-not [Winarchy.Native]::SystemParametersInfoInt(0x48, 8, $buf, 0)) { throw 'SPI_GETANIMATION failed' }
+        [Runtime.InteropServices.Marshal]::ReadInt32($buf, 4)
+    } finally { [Runtime.InteropServices.Marshal]::FreeHGlobal($buf) }
+}
+
+function Set-MinimizeAnimation([int]$on) {
+    Initialize-Native
+    $buf = [Runtime.InteropServices.Marshal]::AllocHGlobal(8)
+    try {
+        [Runtime.InteropServices.Marshal]::WriteInt32($buf, 0, 8)
+        [Runtime.InteropServices.Marshal]::WriteInt32($buf, 4, $on)
+        # SPIF_UPDATEINIFILE | SPIF_SENDCHANGE: saved in the profile, not just this session.
+        if (-not [Winarchy.Native]::SystemParametersInfoInt(0x49, 8, $buf, 3)) { throw 'SPI_SETANIMATION failed' }
+    } finally { [Runtime.InteropServices.Marshal]::FreeHGlobal($buf) }
 }
 
 function Get-KnownFolder([guid]$id) {
@@ -191,4 +243,18 @@ function To-Dword([uint32]$v) { [BitConverter]::ToInt32([BitConverter]::GetBytes
 # Run something hidden and detached (no console flash).
 function Start-Hidden([string]$file, [string[]]$arguments) {
     Start-Process -FilePath $file -ArgumentList $arguments -WindowStyle Hidden
+}
+
+# The window manager itself, never its CLI: cli\glazewm.exe has the same process name, and
+# the auto-tiling watcher keeps one running for its event subscription. So a plain
+# `Get-Process glazewm` says "running" even when the WM has crashed, which quietly disables
+# every watchdog and liveness check. The official build's Path reads empty (it runs with UI
+# access) and that is precisely the one that must count, so only a readable \cli\ path is
+# excluded.
+function Get-GlazeWmProcess {
+    @(Get-Process glazewm -ErrorAction SilentlyContinue | Where-Object {
+        $path = $null
+        try { $path = $_.Path } catch {}
+        $path -notlike '*\cli\*'
+    })
 }

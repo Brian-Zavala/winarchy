@@ -38,6 +38,10 @@ let index = null;    // index.json: themes + background groups (pickers only)
 let status = null;   // status.json: current theme + background
 let keys = null;     // parsed keybindings.txt
 let fonts = null;    // fonts.json: installed monospace fonts (font route)
+let apps = null;     // apps.json: what Windows lists in Start (apps route)
+let catalog = null;  // catalog.json: what winarchy can install, and what is already there
+let herdrKeys = null;// parsed herdr-keys.txt (Learn > Herdr)
+let defaults = null; // defaults.json: the coding agents, and which one is the default
 
 const stack = [];
 let route = null;
@@ -45,6 +49,10 @@ let items = [];      // what is currently shown (after filtering)
 let sel = 0;
 let tab = 0;
 let groups = [];
+// The row/tile for each item index, filled in by the last render (null for a section
+// heading). Holding an arrow key must not walk every node in a 200-app list per repeat.
+let rowOf = [];
+let selEl = null;
 
 // ---------------------------------------------------------------- lifecycle
 // The window outlives a close: it hides, and menu.ahk shows it again for the next open on
@@ -83,7 +91,7 @@ function reset() {
   items = [];
   sel = tab = 0;
   groups = [];
-  index = status = keys = fonts = null;
+  index = status = keys = fonts = herdrKeys = defaults = null;
   $('search').value = '';
   palette(null);
   $('card').className = '';
@@ -95,6 +103,13 @@ function reset() {
   land.id = 'land';
   $('land').replaceWith(land);
   mouse = '';
+  // Nothing is on screen any more, so no row to highlight and no key still repeating.
+  rowOf = [];
+  selEl = null;
+  fast = false;
+  clearTimeout(fastIdle);
+  cancelAnimationFrame(moveFrame);
+  moveFrame = 0;
   clearTimeout(typing);
   typing = 0;
   closing = busy = false;
@@ -121,7 +136,11 @@ async function open(again = false) {
   if (again) Promise.resolve(win().show()).catch(() => {});   // keep Tauri's state in step with menu.ahk's WinShow
   let start;
   [start, menus] = await Promise.all([get('route.json'), get('menu.json'), again && restyle()]);
-  await go(start?.route && (menus?.[start.route] || ['background', 'theme', 'keys', 'font'].includes(start.route)) ? start.route : 'root', false);
+  // Generated routes aren't in menu.json, so they need naming here or `menu.ahk open <x>`
+  // silently falls back to root.
+  const generated = r => ['background', 'theme', 'keys', 'font', 'apps', 'herdr-keys', 'agent'].includes(r)
+    || r === 'install' || r === 'remove' || r.startsWith('install-') || r.startsWith('remove-');
+  await go(start?.route && (menus?.[start.route] || generated(start.route)) ? start.route : 'root', false);
   $('search').focus();
   await focused();
   requestAnimationFrame(() => document.body.classList.add('shown'));
@@ -227,6 +246,22 @@ async function load(name) {
     keys = parseKeys((await get('keybindings.txt', 'text')) ?? '');
   } else if (name === 'font') {
     [fonts, status] = await Promise.all([get('fonts.json'), get('status.json')]);
+  } else if (name === 'apps') {
+    apps = await get('apps.json');
+    // The list is only as current as the last apply, and installing something should show
+    // up without one. Rebuilding it takes about a second, far too long to open the route
+    // behind, so kick it off unawaited: this open uses the file on disk, the next one is
+    // current. (First ever open has no file yet, and renderList says so.)
+    zebar.shellExec(AHK, [MENU, 'apps-refresh']).catch(() => {});
+  } else if (name === 'herdr-keys' && !herdrKeys) {
+    herdrKeys = parseKeys((await get('herdr-keys.txt', 'text')) ?? '');
+  } else if (name === 'agent') {
+    defaults = await get('defaults.json');
+  } else if (name === 'install' || name === 'remove' || name.startsWith('install-') || name.startsWith('remove-')) {
+    // Same deal as apps: show the file on disk now, and rebuild behind us so the next
+    // open knows about anything just installed or removed.
+    catalog = await get('catalog.json');
+    zebar.shellExec(AHK, [MENU, 'catalog-refresh']).catch(() => {});
   }
 }
 
@@ -290,11 +325,23 @@ function setupGroups() {
 const same = (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 // Font families come in long and short spellings ("JetBrainsMono Nerd Font" = "JetBrainsMono NF").
 const fontKey = name => (name ?? '').toLowerCase().replace(/ nerd font mono$/, ' nfm').replace(/ nerd font$/, ' nf');
+// Both keybinding viewers: a two-column list of key + description, read from a text
+// file rather than menu.json, and Enter just closes.
+const isKeys = r => r === 'keys' || r === 'herdr-keys';
 
 function currentItems() {
   const q = $('search').value.trim();
-  if (route === 'keys') {
-    return q ? keys.filter(k => !k.section && matches(`${k.keys} ${k.label}`, q)) : keys;
+  if (isKeys(route)) {
+    const rows = (route === 'keys' ? keys : herdrKeys) ?? [];
+    return q ? rows.filter(k => !k.section && matches(`${k.keys} ${k.label}`, q)) : rows;
+  }
+  if (route === 'agent') {
+    // Omarchy picks no agent for you, so nothing is ticked until one is chosen. One that
+    // isn't installed still shows: picking it says how to install it.
+    return (defaults?.agents ?? []).filter(a => matches(a.label, q)).map(a => ({
+      label: a.installed ? a.label : `${a.label}  (not installed)`,
+      icon: a.icon, current: a.current, action: ['default-agent', a.key],
+    }));
   }
   if (route === 'theme') {
     return (index?.themes ?? []).filter(t => matches(t.label, q)).map(t => ({
@@ -315,6 +362,35 @@ function currentItems() {
     const more = { label: 'Install a Nerd Font…', icon: '', route: 'font-install' };
     return matches(more.label, q) ? [...list, more] : list;
   }
+  if (route === 'apps') {
+    // Everything Windows lists in Start (winarchy apps -> apps.json). Store apps and
+    // desktop programs both launch through shell:AppsFolder, so one action covers both.
+    return (apps?.apps ?? []).filter(a => matches(a.name, q)).map(a => ({
+      label: a.name, icon: a.store ? '' : '', action: ['run-app', a.id],
+    }));
+  }
+  if (route === 'install' || route === 'remove') {
+    // The catalog's groups (catalog.json). Remove only offers a group with something in it.
+    const removing = route === 'remove';
+    return (catalog?.groups ?? [])
+      .filter(g => (removing ? g.items.some(i => i.installed) : true))
+      .filter(g => matches(g.label, q))
+      .map(g => ({ label: g.label, icon: g.icon, route: `${route}-${g.key}` }));
+  }
+  if (route.startsWith('install-') || route.startsWith('remove-')) {
+    const removing = route.startsWith('remove-');
+    const group = (catalog?.groups ?? []).find(g => g.key === route.slice(removing ? 7 : 8));
+    // Remove lists only what is there; Install lists everything and marks what you have.
+    const pool = (group?.items ?? []).filter(i => (removing ? i.installed : true));
+    return pool.filter(i => matches(i.label, q)).map(i => ({
+      label: i.label, icon: i.icon,
+      // An installed row stays listed but goes dim with a check, so the Install list still
+      // reads as a catalog of everything on offer rather than hiding what you installed
+      // from it. Omarchy's menu makes the same call.
+      current: !removing && i.installed, dim: !removing && i.installed,
+      action: [removing ? 'remove-app' : 'install-app', i.key],
+    }));
+  }
   const m = menus?.[route];
   return (m?.items ?? []).filter(i => matches(i.label, q));
 }
@@ -326,7 +402,7 @@ function render(entry = false) {
   items = currentItems();
   const card = $('card');
   const q = !!$('search').value.trim();
-  card.className = route === 'background' ? 'grid' : route === 'theme' ? 'flow' : route === 'keys' ? 'wide' : '';
+  card.className = route === 'background' ? 'grid' : route === 'theme' ? 'flow' : isKeys(route) ? 'wide' : '';
   document.body.classList.toggle('walls', route === 'background');
   $('list').classList.toggle('hidden', isPicker());
   $('grid').classList.toggle('hidden', route !== 'background');
@@ -336,13 +412,16 @@ function render(entry = false) {
   $('search').placeholder =
     route === 'background' ? 'Search backgrounds…' :
     route === 'theme' ? 'Search themes…' :
-    route === 'keys' ? 'Search keybindings…' :
+    isKeys(route) ? 'Search keybindings…' :
     route === 'font' ? 'Search fonts…' :
+    route === 'apps' ? 'Search apps…' :
+    route.startsWith('install') ? 'Install…' :
+    route.startsWith('remove') ? 'Remove…' :
     `${menus?.[route]?.title ?? 'Go'}…`;
   if (route !== 'theme') palette(null);
 
   if (entry && isPicker()) sel = Math.max(0, items.findIndex(i => i.current));
-  if (route === 'keys') sel = Math.max(sel, items.findIndex(i => !i.section));
+  if (isKeys(route)) sel = Math.max(sel, items.findIndex(i => !i.section));
   sel = Math.min(Math.max(sel, 0), Math.max(items.length - 1, 0));
 
   if (route === 'theme') renderCarousel(entry);
@@ -353,13 +432,25 @@ function render(entry = false) {
 function renderList(entry) {
   const list = $('list');
   if (!items.length) {
-    list.replaceChildren(el('div', 'empty-note', 'No matches'));
+    // The apps route builds its list in the background on first open, so an empty one
+    // means "not written yet", not "nothing installed".
+    const note = route === 'apps' && !apps ? 'Building the app list… open Apps again in a moment'
+      : route.startsWith('install') && !catalog ? 'Building the catalog… open Install again in a moment'
+      : route.startsWith('remove') && !catalog ? 'Building the catalog… open Remove again in a moment'
+      : route.startsWith('remove') ? 'Nothing here to remove'
+      // Both of these only exist once Herdr is installed (Install > Terminal > Herdr).
+      : route === 'herdr-keys' ? 'No Herdr keybindings yet — install Herdr, then: winarchy herdr keys'
+      : route === 'agent' && !defaults ? 'No agent list yet — run: winarchy apply'
+      : 'No matches';
+    rowOf = [];
+    selEl = null;
+    list.replaceChildren(el('div', 'empty-note', note));
     return;
   }
   const rows = items.map((it, i) => {
     if (it.section) return el('div', 'section', it.section);
-    const row = el('div', route === 'keys' ? 'row key-row' : it.font ? 'row font-row' : 'row');
-    if (route === 'keys') {
+    const row = el('div', (isKeys(route) ? 'row key-row' : it.font ? 'row font-row' : 'row') + (it.dim ? ' dim' : ''));
+    if (isKeys(route)) {
       row.append(span('keys', it.keys), span('label', it.label));
     } else {
       const label = span('label', it.label);
@@ -373,6 +464,7 @@ function renderList(entry) {
     row.onclick = () => { sel = i; activate(); };
     return row;
   });
+  rowOf = rows.map(r => (r.classList.contains('row') ? r : null));   // sections aren't selectable
   list.replaceChildren(el('div', 'glider'), ...rows);
   highlight(entry);
   if (entry) stagger(rows.slice(0, 14), [{ opacity: 0, translate: '-8px 0' }, { opacity: 1, translate: '0 0' }], 16);
@@ -407,6 +499,8 @@ function renderGrid(entry) {
   const grid = $('grid');
   if (!items.length) {
     const note = index ? 'No matches' : 'No backgrounds yet: run Update > Themes & Backgrounds';
+    rowOf = [];
+    selEl = null;
     grid.replaceChildren(el('div', 'empty-note', note));
     return;
   }
@@ -426,6 +520,7 @@ function renderGrid(entry) {
     tile.onclick = () => { sel = i; activate(); };
     return tile;
   });
+  rowOf = tiles;
   grid.replaceChildren(el('div', 'glider'), ...tiles);
   highlight(entry);
   if (entry) stagger(tiles, [{ opacity: 0, translate: '0 18px' }, { opacity: 1, translate: '0 0' }], 22);
@@ -570,13 +665,17 @@ function footer(keysText, where) {
 function highlight(instant = false) {
   if (route === 'theme') return placeCarousel();
   const container = route === 'background' ? $('grid') : $('list');
-  const els = [...container.children].filter(e => e.classList.contains('row') || e.classList.contains('tile'));
-  const selectable = route === 'background' ? items : items.filter(i => !i.section);
-  const idx = selectable.indexOf(items[sel]);
-  els.forEach((e, i) => e.classList.toggle('selected', i === idx));
+  // Only the two rows that changed, not every row in the list (a render leaves selEl
+  // pointing at a detached node, and removing a class from one of those is harmless).
+  const target = rowOf[sel] ?? null;
+  if (selEl !== target) {
+    selEl?.classList.remove('selected');
+    target?.classList.add('selected');
+    selEl = target;
+  }
   const glider = container.querySelector(':scope > .glider');
-  if (glider) glide(glider, els[idx], instant);
-  els[idx]?.scrollIntoView({ block: 'nearest', container: 'nearest', behavior: instant || calm.matches ? 'instant' : 'smooth' });
+  if (glider) glide(glider, target, instant);
+  target?.scrollIntoView({ block: 'nearest', container: 'nearest', behavior: instant || calm.matches ? 'instant' : 'smooth' });
   if (route === 'background') {
     const it = items[sel];
     backdrop(it?.thumb);
@@ -598,19 +697,46 @@ function moved(e) {
 }
 
 // ---------------------------------------------------------------- input
+// A held arrow key repeats at the OS rate, several times faster than the 260ms glide and
+// the smooth scroll they each restart. Left animated, the list trails a dozen rows behind
+// the selection and you can't see what you are on. So while a key is repeating the
+// highlight and the scroll jump straight to the row, at most once per frame; `fast` clears
+// shortly after the last repeat, and single presses animate as before.
+let fast = false;
+let fastIdle = 0;
+let moveFrame = 0;
+function holdRepeat() {
+  if (!fast) {
+    fast = true;
+    document.body.classList.add('fast');   // menu.css: no row/icon transitions meanwhile
+  }
+  clearTimeout(fastIdle);
+  fastIdle = setTimeout(() => {
+    fast = false;
+    document.body.classList.remove('fast');
+    highlight();   // settle exactly on the row the last repeat landed on
+  }, 90);
+}
+
 function move(delta) {
   if (!items.length) return;
   let i = Math.min(Math.max(sel + delta, 0), items.length - 1);
   while (items[i]?.section) i += delta > 0 ? 1 : -1;   // skip keybinding section headers
   if (i < 0 || i >= items.length || i === sel) return;
   sel = i;
-  highlight();
+  if (!fast) return highlight();
+  if (moveFrame) return;   // several repeats in one frame: one DOM update for all of them
+  moveFrame = requestAnimationFrame(() => {
+    moveFrame = 0;
+    highlight(true);
+  });
 }
 
 function activate() {
   const it = items[sel];
   if (!it || it.section) return;
-  if (route === 'keys') return close();
+  if (it.dim) return;   // already installed: the row is a catalog entry, not an action
+  if (isKeys(route)) return close();
   if (it.back) return back();
   if (it.route) return go(it.route);
   if (it.action) run(it.action);
@@ -619,6 +745,7 @@ function activate() {
 window.addEventListener('keydown', e => {
   if (busy) return e.preventDefault();
   if (typing && e.key.length > 1) flushSearch();   // Enter/arrows act on what was typed
+  if (e.repeat) holdRepeat();                      // held key: move instantly (see move())
   const k = e.key;
   const ctrl = e.ctrlKey;
   const flow = route === 'theme';

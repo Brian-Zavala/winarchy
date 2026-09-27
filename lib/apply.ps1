@@ -188,6 +188,7 @@ function Write-GlazeConfig([int]$monitorCount) {
         workspaces = ConvertTo-WorkspacesYaml (Get-WorkspaceLayout $monitorCount $cfg.workspaces)
         animations = ConvertTo-AnimationsYaml $cfg
         games = ConvertTo-GamesYaml (Get-GameProcesses $cfg)
+        autotile_startup = ConvertTo-AutoTileStartup $cfg (Get-Paths).glazewmCli
     }
     $yaml = Expand-Template (Get-Content -Raw $tplFile) $values
     if ($yaml -eq $old) { return $false }
@@ -216,6 +217,7 @@ function Write-AhkIni($p, $cfg) {
             terminal = $terminal; wt = $p.wt; editor = $editor; files = $cfg.apps.files
             browser = $browser; browserPrivate = $p.browserPrivate
             btop = $(if ($p.btopDir) { Join-Path $p.btopDir 'btop4win.exe' })
+            herdr = $p.herdr
         }
         config = [ordered]@{
             flowHotkey = $p.flowHotkey
@@ -229,13 +231,19 @@ function Write-AhkIni($p, $cfg) {
             screensaverIdle = [int]$cfg.screensaver.idleSeconds
             screensaverProfile = 'Omarchy Screensaver'
             weather = [int]($cfg.weather -ne $false)
+            agentUsage = [int]($cfg.agentUsage.enabled -ne $false)
+            # Omarchy's widget allows 30 s to an hour; the same bounds here.
+            agentUsageSeconds = [Math]::Min(3600, [Math]::Max(30, [int]($cfg.agentUsage.refreshSeconds ?? 900)))
             animations = [int]($p.glazewm -and $p.glazewm -ne $p.glazewmOfficial)
             gameMode = [int]($cfg.gameMode -ne $false)
             games = (@($cfg.games) | Where-Object { $_ }) -join '|'
             gameDirs = (@($cfg.gameDirs) | Where-Object { $_ }) -join '|'
             blockMinimize = [int]($cfg.blockMinimize -ne $false)
             minimizeAllowed = (@($cfg.minimizeAllowed) | Where-Object { $_ }) -join '|'
+            gameFocusGuard = [int]($cfg.gameFocusGuard -ne $false)
             openOnHoveredMonitor = [int]($cfg.openOnHoveredMonitor -ne $false)
+            focusFollowsCursor = [int]($cfg.focusFollowsCursor -ne $false)
+            autoTiling = [int]($cfg.autoTiling.enabled -ne $false)
         }
     }
     $text = foreach ($section in $ini.Keys) {
@@ -261,7 +269,7 @@ function Get-ZpackJson($p) {
             presets = $presets
         }
     }
-    $bar = & $widget 'bar' './bar.html' 'top_most' $false $false @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @(
+    $bar = & $widget 'bar' './bar.html' 'top_most' $false $false @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf', 'icons/**/*.png') @(
         [ordered]@{ program = 'taskmgr'; argsRegex = '.*' },
         [ordered]@{ program = 'explorer'; argsRegex = 'ms-settings:.*' },
         $menuPrivilege
@@ -290,11 +298,20 @@ function Get-ZpackJson($p) {
         }
     }
     $calendar = & $widget 'calendar' './calendar.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.ttf') @($menuPrivilege) @($calPresets)
+    # The bar's agent usage panel: the calendar's per-monitor presets (u0..u7). Unlike the
+    # calendar it reads data files (agents.json, usage-anchor.json), so *.json is included.
+    $usagePresets = foreach ($i in 0..7) {
+        [ordered]@{
+            name = "u$i"; anchor = 'top_left'; offsetX = '0px'; offsetY = '0px'; width = '100%'; height = '100%'
+            monitorSelection = [ordered]@{ type = 'index'; match = $i }
+        }
+    }
+    $usage = & $widget 'usage' './usage.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @($usagePresets)
     [ordered]@{
         '$schema' = 'https://github.com/glzr-io/zebar/raw/v3.0.0/resources/zpack-schema.json'
         name = 'omarchy'; version = '3.0.0'; description = 'Omarchy style top bar, menu and pickers for GlazeWM (winarchy)'
         tags = @('topbar'); previewImages = @(); repositoryUrl = ''
-        widgets = @($bar, $menu, $calendar)
+        widgets = @($bar, $menu, $calendar, $usage)
     } | ConvertTo-Json -Depth 12
 }
 
@@ -381,6 +398,7 @@ function Set-Autostart($p, $cfg) {
 # --- Windows Terminal profiles for the screensaver and About -------------------------
 $ScreensaverProfile = '{5f6a2c1e-7a39-4b1f-9e0d-0a1c2e3f4b51}'
 $AboutProfile = '{5f6a2c1e-7a39-4b1f-9e0d-0a1c2e3f4b52}'
+$AgentProfile = '{5f6a2c1e-7a39-4b1f-9e0d-0a1c2e3f4b53}'
 
 function Set-TerminalProfiles($p) {
     $file = $p.wtSettings
@@ -405,9 +423,20 @@ function Set-TerminalProfiles($p) {
             commandline = "`"$pwsh`" -NoProfile -ExecutionPolicy Bypass -File `"$Code\lib\about.ps1`""
             tabTitle = 'Omarchy About'; suppressApplicationTitle = $true
             padding = '14'; scrollbarState = 'hidden'; bellStyle = 'none'; closeOnExit = 'always'; startingDirectory = $Data
+        },
+        # Coding agents launched from the menu or the keybinding. Omarchy gives those
+        # windows one fixed app-id so window rules can single them out; Windows has no
+        # app-id, and every Windows Terminal window is the same process and class, so the
+        # stable thing to match on is this title - which winarchy sets itself, so it is
+        # not a localized string. Not hidden: it is a profile worth opening by hand.
+        [ordered]@{
+            guid = $AgentProfile; name = 'Omarchy Agent'
+            commandline = "`"$pwsh`" -NoLogo -Command `"& '$Code\bin\winarchy.ps1' agent -Inline`""
+            tabTitle = 'Omarchy Agent'; suppressApplicationTitle = $true
+            font = [ordered]@{ face = $font }; padding = '8'; bellStyle = 'none'
         }
     )
-    $list = @($wt.profiles.list | Where-Object { $_.guid -notin $ScreensaverProfile, $AboutProfile })
+    $list = @($wt.profiles.list | Where-Object { $_.guid -notin $ScreensaverProfile, $AboutProfile, $AgentProfile })
     foreach ($w in $want) { Save-JsonItem $file 'profiles.list' $w.name }
     $wt.profiles.list = @($list) + $want
     Write-Json $file $wt
@@ -434,6 +463,23 @@ function Set-DisallowShaking($cfg) {
     if ((Get-ItemProperty $key -Name DisallowShaking -ErrorAction SilentlyContinue).DisallowShaking -eq $want) { return }
     Save-Reg $key 'DisallowShaking'
     Set-ItemProperty $key -Name DisallowShaking -Value $want -Type DWord
+}
+
+# blockMinimize also turns off the minimize/maximize animation: a minimize that does get
+# through (an app minimizing itself) is undone by winarchy.ahk, and without the animation
+# that's a one-frame blink instead of the window shrinking away and growing back. Turning
+# blockMinimize off puts back what was there; so does uninstall.
+function Set-MinimizeAnimationPolicy($cfg) {
+    $cur = Get-MinimizeAnimation
+    if ($cfg.blockMinimize -eq $false) {
+        $e = (Read-Journal).entries | Where-Object { $_.key -eq 'minanimate' } | Select-Object -First 1
+        if ($e -and $cur -ne [int]$e.value) { Set-MinimizeAnimation ([int]$e.value) }
+        return
+    }
+    if ($cur -eq 0) { return }
+    [void](Add-JournalEntry @{ kind = 'minanimate'; key = 'minanimate'; value = $cur })
+    Set-MinimizeAnimation 0
+    Log 'minimize/maximize animation turned off (blockMinimize)'
 }
 
 # The Omarchy screensaver replaces Windows' own (restored on uninstall).
@@ -493,7 +539,7 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Respli
     $old = if (Test-Path $GlazeConfig) { Get-Content -Raw $GlazeConfig } else { '' }
     $monitors = Get-LayoutMonitorCount @($p.monitors).Count (Get-BoundMonitorCount $old) -Resplit:$Resplit
     $glazeChanged = Write-GlazeConfig $monitors
-    if ($p.glazewmCli -and (Get-Process glazewm -ErrorAction SilentlyContinue)) {
+    if ($p.glazewmCli -and (Get-GlazeWmProcess)) {
         if ($glazeChanged) { & $p.glazewmCli command wm-reload-config | Out-Null }
         if ($cfg.glazewmManaged -ne $false) {
             try { Repair-WorkspaceMonitors $p.glazewmCli (Get-WorkspaceBindings (Get-Content -Raw $GlazeConfig)) }
@@ -510,9 +556,17 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Respli
     try { Set-TerminalProfiles $p } catch { Log "terminal profiles FAILED: $($_.Exception.Message)" }
     Set-WindowsScreensaver $cfg
     try { Set-DisallowShaking $cfg } catch { Log "Aero Shake setting FAILED: $($_.Exception.Message)" }
+    try { Set-MinimizeAnimationPolicy $cfg } catch { Log "minimize animation setting FAILED: $($_.Exception.Message)" }
     if (-not (Test-Path (Join-Path $Pack 'font.css'))) { Write-FontCss }
     try { [void](Update-FontList) } catch { Log "font list FAILED: $($_.Exception.Message)" }
     try { [void](Update-AppList) } catch { Log "app list FAILED: $($_.Exception.Message)" }
+    try { [void](Update-Catalog) } catch { Log "catalog FAILED: $($_.Exception.Message)" }
+    try { [void](Update-AgentList) } catch { Log "agent list FAILED: $($_.Exception.Message)" }
+    # Re-merge the usage records already on disk (no collectors, no network): turning an
+    # agent off in config.json takes it off the bar at once, not at the next refresh.
+    try { [void](Write-AgentUsageFile (Get-Config)) } catch { Log "agent usage FAILED: $($_.Exception.Message)" }
+    # Herdr's config, shell shortcuts and keybindings list, when it is installed at all.
+    try { Initialize-Herdr } catch { Log "herdr FAILED: $($_.Exception.Message)" }
     # The pickers' index.json format follows the code, so rebuild it here too (not only on sync).
     try { Update-Index } catch { Log "picker index FAILED: $($_.Exception.Message)" }
     if (-not (Test-Path (Join-Path $Pack 'theme.css'))) {

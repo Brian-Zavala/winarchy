@@ -28,8 +28,13 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge) {
 
     $entries = @($j.entries)
     [array]::Reverse($entries)
+    # Herdr is an app like the winget ones - it just came from its own installer - so it and
+    # the PATH entry its installer added are handled with the apps below, and -KeepApps
+    # keeps both (a kept Herdr with its PATH entry gone would stop answering to `herdr`).
+    $herdrBins = @($entries | Where-Object kind -eq 'herdr' | ForEach-Object { $_.bin })
     foreach ($e in $entries) {
-        if ($e.kind -in 'winget', 'note') { continue }
+        if ($e.kind -in 'winget', 'note', 'herdr') { continue }
+        if ($KeepApps -and $e.kind -eq 'envpath' -and $herdrBins -contains $e.dir) { continue }
         $what = switch ($e.kind) {
             'reg' { "registry $($e.path)\$($e.name)" }
             'file' { "file $($e.path)" }
@@ -46,6 +51,9 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge) {
         foreach ($e in $entries | Where-Object { $_.kind -eq 'winget' }) {
             if ($e.preinstalled) { Write-Host "  keeping $($e.id) (it was installed before winarchy)"; continue }
             & $step "winget uninstall $($e.id)" { winget uninstall -e --id $e.id --silent --accept-source-agreements | Out-Host }
+        }
+        foreach ($e in $entries | Where-Object { $_.kind -eq 'herdr' }) {
+            & $step 'Remove Herdr' { Restore-JournalEntry $e $dir }
         }
     } else { Write-Host '  -KeepApps: apps stay installed (just not started).' }
 

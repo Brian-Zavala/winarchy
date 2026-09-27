@@ -87,7 +87,7 @@ function Get-GlazeWMPath($proc, $p) {
 function Switch-GlazeWM($p) {
     $want = $p.glazewm
     if (-not $want) { return }
-    $running = @(Get-Process glazewm -ErrorAction SilentlyContinue)
+    $running = @(Get-GlazeWmProcess)      # the WM only: the auto-tiling watcher keeps a CLI alive too
     if ($running.Count -eq 1 -and (Get-GlazeWMPath $running[0] $p) -eq $want) { return }
     Write-Utf8 $SwitchFlag (Get-Date).ToString('s')
     foreach ($r in $running) {
@@ -125,7 +125,7 @@ function Invoke-Animations([string]$action) {
             $b = Get-AnimationBuild
             "window animations: $(if ((Get-Config).animations.enabled -and $b) { 'on' } else { 'off' })"
             "animation build:   $(if ($b) { "$($b.commit.Substring(0, 12)), built $($b.built)" } else { 'not built (winarchy animations build)' })"
-            $r = Get-Process glazewm -ErrorAction SilentlyContinue | Select-Object -First 1
+            $r = Get-GlazeWmProcess | Select-Object -First 1
             "running GlazeWM:   $(if ($r) { Get-GlazeWMPath $r (Get-Paths) } else { 'not running' })"
         }
     }

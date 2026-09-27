@@ -4,19 +4,27 @@
 # and run `winarchy apply`, or set "glazewmManaged": false in config.json to manage it yourself.
 # Keybinds mirror Omarchy v4 default/hypr/bindings/tiling.lua; extras live in winarchy.ahk.
 general:
-  startup_commands: ['shell-exec zebar']
+  # Hyprland-style auto-tiling (dwindle emulation): the extra startup_commands item below
+  # is added by lib/autotile.ps1's ConvertTo-AutoTileStartup when config "autoTiling.enabled"
+  # is true, else nothing. The watcher (lib/autotile-watch.ps1) exits on its own when
+  # GlazeWM does, so there is no matching shutdown_commands entry.
+  startup_commands: ['shell-exec zebar'{{ autotile_startup }}]
   shutdown_commands: ['shell-exec taskkill /IM zebar.exe /F']
   config_reload_commands: []
 
-  # Hyprland follow_mouse = 1
-  focus_follows_cursor: true
+  # Hyprland follow_mouse = 1 is winarchy.ahk's FocusFollowWatch (config focusFollowsCursor):
+  # GlazeWM's own stops following once the pointer touches a window it doesn't manage, and
+  # it isn't paused for games - focusing a window under a drifting pointer took the
+  # foreground off a fullscreen game, which then minimized itself.
+  focus_follows_cursor: false
 
   # Hyprland default: no workspace back-and-forth.
   toggle_workspace_on_refocus: false
 
-  # Hyprland warps the cursor to the focused window.
+  # Off: the pointer stays where it is on workspace switches and focus changes
+  # (with it on, every switch warped the cursor to the centre of the focused window).
   cursor_jump:
-    enabled: true
+    enabled: false
     trigger: 'window_focus'
 
   hide_method: 'cloak'

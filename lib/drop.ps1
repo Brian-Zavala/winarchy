@@ -4,8 +4,13 @@
   the tiled window under the cursor, or moving to the other monitor's workspace);
   a floating window that crossed monitors is re-homed to that monitor's workspace.
   Coordinates are physical pixels (same space GlazeWM uses).
+
+  -WorkspaceOnly re-homes the window to the workspace at the point and stops there,
+  leaving its place in that workspace's layout to GlazeWM. Used for a window that was
+  just opened (openOnHoveredMonitor): there was no drag, so the point says which
+  monitor the window belongs on, not where inside the layout it should sit.
 #>
-param([Parameter(Mandatory)][string]$Id, [int]$X, [int]$Y, [string]$Cli = (Join-Path $env:ProgramFiles 'glzr.io\GlazeWM\cli\glazewm.exe'))
+param([Parameter(Mandatory)][string]$Id, [int]$X, [int]$Y, [string]$Cli = (Join-Path $env:ProgramFiles 'glzr.io\GlazeWM\cli\glazewm.exe'), [switch]$WorkspaceOnly)
 
 $g = $Cli
 function Query($what) { (& $g query $what | ConvertFrom-Json).data }
@@ -34,7 +39,7 @@ if ($target -and $current -and $target.id -ne $current.id) {
     Glaze '--id', $Id, 'move', '--workspace', $target.name
 }
 
-if ($me.state.type -eq 'tiling') {
+if (-not $WorkspaceOnly -and $me.state.type -eq 'tiling') {
     # Step the window toward the drop point until it sits under the cursor.
     for ($i = 0; $i -lt 6; $i++) {
         $wins = (Query windows).windows | Where-Object { $_.state.type -eq 'tiling' -and $_.displayState -eq 'shown' }

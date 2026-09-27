@@ -22,14 +22,29 @@ function Invoke-Doctor([switch]$Fix) {
     & $check "Terminal settings  $($p.wtSettings)" ([bool]$p.wtSettings) 'optional: install Windows Terminal for terminal theming'
 
     Write-Host "`nRunning"
-    & $check 'GlazeWM' ([bool](Get-Process glazewm -ErrorAction SilentlyContinue)) "start it: `"$($p.glazewm)`""
+    & $check 'GlazeWM' ([bool](Get-GlazeWmProcess)) "start it: `"$($p.glazewm)`""
     $build = Get-AnimationBuild
-    $running = Get-Process glazewm -ErrorAction SilentlyContinue | Select-Object -First 1
+    $running = Get-GlazeWmProcess | Select-Object -First 1
     if ($running) { $running = Get-GlazeWMPath $running $p }
     $which = if ($p.glazewm -ne $p.glazewmOfficial) { "animation build $($build.commit.Substring(0, 12)) (experimental)" } else { 'official' }
     & $check "GlazeWM build: $which" (-not $running -or $running -eq $p.glazewm) "the other build is running: winarchy apply"
     if ((Get-Config).animations.enabled -and -not $build) { & $check 'window animations are on, but the animation build is missing' $false 'winarchy animations build' }
+    # Only a signed binary in a secure folder may ask for uiAccess, so our own build can't:
+    # Windows then hides every key from its hook while an elevated window is in front, and
+    # workspace switching (Super+1..0 are GlazeWM's own keys) dies over a game run as
+    # administrator. The admin game helper stands in for those keys, so it stops being
+    # optional as soon as the animation build is the one running.
+    if ($running -and $running -ne $p.glazewmOfficial -and -not (Get-GameHelper).task) {   # installed but stale: the check below says so
+        & $check 'workspace keys work over admin windows (animation build + game helper)' `
+            ([bool](Test-GameHelperCurrent)) `
+            'winarchy game-setup (one admin prompt), or winarchy animations off'
+    }
     & $check 'Zebar (top bar)' ([bool](Get-Process zebar -ErrorAction SilentlyContinue)) 'winarchy.ahk restarts it within 5 s; else run: winarchy apply'
+    if ($cfg.autoTiling.enabled) {
+        $autotileRunning = [bool](Get-CimInstance Win32_Process -Filter "Name='pwsh.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -like '*autotile-watch.ps1*' })
+        & $check 'auto-tiling watcher' $autotileRunning 'winarchy apply (GlazeWM starts it); if it keeps dying, winarchy autotile off then on'
+    }
     & $check 'Flow Launcher' ([bool](Get-Process Flow.Launcher -ErrorAction SilentlyContinue)) "start it: `"$($p.flow)`""
     $ahk = @(Get-OmarchyAhk | Where-Object { $_.CommandLine -like '*winarchy.ahk*' })
     & $check 'winarchy.ahk (keys, bar space, panels)' ($ahk.Count -eq 1) $(if ($ahk.Count -gt 1) { 'more than one copy is running: winarchy apply' } else { 'winarchy apply (starts it)' })
@@ -38,7 +53,7 @@ function Invoke-Doctor([switch]$Fix) {
     # Games set to "Run as administrator" need the admin game helper to be closed by Super+W / the bar.
     $gh = Get-GameHelper
     if ($gh.task) {
-        & $check 'admin game helper (closes games that run as administrator)' (Test-GameHelperCurrent) 'winarchy game-setup (the installed copy is out of date)'
+        & $check 'admin game helper (closes admin games; carries the workspace keys over them)' (Test-GameHelperCurrent) 'winarchy game-setup (the installed copy is out of date)'
     } else {
         $games = @(Get-GameProcesses (Get-Config))
         $admin = @((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers' -ErrorAction SilentlyContinue).PSObject.Properties |
@@ -54,6 +69,8 @@ function Invoke-Doctor([switch]$Fix) {
             @((Join-Path $Pack 'zebar.mjs'), 'Zebar client (offline copy)'),
             @((Join-Path $Pack 'theme.css'), 'theme colors'),
             @((Join-Path $Pack 'index.json'), 'picker index'),
+            @((Join-Path $Pack 'apps.json'), 'Apps list'),
+            @((Join-Path $Pack 'catalog.json'), 'Install/Remove catalog'),
             @($GlazeConfig, 'GlazeWM config'))) {
         & $check "$($f[1])  $($f[0])" (Test-Path $f[0]) 'winarchy apply'
     }
@@ -65,6 +82,46 @@ function Invoke-Doctor([switch]$Fix) {
     & $check 'starts at login (Startup\winarchy.lnk)' ($target -like "*$Code*") 'winarchy apply'
     & $check 'winarchy on PATH' ((([Environment]::GetEnvironmentVariable('Path', 'User')) -split ';') -contains (Join-Path $Code 'bin')) 'winarchy install'
 
+    # Herdr is optional, so this section only appears once it is installed: nothing here
+    # is wrong on a machine that never asked for it.
+    if (Test-HerdrInstalled) {
+        Write-Host "`nHerdr"
+        & $check "herdr  $(Get-HerdrExe)" $true ''
+        $herdrConfig = Get-HerdrConfigPath
+        & $check "config  $herdrConfig" (Test-Path $herdrConfig) 'winarchy herdr config'
+        if (Test-Path $herdrConfig) {
+            # Herdr validates its own config and names anything it had to ignore, which is
+            # what a hand-edited template gets wrong.
+            $issues = @(& (Get-HerdrExe) config check 2>&1 | Where-Object { $_ -notmatch '^config: ok' })
+            & $check "config is valid$(if ($issues) { " ($($issues.Count) issue(s))" })" (-not $issues) "$($issues -join '; ')"
+        }
+        & $check "theme: $(Get-HerdrTheme (Read-State).theme)" $true ''
+        & $check 'Herdr keybindings list (Learn > Herdr)' (Test-Path (Join-Path $Pack 'herdr-keys.txt')) 'winarchy herdr keys'
+        $profileFile = $PROFILE.CurrentUserAllHosts
+        $hasBlock = (Test-Path -LiteralPath $profileFile) -and
+            ((Get-Content -Raw -LiteralPath $profileFile) -match [regex]::Escape($HerdrProfileBegin))
+        & $check "hdl / hds / hdlm / hsl in $profileFile" $hasBlock 'winarchy herdr shortcuts'
+    }
+    # The bar's agent usage runs Omarchy's collectors, which are Python. Without it the
+    # indicator simply never appears, which looks the same as "no agent used yet" - so
+    # say which it is, but only to someone who has an agent whose usage it would show.
+    if ($cfg.agentUsage.enabled -ne $false -and @(Get-AgentState | Where-Object installed).Count) {
+        Write-Host "`nAgent usage (bar)"
+        & $check "Python 3  $($p.python)" ([bool]$p.python) 'winget install -e --id Python.Python.3.13, then: winarchy apply (the "python" in WindowsApps is only a Store shortcut and does not count)'
+        $usage = Read-Json (Join-Path $Pack 'agents.json')
+        if ($p.python) {
+            $names = @($usage.agents | ForEach-Object name)
+            & $check "agents shown in the bar: $(if ($names) { $names -join ', ' } else { 'none yet' })" $true ''
+            foreach ($a in @($usage.agents | Where-Object usageStatusText)) {
+                & $check "$($a.name): $($a.usageStatusText)" $false $a.authHelpText
+            }
+        }
+    }
+    $agent = Get-DefaultAgent
+    if ($agent -and -not (Test-AgentInstalled $agent)) {
+        & $check "default agent '$agent' is installed" $false "$($AgentTable[$agent].hint), or pick another: winarchy default-agent <name>"
+    }
+
     Write-Host "`nScreen"
     $yaml = if (Test-Path $GlazeConfig) { Get-Content -Raw $GlazeConfig } else { '' }
     $top = if ($yaml -match "'(\d+)px'\s*# gaps:top") { [int]$Matches[1] } else { 0 }
@@ -74,7 +131,7 @@ function Invoke-Doctor([switch]$Fix) {
         Where-Object { $_.Message -match 'ttfx' }).Count
     & $check "screensaver effects engine: $crashes crash(es) in the last hour" ($crashes -eq 0) 'winarchy update (older versions crash-looped ttfx on Windows)'
     $bindings = @(Get-WorkspaceBindings $yaml)
-    if ($bindings -and $cfg.glazewmManaged -ne $false -and $p.glazewmCli -and (Get-Process glazewm -ErrorAction SilentlyContinue)) {
+    if ($bindings -and $cfg.glazewmManaged -ne $false -and $p.glazewmCli -and (Get-GlazeWmProcess)) {
         $live = try { (& $p.glazewmCli query monitors | ConvertFrom-Json).data.monitors } catch { $null }
         if ($live) {
             $off = @(Get-MisplacedWorkspaces $live $bindings | ForEach-Object name)
@@ -101,7 +158,7 @@ function Invoke-Doctor([switch]$Fix) {
     if ($Fix -and $script:DoctorProblems) {
         Write-Host "`nFixing: re-applying configs and restarting the parts" -ForegroundColor Cyan
         Use-Lock { Invoke-Apply }
-        if ($p.glazewm -and -not (Get-Process glazewm -ErrorAction SilentlyContinue)) { Start-Process $p.glazewm }
+        if ($p.glazewm -and -not (Get-GlazeWmProcess)) { Start-Process $p.glazewm }
         if ($p.flow -and -not (Get-Process Flow.Launcher -ErrorAction SilentlyContinue)) { Start-Process $p.flow }
     }
     Write-Host ''

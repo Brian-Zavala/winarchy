@@ -1,0 +1,134 @@
+/* The bar's agent usage panel (Omarchy Quattro's agents widget). Colors come from
+   theme.css, so it follows light and dark themes alike; the values below are Tokyo Night
+   fallbacks. Card look matches the calendar and the menu. */
+:root {
+  --bg: #1a1b26; --fg: #a9b1d6; --accent: #7aa2f7; --yellow: #e0af68; --alert: #f7768e;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  /* Secondary and muted text. Measured against all 22 Omarchy themes: 86% is the
+     faintest mix that keeps small text at 4.5:1 or better on every one (Rose Pine is
+     the tightest), so the hierarchy comes from size, weight and spacing, not fading. */
+  --ink-2: color-mix(in srgb, var(--fg) 90%, transparent);
+  --ink-3: color-mix(in srgb, var(--fg) 86%, transparent);
+  --hair: color-mix(in srgb, var(--fg) 10%, transparent);    /* hairline rules */
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  overflow: clip;
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font, 'JetBrainsMono NF'), 'JetBrainsMono NF', 'JetBrainsMono Nerd Font', monospace;
+  font-size: 13px;
+  user-select: none;
+  cursor: default;
+}
+
+button { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
+.hidden { display: none !important; }
+
+#panel {
+  position: absolute;
+  top: var(--top, 36px);
+  left: var(--left, 50%);
+  width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px 22px 14px;
+  background: var(--bg);
+  border: 2px solid var(--fg);
+  box-shadow: 0 24px 70px -24px color-mix(in srgb, var(--accent) 45%, transparent);
+  opacity: 0;
+  translate: 0 -6px;
+  transition: opacity 140ms var(--ease), translate 180ms var(--ease);
+}
+.shown #panel { opacity: 1; translate: 0 0; }
+@media (prefers-reduced-motion: reduce) { #panel { transition: none; } }
+
+/* ---- hero: the mark, the tool, the plan it runs on */
+#hero { display: flex; align-items: center; gap: 16px; line-height: 1.1; }
+#hero .glyph { font-size: 34px; }
+.who { display: flex; flex-direction: column; gap: 4px; }
+#name { font-size: 20px; font-weight: 700; }
+#plan { color: var(--ink-2); letter-spacing: .5px; }
+
+/* Auth and endpoint problems: an icon and words, never color alone. */
+#status {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 12px;
+  border-left: 2px solid var(--alert);
+  background: color-mix(in srgb, var(--alert) 8%, transparent);
+  line-height: 1.45;
+}
+#status .icon { color: var(--alert); }
+#status strong { display: block; }
+#status span.help { color: var(--ink-2); }
+
+/* ---- subscription switch (h / l), only with more than one agent */
+#chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { padding: 3px 10px; border: 1px solid var(--hair); border-radius: 4px; color: var(--ink-2); }
+.chip:hover { color: var(--fg); border-color: color-mix(in srgb, var(--fg) 35%, transparent); }
+.chip.on { color: var(--fg); border-color: var(--accent); }
+
+/* ---- sections */
+section { display: flex; flex-direction: column; gap: 8px; }
+h2 { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-3); }
+
+/* ---- limits: label, % used, a meter whose fill carries severity, time to reset.
+   The unfilled track is a light step of the fill's own hue, so the state reads across
+   the whole bar. Severity also shows as a glyph beside the figure, never color alone. */
+#limits { display: flex; flex-direction: column; gap: 12px; }
+.limit { display: grid; grid-template-columns: 1fr auto; row-gap: 5px; --fill: var(--accent); }
+.limit.warn { --fill: var(--yellow); }
+.limit.crit { --fill: var(--alert); }
+.limit .label { color: var(--ink-2); }
+.limit .pct { font-weight: 700; text-align: right; }
+.limit .pct .flag { margin-right: 6px; color: var(--fill); }
+.limit .meter {
+  grid-column: 1 / -1;
+  height: 6px; border-radius: 3px; overflow: hidden;
+  background: color-mix(in srgb, var(--fill) 18%, transparent);
+}
+.limit .meter span { display: block; height: 100%; border-radius: inherit; background: var(--fill); transition: width 200ms var(--ease); }
+.limit .reset { grid-column: 1 / -1; font-size: 11px; color: var(--ink-3); }
+
+/* ---- tokens by day / by model: one series each, so one color and no legend.
+   Label | bar (scaled to the heaviest row) | value. The values sit in their own column,
+   so each list is its own table view; the bar is an 8px mark, square at the baseline
+   and rounded at its data end. */
+.rows { display: flex; flex-direction: column; gap: 2px; }
+.row {
+  display: grid;
+  /* One label width for both charts, so their bars start on the same line. */
+  grid-template-columns: 132px 1fr 64px;
+  align-items: center;
+  gap: 12px;
+  min-height: 22px;
+  padding: 0 4px;
+  border-radius: 3px;
+  outline: none;
+}
+.row:hover, .row:focus-visible { background: color-mix(in srgb, var(--fg) 6%, transparent); }
+.row .label { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .track { height: 8px; }
+.row .bar { display: block; height: 100%; min-width: 2px; border-radius: 0 4px 4px 0; background: var(--accent); }
+.row .bar.zero { min-width: 0; }
+.row .value { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.row.today .label, .row.today .value { color: var(--fg); font-weight: 700; }
+
+/* ---- footer */
+footer {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding-top: 10px; border-top: 1px solid var(--hair);
+  font-size: 11px; color: var(--ink-3);
+}
+
+/* ---- hover / focus detail (enhances; every figure is also on the row itself) */
+#tip {
+  position: absolute; z-index: 2; pointer-events: none;
+  padding: 7px 10px; line-height: 1.5; white-space: pre;
+  background: var(--bg); border: 1px solid color-mix(in srgb, var(--fg) 30%, transparent);
+  font-size: 11px; color: var(--fg);
+}
