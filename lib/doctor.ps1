@@ -156,7 +156,10 @@ function Invoke-Doctor([switch]$Fix) {
     if ($fails) { $fails | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow } } else { Write-Host '  none' -ForegroundColor Green }
 
     if ($Fix -and $script:DoctorProblems) {
-        Write-Host "`nFixing: re-applying configs and restarting the parts" -ForegroundColor Cyan
+        Write-Host "`nFixing: installing anything missing, re-applying configs, restarting the parts" -ForegroundColor Cyan
+        # A missing app or dependency (AutoHotkey, GlazeWM, Python, ...) is the fix most
+        # problems above point at; each step only installs what is not there.
+        Install-Dependencies
         Use-Lock { Invoke-Apply }
         if ($p.glazewm -and -not (Get-GlazeWmProcess)) { Start-Process $p.glazewm }
         if ($p.flow -and -not (Get-Process Flow.Launcher -ErrorAction SilentlyContinue)) { Start-Process $p.flow }

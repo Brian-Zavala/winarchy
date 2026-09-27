@@ -37,6 +37,10 @@ Then press **Super + K** for every key. Super is the Windows key.
 nothing. The one thing it skips is Herdr (it installs from outside winget and is unsigned, so that
 stays your call) — add it any time from the menu's Install › Terminal.
 
+**Dependencies stay automatic.** `winarchy update` installs anything a newer winarchy needs that your
+PC doesn't have yet, and `winarchy doctor -Fix` puts back anything that went missing — each only
+installs what isn't there, and records it so uninstall takes it back out.
+
 **Requirements:** Windows 11 22H2 or newer, winget (App Installer), an internet connection for install.
 
 ## What you get
@@ -101,7 +105,8 @@ winarchy agent-usage       refresh the bar's AI agent usage now (-Force: rescan 
 winarchy autotile off      turn off auto-tiling    (on / toggle / status)
 winarchy animations on     window animations       (experimental; first: animations build)
 winarchy bar off           hide the top bar        (winarchy bar on / toggle; Super+Shift+Space)
-winarchy update            update winarchy, Omarchy themes, Herdr and the apps
+winarchy update            update winarchy, Omarchy themes, Herdr and the apps, and
+                           install anything a newer winarchy needs
 winarchy uninstall         back to normal Windows  (-DryRun to preview, -KeepApps)
 ```
 

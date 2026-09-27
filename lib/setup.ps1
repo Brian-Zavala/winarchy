@@ -203,6 +203,20 @@ function Install-HerdrStep {
     try { Install-Herdr } catch { Write-Ok "Herdr install failed (skipping): $($_.Exception.Message)" }
 }
 
+# Everything winarchy needs on the machine, installing only what is missing: install runs
+# it, and so do `winarchy update` (in a fresh process, after the pull, so a dependency that
+# new code brings in - Python arrived this way - lands on PCs installed before it) and
+# `winarchy doctor -Fix`. Each step records what it installs in the journal first, and
+# notes as preinstalled whatever was already there, so uninstall removes only what winarchy
+# added. Herdr is not in here: it is an optional add-on, not something winarchy needs, and
+# installing an unsigned binary from outside winget is the person's call (Install-HerdrStep).
+function Install-Dependencies {
+    Install-Prerequisites
+    Install-Apps
+    Install-Extras
+    [void](Update-Paths)
+}
+
 # The few questions whose answer depends on the person, not the machine.
 function Get-InstallAnswers($p) {
     Write-Step 'A few choices (Enter = recommended)'
@@ -274,9 +288,7 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
         [void](Add-JournalEntry @{ kind = 'runkeys'; key = 'runkeys'; names = @((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).PSObject.Properties.Name | Where-Object { $_ -notlike 'PS*' }) })
     }
     Save-Dir (Join-Path $env:USERPROFILE '.glzr')
-    Install-Prerequisites
-    Install-Apps
-    Install-Extras
+    Install-Dependencies
     Install-HerdrStep
     $p = Update-Paths
 
@@ -375,6 +387,13 @@ function Invoke-Update {
             }
             $codeChanged = $before -ne (git -C $Code rev-parse HEAD)
         } else { Write-Ok 'installed from a local copy (no git remote): nothing to pull' }
+
+        # Whatever winarchy needs and this PC is missing - including anything the code just
+        # pulled depends on that an older install never set up. A fresh process, like apply
+        # below: this one still has the code from before the pull loaded.
+        $deps = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Code 'bin\winarchy.ps1'), 'deps')
+        & $p.pwsh @deps
+        if ($LASTEXITCODE) { Add-Unfinished 'some dependencies did not install (listed above); winarchy doctor -Fix tries again' }
 
         Write-Step 'Omarchy themes'
         $omarchy = $pending | Where-Object name -eq 'Omarchy themes' | Select-Object -First 1

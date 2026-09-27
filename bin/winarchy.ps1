@@ -6,7 +6,9 @@
   winarchy install [-Yes] [-Adopt]     set everything up (asks a few questions; -Yes = defaults)
   winarchy uninstall [-KeepApps] [-DryRun] [-Purge]
                                           undo every change, from the backup journal
-  winarchy update                      pull the latest winarchy, re-apply, upgrade apps
+  winarchy update                      pull the latest winarchy, install anything it now needs,
+                                          re-apply, upgrade apps
+  winarchy deps                        install whatever winarchy needs and this PC is missing
   winarchy apply [-MonitorsOnly] [-Resplit]
                                           regenerate configs from config.json (after editing it);
                                           -Resplit: split workspaces over the monitors connected now
@@ -123,6 +125,12 @@ switch ($Verb) {
         Use-Lock { Add-ConfigGame $Arg; Invoke-Apply -MonitorsOnly }
     }
     'extras' { Install-Extras; Use-Lock { Invoke-Apply } }
+    # Install whatever winarchy needs and is missing (update and doctor -Fix run this).
+    'deps' {
+        Install-Dependencies
+        Write-Unfinished
+        if ($script:Unfinished.Count) { throw "$($script:Unfinished.Count) dependency step(s) did not finish" }
+    }
     'weather' { Update-Weather }
     'update-check' { Invoke-UpdateCheck }
     'animations' { Invoke-Animations $Arg }
