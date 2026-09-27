@@ -224,8 +224,8 @@ function Get-InstallAnswers($p) {
     if (-not $cfg) { $cfg = [ordered]@{} }
     if ([int]$p.input.count -gt 1 -or $p.input.ime) {
         Write-Ok "You have $($p.input.count) keyboard layouts/input methods. Windows switches them with Win+Space;"
-        Write-Ok 'Omarchy uses Super+Space for the app launcher (Alt+Shift still switches layouts).'
-        $cfg.takeOverWinSpace = Read-YesNo 'Use Super+Space for the launcher?' $true
+        Write-Ok 'Winarchy uses Super+Space for the Omarchy menu (Alt+Shift still switches layouts).'
+        $cfg.takeOverWinSpace = Read-YesNo 'Use Super+Space for the Omarchy menu?' $true
     }
     $personal = Join-Path $p.startup 'launchers.ahk'
     if (Test-Path $personal) {
@@ -313,7 +313,7 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     Write-Host ''
     Write-Host 'Done. Super = the Windows key. Start here:' -ForegroundColor Green
     Write-Host '  Super + K             all keybindings'
-    Write-Host '  Super + Alt + Space   Omarchy menu        Super + Space   app launcher'
+    Write-Host '  Super + Space         Omarchy menu        Super + Alt + Space   app launcher'
     Write-Host '  Super + Return        terminal            Super + 1..0    workspaces'
     Write-Host '  winarchy doctor    check the setup     winarchy uninstall   undo everything'
     Write-Host "  Settings: $ConfigFile   (then: winarchy apply)"

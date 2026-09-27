@@ -2,8 +2,8 @@ OMARCHY-STYLE KEYBINDINGS (Winarchy)            Super = Windows key
 =====================================================================
 
 MENUS
-  Super + Space                 App launcher (Flow Launcher)
-  Super + Alt + Space           Omarchy menu (also: left click the bar logo)
+  Super + Space                 Omarchy menu (also: left click the bar logo)
+  Super + Alt + Space           App launcher (Flow Launcher)
   Super + Escape                System menu (lock, suspend, restart, shutdown)
   Super + K                     Keybindings (this list)
   Super + Ctrl + Space          Background picker
@@ -110,7 +110,7 @@ HERDR AND CODING AGENTS
   hdlm <agent> [<agent2>]       One hdl tab per subdirectory of the current folder
   hsl <count> <command>         Swarm: N panes in a grid, all running the same command
   Ctrl + Space                  Herdr's prefix (then ? for help) - full list in Learn > Herdr keys
-  Menu > Trigger > Herdr        Open or re-attach the Herdr session
+  Super + Ctrl + Return         Herdr: open or re-attach the session (also Menu > Trigger > Herdr)
   Menu > Trigger > Agent        Start the default coding agent, unattended
   Menu > Setup > Default Agent  Choose it (Claude, Codex, Copilot, OpenCode, ...)
   Bar robot icon                Click: agent usage and limits, right-click: start the agent

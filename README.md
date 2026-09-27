@@ -31,7 +31,8 @@ The installer:
    your default browser, terminal and editor;
 5. downloads Omarchy's themes and backgrounds (~110 MB, asks first) and applies Tokyo Night.
 
-Then press **Super + K** for every key. Super is the Windows key.
+Then press **Super + Space** for the Omarchy menu and **Super + K** for every key. Super is the
+Windows key.
 
 **Unattended:** `$env:WINARCHY_YES = 1` before the one-liner takes every recommended answer and asks
 nothing. The one thing it skips is Herdr (it installs from outside winget and is unsigned, so that
@@ -55,9 +56,10 @@ installs what isn't there, and records it so uninstall takes it back out.
 | **Top bar** | Omarchy Quattro's bar: logo (menu), workspaces, the clock at the exact centre with the Quattro calendar under it (Super+Ctrl+Alt+D), indicators to its left (hover to reveal the ones that are off, click to toggle), weather, updates, the AI agent icon, and system modules. Running windows and the tray fold behind a chevron. Always above windows (except fullscreen ones and games); tiles never go under it. Super+Shift+Space turns it off until you turn it back on |
 | **Gaming** | Games get out of the way by themselves: GlazeWM doesn't tile them, the bar hides on the game's monitor, nothing steals focus from a fullscreen game, and each game stays on its own workspace. A gamepad icon in the bar switches to the game or closes it; Super+W closes it too. Gamepad input keeps the screensaver away. See [Games](#games) |
 
-### The Omarchy menu (Super+Alt+Space)
+### The Omarchy menu (Super+Space)
 
 Laid out like Omarchy Quattro's: **Apps · Learn · Trigger · Style · Setup · Install · Remove · Update · About · System**.
+Super+Space opens it (or left-click the bar's logo); the app launcher is on Super+Alt+Space.
 
 | | |
 |---|---|
@@ -127,8 +129,8 @@ the bar picks up `user.css`. Open them from the Omarchy menu (Setup / Style).
 
 [Herdr](https://herdr.dev) is a terminal workspace manager for AI coding agents, and what Omarchy
 Quattro uses instead of tmux (a Herdr workspace is a tmux session, a tab a window, a pane a pane).
-Install offers it; otherwise the menu's Install › Terminal › Herdr adds it. Trigger › Herdr opens it
-or re-attaches to the session you left.
+Install offers it; otherwise the menu's Install › Terminal › Herdr adds it. **Super+Ctrl+Return** (or
+Trigger › Herdr) opens it or re-attaches to the session you left.
 
 Inside a Herdr pane, Omarchy's layouts are one word each:
 
@@ -218,9 +220,10 @@ Herdr (`-KeepApps` keeps them). Downloaded themes, backgrounds and fonts are kep
 **Some windows can't be moved or tiled.** Windows running as administrator can't be managed by
 non-admin tools (GlazeWM, AutoHotkey). That's a Windows security boundary.
 
-**I use several keyboard layouts.** Windows switches layouts with Win+Space; Omarchy uses it for
-the launcher. The installer asks. Alt+Shift still switches layouts either way, and
-`"takeOverWinSpace": false` in config.json gives Win+Space back.
+**I use several keyboard layouts.** Windows switches layouts with Win+Space; Winarchy uses it for
+the Omarchy menu. The installer asks. Alt+Shift still switches layouts either way, and
+`"takeOverWinSpace": false` in config.json gives Win+Space back — the menu then stays on
+Super+Alt+Space, and the launcher on Alt+Space.
 
 **Keys on my keyboard layout.** Letters follow your layout (like Hyprland). Punctuation keys
 (`,` `-` `=` `` ` ``) are bound by physical position, so they work on AZERTY/QWERTZ too.
