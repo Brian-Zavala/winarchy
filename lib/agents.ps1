@@ -309,13 +309,15 @@ function Update-AgentUsage([switch]$Force, [switch]$LimitsOnly, [string]$Only, [
         Write-Utf8 (Join-Path $AgentUsageDir "$($r.id).json") $text
         if ($record.retryAdvised) { $retry = $true }
     }
-    Write-AgentUsageFile $cfg
     # Upstream's collector asks for an early retry when the limits probe reached no server
-    # at all - the first run after login often beats the network. Once, a minute later.
+    # at all - the first run after login often beats the network. Once, a minute later,
+    # and only its records are returned, or every agent would be listed twice.
     if ($retry -and -not $NoRetry) {
+        [void](Write-AgentUsageFile $cfg)
         Start-Sleep -Seconds 60
-        Update-AgentUsage -LimitsOnly -NoRetry
+        return Update-AgentUsage -LimitsOnly -NoRetry
     }
+    Write-AgentUsageFile $cfg
 }
 
 # Merge every record on disk - whoever wrote it, so a collector added later needs no
