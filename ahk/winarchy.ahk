@@ -379,7 +379,10 @@ GlazeGuard() {
         return
     }
     WmLog("GlazeWM stopped: restarting it")
-    try Run('"' exe '"', RegExReplace(exe, "\[^\]+$"))
+    SplitPath exe, , &dir
+    try Run('"' exe '"', dir)
+    catch as e
+        WmLog("GlazeWM restart failed: " e.Message)
 }
 
 ; --- Screensaver (Omarchy: effects after 2.5 min idle; any input ends it) -----
