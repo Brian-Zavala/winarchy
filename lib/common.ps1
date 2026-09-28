@@ -345,6 +345,17 @@ function ConvertTo-EncodedCommand([string]$script) {
     [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script))
 }
 
+# Screenshot auto-copy (ps51\screenshot-to-clipboard.ps1), found by its script name so a
+# copy started from an older path (the pre-rename junction) counts too.
+function Get-ScreenshotWatcher {
+    Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -like '*screenshot-to-clipboard.ps1*' }
+}
+
+function Stop-ScreenshotWatcher {
+    Get-ScreenshotWatcher | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+}
+
 function Get-KnownFolder([guid]$id) {
     Initialize-Native
     $ptr = [IntPtr]::Zero

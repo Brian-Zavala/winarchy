@@ -82,7 +82,7 @@ It's JSON, so a `\` in a path is written `\\`. A file with a mistake in it is le
 | Key | Default | What it does |
 |---|---|---|
 | `syncAtLogin` | `true` | Index your background folders again after login (no downloads) |
-| `screenshotAutoCopy` | `false` | Copy every new screenshot file to the clipboard |
+| `screenshotAutoCopy` | `true` | Copy every new screenshot file to the clipboard, so a snip pastes straight into a terminal app like Claude Code |
 | `omarchyRepo` | `"omacom/omarchy"` | The GitHub repo the themes and backgrounds come from |
 | `omarchyTag` | `"v4.0.4"` | The Omarchy release they come from. `winarchy update` moves it to the latest |
 | `zebarClientVersion` | `"3.0.3"` | The version of Zebar's client library the bar loads |

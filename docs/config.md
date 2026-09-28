@@ -34,7 +34,7 @@ Put only the keys you want to change; everything else comes from
 | `agentUsage.refreshSeconds` | `900` | How often the usage refreshes (30 to 3600). Opening the panel always refreshes the limits |
 | `agentUsage.providers` | `{}` | Hide one agent that is installed: `{ "codex": { "enabled": false } }`. Collectors ship for `claude`, `codex` and `fireworks`; a new `lib/agents/usage-<id>.py` is picked up with no other change. Claude's limits come from Anthropic's usage endpoint using Claude Code's own sign-in (the token goes nowhere else and never into a file), Codex's from `codex app-server`; `CLAUDE_CONFIG_DIR` and `CODEX_HOME` are honored. Fireworks reads `FIREWORKS_API_KEY` or `~/.fireworks/auth.ini`, and an optional `~/.config/omarchy/agents/fireworks.json` for its balance |
 | `location` | `null` | `{ "lat": 51.5, "lon": -0.12, "name": "London" }` instead of the IP-based guess (ipinfo.io) |
-| `screenshotAutoCopy` | `false` | Copy every new screenshot file to the clipboard |
+| `screenshotAutoCopy` | `true` | Copy every new screenshot file to the clipboard, so a snip pastes straight into a terminal app like Claude Code |
 | `syncAtLogin` | `true` | Re-index your background folders after login (no downloads) |
 | `glazewmManaged` | `true` | `false` = winarchy stops writing `~/.glzr/glazewm/config.yaml` (edit it yourself) |
 | `gameMode` | `true` | Games get out of the way: GlazeWM doesn't tile them, the bar hides on the game's monitor, and display-mode changes, bar restarts and the screensaver wait until you leave or close it. Super+W and the bar's gamepad icon close a game; gamepad input counts as activity. Games = the ones Windows' Game Bar recognised (any launcher) + `games`. See the README's Games section |

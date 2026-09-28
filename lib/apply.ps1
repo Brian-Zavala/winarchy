@@ -392,7 +392,18 @@ function Set-Autostart($p, $cfg) {
     $shot = Join-Path $startup 'Screenshot to Clipboard.lnk'
     if ($cfg.screenshotAutoCopy) {
         Save-File $shot
-        New-Shortcut $shot (Join-Path $env:SystemRoot 'System32\conhost.exe') "--headless `"$($p.powershell)`" -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Code\ps51\screenshot-to-clipboard.ps1`"" "$Code\ps51" 7
+        $shotArgs = "--headless `"$($p.powershell)`" -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Code\ps51\screenshot-to-clipboard.ps1`""
+        New-Shortcut $shot (Join-Path $env:SystemRoot 'System32\conhost.exe') $shotArgs "$Code\ps51" 7
+        # Working now, not from the next login.
+        if (-not (Get-ScreenshotWatcher)) {
+            Start-Process (Join-Path $env:SystemRoot 'System32\conhost.exe') -ArgumentList $shotArgs -WorkingDirectory "$Code\ps51" -WindowStyle Hidden
+        }
+    } elseif (Test-Path -LiteralPath $shot) {
+        # Turned off: take it out of Startup (journaled, so uninstall puts back one you had
+        # before winarchy) and stop the running copy.
+        Save-File $shot
+        Remove-Item -LiteralPath $shot -Force
+        Stop-ScreenshotWatcher
     }
     # GlazeWM at login: the selected build (official, or the animation build).
     $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'

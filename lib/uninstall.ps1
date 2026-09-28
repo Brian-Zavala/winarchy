@@ -52,6 +52,11 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge) {
         }
         & $step "Restore $what" { Restore-JournalEntry $e $dir }
     }
+    # The replay removed the screenshot auto-copy shortcut unless you had one before
+    # winarchy; if it's gone, stop the running copy too (it runs from the code folder).
+    if (-not (Test-Path -LiteralPath (Join-Path ([Environment]::GetFolderPath('Startup')) 'Screenshot to Clipboard.lnk'))) {
+        & $step 'Stop screenshot auto-copy' { Stop-ScreenshotWatcher }
+    }
 
     if (-not $KeepApps) {
         foreach ($e in $entries | Where-Object { $_.kind -eq 'winget' }) {
