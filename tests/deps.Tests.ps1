@@ -6,6 +6,8 @@ BeforeAll {
     $root = Split-Path -Parent $PSScriptRoot
     foreach ($f in 'common', 'detect', 'render', 'journal', 'catalog', 'herdr', 'extras', 'setup', 'doctor') { . "$root\lib\$f.ps1" }
     $Code = $root
+    # Log lines from tests go to a scratch log, never the real one.
+    $LogFile = Join-Path $TestDrive 'winarchy.log'
     $Pack = Join-Path $TestDrive 'pack'
     New-Item -ItemType Directory -Force $Pack | Out-Null
 }

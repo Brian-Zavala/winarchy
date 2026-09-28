@@ -4,6 +4,8 @@ BeforeAll {
     $root = Split-Path -Parent $PSScriptRoot
     foreach ($f in 'common', 'detect', 'render', 'themes', 'targets', 'journal', 'apply', 'herdr') { . "$root\lib\$f.ps1" }
     $Code = $root
+    # Log lines from tests go to a scratch log, never the real one.
+    $LogFile = Join-Path $TestDrive 'winarchy.log'
 }
 
 Describe 'Workspace split' {

@@ -5,6 +5,8 @@ BeforeAll {
     $root = Split-Path -Parent $PSScriptRoot
     foreach ($f in 'common', 'detect', 'render', 'journal', 'agents', 'herdr') { . "$root\lib\$f.ps1" }
     $Code = $root
+    # Log lines from tests go to a scratch log, never the real one.
+    $LogFile = Join-Path $TestDrive 'winarchy.log'
 
     # Pester runs a mock's body in its own scope, so the fake keeps its state in globals
     # (reset for every test, removed in AfterAll) rather than in $script: variables.

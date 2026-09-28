@@ -4,6 +4,8 @@ BeforeAll {
     $root = Split-Path -Parent $PSScriptRoot
     foreach ($f in 'common', 'detect', 'agents') { . "$root\lib\$f.ps1" }
     $Code = $root
+    # Log lines from tests go to a scratch log, never the real one.
+    $LogFile = Join-Path $TestDrive 'winarchy.log'
     Add-Type -Namespace Win32 -Name Argv -MemberDefinition @'
 [DllImport("shell32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
 public static extern IntPtr CommandLineToArgvW(string cmdLine, out int count);

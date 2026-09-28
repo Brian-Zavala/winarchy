@@ -5,6 +5,8 @@ BeforeAll {
     # herdr: the Terminal group's Herdr row answers its presence test from lib/herdr.ps1.
     foreach ($f in 'common', 'detect', 'render', 'catalog', 'herdr') { . "$root\lib\$f.ps1" }
     $Code = $root
+    # Log lines from tests go to a scratch log, never the real one.
+    $LogFile = Join-Path $TestDrive 'winarchy.log'
 }
 
 Describe 'Catalog table' {

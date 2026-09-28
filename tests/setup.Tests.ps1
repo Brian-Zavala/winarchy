@@ -4,6 +4,8 @@ BeforeAll {
     $root = Split-Path -Parent $PSScriptRoot
     foreach ($f in 'common', 'detect', 'render', 'catalog', 'herdr', 'extras', 'setup') { . "$root\lib\$f.ps1" }
     $Code = $root
+    # Log lines from tests go to a scratch log, never the real one.
+    $LogFile = Join-Path $TestDrive 'winarchy.log'
     # updates.json lives in the bar's folder: keep the real one out of it.
     $Pack = Join-Path $TestDrive 'pack'
     New-Item -ItemType Directory -Force $Pack | Out-Null
