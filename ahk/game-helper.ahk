@@ -109,7 +109,9 @@ LWin up::Send "{Blind}{vkE8}{LWin up}"
 #+Tab::Rescue(702)
 #^Tab::Rescue(703)
 #s::Rescue(801)
+#SC029::Rescue(801)   ; Super + `: the scratchpad too
 #!s::Rescue(802)
+#+SC029::Rescue(802)  ; Super + Shift + `: send to the scratchpad
 #f::Rescue(803)
 #!f::Rescue(804)
 #HotIf
