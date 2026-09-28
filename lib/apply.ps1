@@ -196,7 +196,7 @@ function Write-GlazeConfig([int]$monitorCount) {
     }
     $yaml = Expand-Template (Get-Content -Raw $tplFile) $values
     if ($yaml -eq $old) { return $false }
-    if ($old) { Save-File $GlazeConfig }
+    Save-File $GlazeConfig
     Write-Utf8 $GlazeConfig $yaml
     Log "GlazeWM config written ($monitorCount monitor(s))"
     $true
@@ -263,7 +263,10 @@ function Write-AhkIni($p, $cfg) {
 # --- Zebar pack ---------------------------------------------------------------------
 function Get-ZpackJson($p) {
     $ahk = $p.ahk
-    $menuPrivilege = [ordered]@{ program = $ahk; argsRegex = '.*menu\.ahk.*' }
+    # Only our own menu.ahk may drive the menu widget, not any script of that name. Zebar's
+    # regex is Rust's, which rejects .NET's escaped spaces, so only the metacharacters are.
+    $menuPath = (Join-Path $Code 'ahk\menu.ahk') -replace '([\\.+*?()|\[\]{}^$])', '\$1'
+    $menuPrivilege = [ordered]@{ program = $ahk; argsRegex = "(?i).*$menuPath.*" }
     $widget = {
         param($name, $html, $zOrder, $focused, $transparent, $include, $privileges, $presets)
         [ordered]@{
@@ -368,7 +371,7 @@ function Write-ZebarPack($p, $cfg) {
     }
     $cur = Read-Json $settings
     if (-not $cur -or -not ($cur.startupConfigs | Where-Object { $_.pack -eq 'omarchy' -and $_.widget -eq 'bar' })) {
-        if ($cur) { Save-File $settings }
+        Save-File $settings
         Write-Json $settings $want
     }
 }

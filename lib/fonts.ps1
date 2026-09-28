@@ -16,6 +16,7 @@ function Install-FontFile([string]$file) {
     $dir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
     New-Item -ItemType Directory -Force $dir | Out-Null
     $dest = Join-Path $dir ([IO.Path]::GetFileName($file))
+    Save-File $dest
     Copy-Item -Force $file $dest
     Add-Type -AssemblyName PresentationCore
     $face = try { ([System.Windows.Media.GlyphTypeface]::new([Uri]$dest)).Win32FamilyNames['en-US'] } catch { [IO.Path]::GetFileNameWithoutExtension($dest) }
@@ -23,6 +24,7 @@ function Install-FontFile([string]$file) {
     $name = "$face $style (TrueType)".Replace('  ', ' ')
     $key = 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts'
     if (-not (Test-Path $key)) { New-Item -Force $key | Out-Null }
+    Save-Reg $key $name
     Set-ItemProperty $key -Name $name -Value $dest
     [void][Winarchy.Native]::AddFontResource($dest)
 }
