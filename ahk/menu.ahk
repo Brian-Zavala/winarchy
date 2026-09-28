@@ -74,8 +74,9 @@ switch verb {
     ; Install/Remove: winget in a terminal, so the download and any prompts are visible.
     ; Herdr is a full-screen terminal app: it gets a terminal, and takes it over.
     case "herdr": RunHerdr()
-    ; The coding agent opens in its own window (winarchy agent picks the flags).
-    case "agent": OmarchyCmd("agent")
+    ; The coding agent opens in its own window (winarchy agent picks the flags); with no
+    ; default agent yet, -Pick opens the chooser instead of failing into the log.
+    case "agent": OmarchyCmd("agent", "-Pick")
     ; Setup > Default Agent: sets it, then starts it, like Omarchy's menu does.
     case "default-agent": RunInTerminal("Default agent", CliInTerminal("default-agent", arg))
     case "install-app": RunInTerminal("Install " arg, CliInTerminal("install-app", arg))

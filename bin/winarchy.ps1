@@ -187,7 +187,13 @@ switch ($Verb) {
     }
     'default-agent' {
         if (-not $Arg) { "default agent: $((Get-DefaultAgent) ?? 'none yet (winarchy agent list)')" }
-        else { [void](Set-DefaultAgent $Arg); Use-Lock { Invoke-Apply -NoRestart } }
+        else {
+            $key = Set-DefaultAgent $Arg
+            Use-Lock { Invoke-Apply -NoRestart }
+            # Omarchy's omarchy-default-agent starts the agent it just chose.
+            # (Set-DefaultAgent already said how to install one that is missing.)
+            if (Test-AgentInstalled $key) { Invoke-Agent }
+        }
     }
     'config' {
         if (-not (Test-Path $ConfigFile)) { Write-Json $ConfigFile ([ordered]@{ _help = 'Only the settings you change. See docs/config.md, then run: winarchy apply' }) }
