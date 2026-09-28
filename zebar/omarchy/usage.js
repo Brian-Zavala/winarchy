@@ -233,10 +233,15 @@ async function poll() {
   if (changed) { refreshing = false; render(); }
 }
 
+let refreshTimer = null;
 function refresh() {
   refreshing = true;
   $('updated').textContent = 'refreshing…';
   act('usage-refresh');
+  // A refresh that never writes (no Python, a collector hung past its 60 s) must not
+  // leave "refreshing…" up for good: show the last update again.
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => { if (refreshing) { refreshing = false; render(); } }, 90000);
 }
 
 // ---- lifecycle (as the calendar)
