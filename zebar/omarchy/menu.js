@@ -78,6 +78,8 @@ async function hide() {
     await win().hide();
   } catch (e) {
     log(`menu: hide failed, closing instead: ${e}`);
+    // Let this close through: the close-request handler below would cancel it otherwise.
+    quitting = true;
     return Promise.resolve(win().close()).catch(() => {});
   }
   reset();
@@ -147,7 +149,8 @@ async function open(again = false) {
 }
 window.addEventListener('focus', () => { if (idle) open(true); });
 // menu.ahk's toggle (and anything else closing the window) fades and hides it instead.
-Promise.resolve(win().onCloseRequested?.(e => { e.preventDefault(); if (!idle) close(); })).catch(() => {});
+let quitting = false;
+Promise.resolve(win().onCloseRequested?.(e => { if (quitting) return; e.preventDefault(); if (!idle) close(); })).catch(() => {});
 function run(action) {
   if (action[0] === 'bg-set') return land(items[sel]);
   // Fire the action, then close: menu.ahk waits for this window to go away before
