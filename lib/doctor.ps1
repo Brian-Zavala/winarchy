@@ -21,14 +21,16 @@ function Invoke-Doctor([switch]$Fix) {
     & $check "Zebar          $($p.zebar)" ([bool]$p.zebar) 'reinstall GlazeWM (it bundles Zebar)'
     & $check "Flow Launcher  $($p.flow)" ([bool]$p.flow) 'winget install -e --id Flow-Launcher.Flow-Launcher'
     & $check 'JetBrainsMono Nerd Font' ([bool]$p.nerdFont) 'winarchy install (installs it), or install any Nerd Font'
-    & $check "Terminal settings  $($p.wtSettings)" ([bool]$p.wtSettings) 'optional: install Windows Terminal for terminal theming'
+    # Optional, so never a problem (and never something -Fix reinstalls).
+    if ($p.wtSettings) { & $check "Terminal settings  $($p.wtSettings)" $true '' }
+    else { Write-Host '  --    Windows Terminal not found (optional: it gets the terminal theming)' -ForegroundColor DarkGray }
 
     Write-Host "`nRunning"
     & $check 'GlazeWM' ([bool](Get-GlazeWmProcess)) "start it: `"$($p.glazewm)`""
     $build = Get-AnimationBuild
     $running = Get-GlazeWmProcess | Select-Object -First 1
     if ($running) { $running = Get-GlazeWMPath $running $p }
-    $which = if ($p.glazewm -ne $p.glazewmOfficial) { "animation build $($build.commit.Substring(0, 12)) (experimental)" } else { 'official' }
+    $which = if ($p.glazewm -ne $p.glazewmOfficial) { "animation build $("$($build.commit)".PadRight(12).Substring(0, 12).Trim()) (experimental)" } else { 'official' }
     & $check "GlazeWM build: $which" (-not $running -or $running -eq $p.glazewm) "the other build is running: winarchy apply"
     if ((Get-Config).animations.enabled -and -not $build) { & $check 'window animations are on, but the animation build is missing' $false 'winarchy animations build' }
     # Only a signed binary in a secure folder may ask for uiAccess, so our own build can't:
@@ -127,7 +129,9 @@ function Invoke-Doctor([switch]$Fix) {
     Write-Host "`nScreen"
     $yaml = if (Test-Path $GlazeConfig) { Get-Content -Raw $GlazeConfig } else { '' }
     $top = if ($yaml -match "'(\d+)px'\s*# gaps:top") { [int]$Matches[1] } else { 0 }
-    & $check "bar strip kept free of windows (GlazeWM top gap $top px)" ($top -ge [int]$cfg.barHeight) 'winarchy apply'
+    # With the bar turned off (Super + Shift + Space) the strip is given back on purpose.
+    if (Test-Path (Join-Path $Generated 'bar-off')) { & $check 'top bar turned off (winarchy bar on brings it back)' $true '' }
+    else { & $check "bar strip kept free of windows (GlazeWM top gap $top px)" ($top -ge [int]$cfg.barHeight) 'winarchy apply' }
     # Screensaver health: the effects engine must not be crash-looping.
     $crashes = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; ProviderName = 'Application Error'; StartTime = (Get-Date).AddHours(-1) } -MaxEvents 500 -ErrorAction SilentlyContinue |
         Where-Object { $_.Message -match 'ttfx' }).Count
