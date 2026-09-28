@@ -200,7 +200,7 @@ switch ($Verb) {
         $p = Get-Paths
         if ($p.nvim) { & $p.nvim $ConfigFile } else { Start-Process notepad.exe $ConfigFile }
     }
-    'keys' { Get-Content (Join-Path $Pack 'keybindings.txt') -ErrorAction SilentlyContinue ?? (Get-Content (Join-Path $Code 'default\keybindings.txt')) }
+    'keys' { (Get-Content (Join-Path $Pack 'keybindings.txt') -ErrorAction SilentlyContinue) ?? (Get-Content (Join-Path $Code 'default\keybindings.txt')) }
     'status' { $s = Read-State; "theme: $($s.theme)"; "background: $($s.background)"; "font: $(Get-FontFamily)" }
     'version' { "winarchy $version" }
     default { Get-Help $PSCommandPath -Detailed | Out-String | Write-Host }
