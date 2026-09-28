@@ -316,7 +316,8 @@ function Set-WindowsAccent($c) {
     foreach ($v in @(@($dwm, 'AccentColor'), @($dwm, 'ColorizationColor'), @($dwm, 'ColorizationAfterglow'),
                       @($acc, 'AccentColorMenu'), @($acc, 'StartColorMenu'), @($acc, 'AccentPalette'),
                       @($per, 'AppsUseLightTheme'), @($per, 'SystemUsesLightTheme'))) { Save-Reg $v[0] $v[1] }
-    New-Item -Force $acc -ErrorAction SilentlyContinue | Out-Null
+    # Only when missing: New-Item -Force on a key that exists wipes every value in it.
+    if (-not (Test-Path $acc)) { New-Item $acc | Out-Null }
     Set-ItemProperty $dwm -Name AccentColor -Type DWord -Value (To-Dword $abgr)
     Set-ItemProperty $dwm -Name ColorizationColor -Type DWord -Value (To-Dword $argb)
     Set-ItemProperty $dwm -Name ColorizationAfterglow -Type DWord -Value (To-Dword $argb)
