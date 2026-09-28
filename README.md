@@ -20,7 +20,7 @@ irm https://raw.githubusercontent.com/Brian-Zavala/winarchy/main/install.ps1 | i
 
 ## The Winarchy Manual
 
-The manual lives in [`manual/`](manual/), which is its authoritative source. Chapters keep Omarchy's numbers, so a gap is a chapter Windows has nothing to say about.
+Like Omarchy it lives in [`manual/`](manual/), but if there's a missing chapter it's because Windows isn't cool enough and has nothing to say about.
 
 - [Welcome to Winarchy!](manual/01-welcome-to-winarchy.md)
 
