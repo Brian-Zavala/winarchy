@@ -1,7 +1,5 @@
 ![Winarchy](images/winarchy-no-bg.png)
 
-# Winarchy
-
 Most people never choose their desktop. They take whatever Microsoft ships, pile a few tweaks on top, and call it a setup. That's a shame, because the computer you stare at all day should be a joy to use, not a compromise you've learned to tolerate.
 
 [Omarchy](https://omarchy.org) showed what happens when somebody makes all the choices for you and makes them well. It's beautiful and fast, and it's opinionated in the best sense: tiling windows, keyboard first, themes that actually look good. But it's Linux, and plenty of us are stuck on Windows for work, for games, or for software that simply won't leave.
