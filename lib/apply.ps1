@@ -213,12 +213,13 @@ function Write-AhkIni($p, $cfg) {
         default { Expand-UserPath $cfg.apps.terminal }
     }
     $browser = if ($cfg.apps.browser -eq 'auto') { $p.browser } else { Expand-UserPath $cfg.apps.browser }
+    $files = if (-not $cfg.apps.files -or $cfg.apps.files -eq 'auto') { 'explorer.exe' } else { Expand-UserPath $cfg.apps.files }
     $ini = [ordered]@{
         paths  = [ordered]@{
             code = $Code; data = $Data; pack = $Pack; log = $LogFile; glazeConfig = $GlazeConfig
             ahk = $p.ahk; pwsh = $p.pwsh; powershell = $p.powershell
             glazewm = $p.glazewm; glazewmCli = $p.glazewmCli; zebar = $p.zebar; flow = $p.flow
-            terminal = $terminal; wt = $p.wt; editor = $editor; files = $cfg.apps.files
+            terminal = $terminal; wt = $p.wt; editor = $editor; files = $files
             browser = $browser; browserPrivate = $p.browserPrivate
             btop = $(if ($p.btopDir) { Join-Path $p.btopDir 'btop4win.exe' })
             herdr = $p.herdr
