@@ -33,7 +33,7 @@ function Test-Preflight {
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
         throw 'winget (App Installer) is missing. Install "App Installer" from the Microsoft Store, then run this again.'
     }
-    $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    $admin = Test-Elevated
     if ($admin) { Write-Warning 'Running as administrator: settings would land in the admin profile. Run from a normal terminal.' }
     Write-Ok "Windows build $build, $env:PROCESSOR_ARCHITECTURE, winget OK"
 }
@@ -76,6 +76,67 @@ function Invoke-Winget([string]$verb, [string]$id, [string]$scope) {
     $r = Invoke-Unattended 'winget' (Get-WingetArgs $verb $id $scope)
     if ($r.Code -in $WingetExitOk) { $r.Ok = $true; $r.Reason = $null }
     $r
+}
+
+# Exit codes that mean "only an administrator can do this" - a machine-wide package
+# (WSL, an all-users MSIX or MSI) refuses a normal token. These get one more try, elevated.
+#   0x80073D28 MSIX: administrator privileges are required
+#   0x80070005 access denied          0x800702E4 / 740 elevation required
+#   0x8A150019 winget: the command requires administrator privileges
+$WingetAdminCodes = @(-2147009240, -2147024891, -2147024156, 740, -1978335207)
+
+function Test-Elevated {
+    ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+# Upgrades the given packages from one elevated window, so a whole batch costs a single
+# UAC prompt. Returns id -> the same result object Invoke-Winget gives. The elevated side
+# is an inline command (never a file the user's own processes could swap underneath it).
+function Invoke-WingetElevated([string[]]$ids, [int]$timeoutSec = 900) {
+    $results = @{}
+    $out = New-TemporaryFile
+    try {
+        $calls = [ordered]@{}
+        foreach ($id in $ids) { $calls[$id] = @(Get-WingetArgs upgrade $id $null) }
+        $json = ($calls | ConvertTo-Json -Compress -Depth 4) -replace "'", "''"
+        $script = @"
+`$calls = '$json' | ConvertFrom-Json -AsHashtable
+`$res = [ordered]@{}
+foreach (`$id in `$calls.Keys) {
+    Write-Host "``n==> upgrading `$id as administrator" -ForegroundColor Cyan
+    `$a = `$calls[`$id]; & winget @a
+    `$res[`$id] = `$LASTEXITCODE
+}
+`$res | ConvertTo-Json | Set-Content -LiteralPath '$($out.FullName -replace "'", "''")' -Encoding utf8
+"@
+        $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script))
+        try {
+            $proc = Start-Process (Get-Paths).pwsh -Verb RunAs -PassThru -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $enc"
+        } catch {
+            foreach ($id in $ids) { $results[$id] = [pscustomobject]@{ Ok = $false; Code = $null; Reason = 'the administrator prompt was declined' } }
+            return $results
+        }
+        if (-not $proc.WaitForExit($timeoutSec * 1000 * [math]::Max(1, $ids.Count))) { try { $proc.Kill($true) } catch {} }
+        $codes = try { Get-Content -Raw $out.FullName | ConvertFrom-Json -AsHashtable } catch { $null }
+        foreach ($id in $ids) {
+            $code = if ($codes -and $codes.Contains($id)) { [int]$codes[$id] } else { $null }
+            $ok = $null -ne $code -and $code -in $WingetExitOk
+            $reason = if ($ok) { $null } elseif ($null -eq $code) { 'the administrator window did not finish' } else { 'exit code 0x{0:X8}, as administrator' -f $code }
+            $results[$id] = [pscustomobject]@{ Ok = $ok; Code = $code; Reason = $reason }
+        }
+        $results
+    } finally { Remove-Item $out -Force -ErrorAction SilentlyContinue }
+}
+
+# The fresh check only sees what winget still lists. Anything this run could not update
+# stays on the bar's update icon either way, so it is not forgotten until the next try.
+function Add-PendingUpdates($file, [object[]]$items) {
+    if (-not $items) { return }
+    $u = Read-Json $file
+    $list = [Collections.Generic.List[object]]::new()
+    foreach ($i in @($u.items | Where-Object { $_ })) { $list.Add($i) }
+    foreach ($i in $items) { if (-not ($list | Where-Object name -eq $i.name)) { $list.Add($i) } }
+    Write-Json $file ([ordered]@{ checked = $u.checked ?? (Get-Date).ToString('s'); items = @($list) })
 }
 
 # Whether a package can be installed with nobody watching. winget brings the silent
@@ -368,6 +429,7 @@ function Invoke-Update {
     $script:Unfinished.Clear()
     $updFile = Join-Path $Pack 'updates.json'
     $pending = @((Read-Json $updFile).items | Where-Object { $_ })
+    $notUpdated = [Collections.Generic.List[string]]::new()
     $checked = $false
     try {
         # Hide the bar icon while this runs, so it can't be clicked again.
@@ -414,9 +476,11 @@ function Invoke-Update {
         if (-not $ids) { Write-Ok 'up to date' }
         # Upgrading AutoHotkey closes running scripts: remember them to start them again.
         $scripts = @(Get-CimInstance Win32_Process -Filter "Name like 'AutoHotkey%'" | ForEach-Object CommandLine)
+        $needAdmin = [Collections.Generic.List[string]]::new()
         foreach ($id in $ids) {
             if (-not (Test-WingetUnattended $id)) {
                 Add-Unfinished "$id not updated: its installer can't run unattended; open the app and it updates itself"
+                $notUpdated.Add($id)
                 continue
             }
             Write-Ok "upgrading $id"
@@ -424,7 +488,19 @@ function Invoke-Update {
             # quiet mode it prints nothing while it downloads the toolchain.
             if ($id -eq 'Rustlang.Rustup') { Write-Ok 'Rust updates in a separate window that closes itself when done.' }
             $r = Invoke-Winget upgrade $id $null
-            if (-not $r.Ok) { Add-Unfinished "$id did not update ($($r.Reason))" }
+            if ($r.Ok) { continue }
+            if ($r.Code -in $WingetAdminCodes -and -not (Test-Elevated)) { Write-Ok "$id needs administrator rights: trying again elevated below"; $needAdmin.Add($id); continue }
+            Add-Unfinished "$id did not update ($($r.Reason))"
+            $notUpdated.Add($id)
+        }
+        if ($needAdmin.Count) {
+            Write-Ok "Windows asks once (UAC) to update $($needAdmin -join ', ') as administrator; it runs in its own window."
+            $elevated = Invoke-WingetElevated @($needAdmin)
+            foreach ($id in $needAdmin) {
+                $r = $elevated[$id]
+                if ($r.Ok) { Write-Ok "$id updated as administrator" }
+                else { Add-Unfinished "$id did not update ($($r.Reason))"; $notUpdated.Add($id) }
+            }
         }
         if ($ids -contains 'AutoHotkey.AutoHotkey') {
             $p = Update-Paths
@@ -444,6 +520,7 @@ function Invoke-Update {
         Write-Step 'Checking again'
         Invoke-UpdateCheck
         $checked = $true
+        Add-PendingUpdates $updFile @($pending | Where-Object { $notUpdated -contains $_.name })
     } catch {
         $crash = $_
         Add-Unfinished "update stopped: $($_.Exception.Message)"

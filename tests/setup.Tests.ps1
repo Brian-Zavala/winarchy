@@ -143,6 +143,33 @@ Describe 'Invoke-Update' {
         Should -Invoke Log -ParameterFilter { $msg -match 'unfinished: Git\.Git did not update \(exit code' }
         Should -Invoke Wait-KeyToClose -Times 1 -Exactly
     }
+    It 'retries an app that needs administrator rights once, elevated, in one batch' {
+        Mock Test-Elevated { $false }
+        Mock Invoke-Winget { [pscustomobject]@{ Ok = $false; Code = -2147009240; Reason = 'exit code 0x80073D28' } } -ParameterFilter { $id -in 'Microsoft.WSL', 'Other.App' }
+        Mock Invoke-WingetElevated { $r = @{}; foreach ($i in $ids) { $r[$i] = [pscustomobject]@{ Ok = $true; Code = 0 } }; $r }
+        Set-Pending 'Microsoft.WSL', 'Git.Git', 'Other.App'
+        Invoke-Update
+        Should -Invoke Invoke-WingetElevated -Times 1 -Exactly -ParameterFilter { ($ids -join ',') -eq 'Microsoft.WSL,Other.App' }
+        Should -Invoke Wait-KeyToClose -Times 0 -Exactly
+    }
+    It 'keeps what did not update on the bar icon even when the fresh check misses it' {
+        Mock Test-Elevated { $false }
+        Mock Invoke-Winget { [pscustomobject]@{ Ok = $false; Code = -2147009240; Reason = 'exit code 0x80073D28' } } -ParameterFilter { $id -eq 'Microsoft.WSL' }
+        Mock Invoke-WingetElevated { @{ 'Microsoft.WSL' = [pscustomobject]@{ Ok = $false; Code = $null; Reason = 'the administrator prompt was declined' } } }
+        Mock Invoke-UpdateCheck { Write-Json $updFile ([ordered]@{ checked = 'now'; items = @() }) }
+        Set-Pending 'Microsoft.WSL', 'Git.Git'
+        Invoke-Update
+        Should -Invoke Log -ParameterFilter { $msg -match 'unfinished: Microsoft\.WSL did not update \(the administrator prompt was declined\)' }
+        @((Read-Json $updFile).items | ForEach-Object name) | Should -Be @('Microsoft.WSL')
+    }
+    It 'does not ask for elevation for an ordinary failure' {
+        Mock Test-Elevated { $false }
+        Mock Invoke-Winget { [pscustomobject]@{ Ok = $false; Code = 1; Reason = 'exit code 0x00000001' } }
+        Mock Invoke-WingetElevated {}
+        Set-Pending 'Git.Git'
+        Invoke-Update
+        Should -Invoke Invoke-WingetElevated -Times 0 -Exactly
+    }
     It 'puts the list back for the bar when the run dies before the fresh check' {
         Mock Invoke-UpdateCheck { throw 'boom' }
         Set-Pending 'Git.Git', 'Spotify.Spotify'
