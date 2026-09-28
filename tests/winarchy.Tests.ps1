@@ -476,3 +476,34 @@ Describe 'Theme set order' {
         $script:order -join ' ' | Should -Be 'bar status:True background slow'
     }
 }
+
+Describe 'Gaps toggled off vs a gap of 0 in config.json' {
+    BeforeAll { foreach ($f in 'animations', 'autotile') { . "$root\lib\$f.ps1" } }
+    BeforeEach {
+        $GlazeConfig = Join-Path $TestDrive "$([guid]::NewGuid()).yaml"
+        $Data = Join-Path $TestDrive ([guid]::NewGuid())
+        $Generated = Join-Path $Data 'generated'
+        $script:state = @{}
+        Mock Read-State { $script:state }
+        Mock Save-State { $script:state = $s }
+        Mock Save-File {}
+        Mock Log {}
+        Mock Get-Paths { @{} }
+        Mock Read-Colors { @{ focused_border = '#7aa2f7' } }
+        function Gap { if ((Get-Content -Raw $GlazeConfig) -match "inner_gap:\s*'(\d+)px'\s*# gaps") { [int]$Matches[1] } }
+    }
+    It 'keeps gaps off after Super + Shift + Backspace' {
+        Mock Get-Config { @{ gap = 10; barHeight = 26 } }
+        [void](Write-GlazeConfig 1)
+        (Get-Content -Raw $GlazeConfig) -replace "'10px'(\s*# gaps)(?!:)", "'0px'`$1" | Set-Content $GlazeConfig
+        [void](Write-GlazeConfig 1)
+        Gap | Should -Be 0
+    }
+    It 'uses a new gap after config.json had 0' {
+        Mock Get-Config { @{ gap = 0; barHeight = 26 } }
+        [void](Write-GlazeConfig 1)
+        Mock Get-Config { @{ gap = 8; barHeight = 26 } }
+        [void](Write-GlazeConfig 1)
+        Gap | Should -Be 8
+    }
+}

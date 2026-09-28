@@ -174,8 +174,13 @@ function Write-GlazeConfig([int]$monitorCount) {
     if (-not (Test-Path $tplFile)) { $tplFile = Join-Path $Code 'templates\glazewm.yaml.tpl' }
     $old = if (Test-Path $GlazeConfig) { Get-Content -Raw $GlazeConfig } else { '' }
     # Keep what the toggles/theme last set: gaps on/off and the focused border colour.
+    # A 0px gap means Super + Shift + Backspace turned gaps off, unless the gap set in
+    # config.json at the last apply was 0 itself: then it is just the old setting.
     $gap = [int]$cfg.gap
-    if ($old -match "inner_gap:\s*'0px'\s*# gaps") { $gap = 0 }
+    $state = Read-State
+    $lastGap = if ($null -ne $state.gap) { [int]$state.gap } else { $gap }
+    if ($lastGap -ne 0 -and $old -match "inner_gap:\s*'0px'\s*# gaps") { $gap = 0 }
+    if ($state.gap -ne [int]$cfg.gap) { $state.gap = [int]$cfg.gap; Save-State $state }
     # The bar's strip lives in GlazeWM's top gap (scaled per monitor like the bar itself).
     # (None while the bar is turned off: Super+Shift+Space / winarchy bar off.)
     $gapTop = if (Test-Path (Join-Path $Generated 'bar-off')) { $gap } else { [int]$cfg.barHeight + $gap }
