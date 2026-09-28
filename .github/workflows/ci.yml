@@ -41,3 +41,52 @@ jobs:
           foreach ($s in Get-ChildItem ahk/*.ahk) {
             if (-not (Test-AhkLoads $s.FullName)) { Write-Error "$($s.Name) failed to load"; exit 1 }
           }
+
+  # Every push to main is a release: bump the version, move the CHANGELOG's Unreleased
+  # entries under it, commit, tag, and publish a GitHub release. A push made with
+  # GITHUB_TOKEN starts no workflow, so the version commit can't set this off again.
+  version:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[skip version]')
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    concurrency: version
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+      - name: Bump the version
+        id: bump
+        shell: pwsh
+        run: ./.github/scripts/release.ps1 -Before '${{ github.event.before }}' -After '${{ github.sha }}'
+      - name: Commit, tag and release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.bump.outputs.version }}
+          NOTES: ${{ steps.bump.outputs.notes }}
+          FILE: ${{ steps.bump.outputs.file }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- $env:FILE CHANGELOG.md
+          git commit -m "Version $env:VERSION [skip ci]"
+          # Someone may have pushed while the tests ran: land on top of it.
+          git pull --rebase origin main
+          if ($LASTEXITCODE) { exit 1 }
+          git tag "v$env:VERSION"
+          git push origin HEAD:main "v$env:VERSION"
+          if ($LASTEXITCODE) { exit 1 }
+          gh release create "v$env:VERSION" --title "Winarchy $env:VERSION" --notes-file $env:NOTES --verify-tag
+      - name: Update the repo description
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.WINARCHY_ADMIN_TOKEN }}
+          DESCRIPTION: ${{ steps.bump.outputs.description }}
+        run: |
+          # Editing the description needs a token with Administration: write, which
+          # GITHUB_TOKEN never has: the repo secret WINARCHY_ADMIN_TOKEN (see AGENTS.md).
+          if (-not $env:GH_TOKEN) { Write-Host '::notice::WINARCHY_ADMIN_TOKEN is not set, so the repo description was left as it is.'; exit 0 }
+          gh api -X PATCH "repos/${{ github.repository }}" -f description="$env:DESCRIPTION" --silent
