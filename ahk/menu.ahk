@@ -150,6 +150,9 @@ RunHerdr() {
         Notify("Herdr is not installed (Omarchy menu > Install > Terminal)")
         return
     }
+    ; Link any agent installed since last time, in the background: it only writes a hook
+    ; into the agent's own config, so Herdr need not wait for it.
+    OmarchyCmd("herdr", "link")
     RunInTerminal("Herdr", '"' herdr '"')
 }
 

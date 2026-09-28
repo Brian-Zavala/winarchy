@@ -23,10 +23,11 @@
   winarchy catalog                     rebuild the menu's Install/Remove lists (and show them)
   winarchy install-app <key>           install one catalog item (the menu's Install section)
   winarchy remove-app <key>            remove one again (the menu's Remove section)
-  winarchy herdr [status|install|layout|square|multi|swarm|config|reload|keys|shortcuts]
+  winarchy herdr [status|install|layout|square|multi|swarm|config|reload|keys|shortcuts|link|welcome]
                                           Herdr (Omarchy's tmux replacement) and its agent
                                           layouts; layout/square/multi/swarm run in a Herdr
-                                          pane and are also hdl / hds / hdlm / hsl in a shell
+                                          pane and are also hdl / hds / hdlm / hsl in a shell;
+                                          link hooks every agent on PATH into Herdr
   winarchy agent [-Inline] [-Pick] [-Prompt <text>] | agent list
                                           start the default coding agent, unattended
   winarchy default-agent <name>        pick it (claude, codex, copilot, opencode, ...)

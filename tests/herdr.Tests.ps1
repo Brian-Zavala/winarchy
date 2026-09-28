@@ -178,6 +178,47 @@ Describe 'Herdr shell shortcuts' {
     }
 }
 
+Describe 'Herdr agent integrations' {
+    BeforeEach {
+        # A fake herdr.exe: status prints what the real one does, install records the target.
+        $global:HerdrInstalls = [Collections.Generic.List[string]]::new()
+        Mock Get-HerdrExe {
+            {
+                $global:LASTEXITCODE = 0
+                if ($args[1] -eq 'status') {
+                    'claude: current (v10) (C:\Users\me\.claude\hooks\herdr-agent-state.ps1)'
+                    'codex: not installed (C:\Users\me\.codex\herdr-agent-state.ps1)'
+                    'cursor: not installed (C:\Users\me\.cursor\herdr-agent-state.ps1)'
+                    'letta (experimental): not installed (C:\Users\me\.letta\hooks\herdr-agent-session.ps1)'
+                } elseif ($args[1] -eq 'install') { $global:HerdrInstalls.Add($args[2]) }
+            }
+        }
+        # On PATH: claude, codex and Cursor's CLI; not letta, and not a `cursor` command.
+        Mock Get-Command { if ($Name -in 'claude', 'codex', 'cursor-agent') { [pscustomobject]@{ Name = $Name } } }
+        Mock Log {}
+    }
+    AfterAll { Remove-Variable HerdrInstalls -Scope Global -ErrorAction SilentlyContinue }
+
+    It 'reads which agents are found and which are linked' {
+        $a = @(Get-HerdrAgents)
+        $a.target | Should -Be @('claude', 'codex', 'cursor', 'letta')
+        ($a | Where-Object found).target | Should -Be @('claude', 'codex', 'cursor')
+        ($a | Where-Object linked).target | Should -Be @('claude')
+    }
+    It 'links every agent on PATH that is not linked yet, and nothing else' {
+        Sync-HerdrIntegrations | Should -Be @('codex', 'cursor')
+        $global:HerdrInstalls | Should -Be @('codex', 'cursor')
+    }
+    It 'turns Herdr''s own first-run panel off, since the config is rewritten on apply' {
+        Get-Content -Raw (Join-Path $Code 'templates\herdr.toml.tpl') | Should -Match '(?m)^onboarding = false\s*$'
+    }
+    It 'says hello once, from the first Herdr pane' {
+        $t = Get-HerdrProfileBlock
+        $t | Should -Match ([regex]::Escape($HerdrWelcomeMark))
+        $t | Should -Match 'HERDR_PANE_ID.*winarchy herdr welcome'
+    }
+}
+
 Describe 'Herdr keybindings list' {
     It 'renders bindings the way Omarchy''s viewer does' {
         ConvertTo-HerdrCombo '"prefix+h"' | Should -Be 'Prefix + H'

@@ -222,7 +222,91 @@ function Initialize-Herdr {
     try { [void](Write-HerdrConfig) } catch { Log "herdr config FAILED: $($_.Exception.Message)" }
     try { [void](Set-HerdrProfile) } catch { Log "herdr profile FAILED: $($_.Exception.Message)" }
     try { [void](Update-HerdrKeys) } catch { Log "herdr keybindings FAILED: $($_.Exception.Message)" }
+    try { [void](Sync-HerdrIntegrations) } catch { Log "herdr integrations FAILED: $($_.Exception.Message)" }
     try { [void](Invoke-HerdrReload) } catch { Log "herdr reload FAILED: $($_.Exception.Message)" }
+}
+
+# --- agent integrations --------------------------------------------------------------
+# An integration is a hook Herdr puts in an agent's own config so the agent reports its
+# state (working, waiting, done) and its session, which is what lets a restored pane
+# resume the conversation. Herdr's settings > integrations lists an agent as found when
+# its command is on PATH, and `herdr integration install <target>` links it without
+# asking anything. Linking everything found is what that panel would have you click
+# through, so winarchy does it on apply and each time the menu starts Herdr.
+#
+# Targets whose command is not simply their own name; the rest are looked up as is.
+$HerdrAgentCommands = @{
+    cursor            = @('cursor-agent')
+    'antigravity-cli' = @('agy', 'antigravity')
+    kilo              = @('kilo', 'kilocode')
+}
+
+# One row per target Herdr knows: found (command on PATH) and linked (hook installed and
+# current). `herdr integration status` prints "claude: current (v10) (<hook path>)".
+function Get-HerdrAgents {
+    $exe = Get-HerdrExe
+    if (-not $exe) { return }
+    foreach ($line in (& $exe integration status 2>$null)) {
+        if ($line -notmatch '^([\w-]+)[^:]*:\s*(.+?)\s*\(') { continue }
+        $target = $Matches[1]
+        $state = $Matches[2]
+        $cmds = if ($HerdrAgentCommands.Contains($target)) { $HerdrAgentCommands[$target] } else { @($target) }
+        [pscustomobject]@{
+            target = $target
+            found  = [bool]($cmds | Where-Object { Get-Command $_ -CommandType Application, ExternalScript -ErrorAction SilentlyContinue })
+            linked = $state -match '^current'
+        }
+    }
+}
+
+# Link every agent on PATH that is not linked yet (or whose hook is out of date).
+# Returns the targets it linked.
+function Sync-HerdrIntegrations {
+    $exe = Get-HerdrExe
+    if (-not $exe) { return }
+    foreach ($a in @(Get-HerdrAgents | Where-Object { $_.found -and -not $_.linked })) {
+        $out = & $exe integration install $a.target 2>&1
+        if ($LASTEXITCODE) { Log "herdr: could not link $($a.target): $($out -join ' ')"; continue }
+        Log "herdr: linked $($a.target)"
+        $a.target
+    }
+}
+
+# --- first-run welcome ---------------------------------------------------------------
+# Shown once, in the first Herdr pane (the shortcuts block in the profile calls it), in
+# place of Herdr's own first-run panel: which agents are here and that they are linked.
+$HerdrWelcomeMark = Join-Path $Data 'herdr-welcomed'
+
+function Show-HerdrWelcome {
+    New-Item -ItemType File -Force $HerdrWelcomeMark | Out-Null
+    try { [void](Sync-HerdrIntegrations) } catch { Log "herdr integrations FAILED: $($_.Exception.Message)" }
+    $agents = @(Get-HerdrAgents)
+    $prefix = 'ctrl+space'
+    $cfg = Get-HerdrConfigPath
+    if ((Test-Path $cfg) -and ((Get-Content -Raw $cfg) -match '(?m)^\s*prefix\s*=\s*"([^"]+)"')) { $prefix = $Matches[1] }
+    Write-Host ''
+    Write-Host '  Welcome to Herdr' -ForegroundColor Cyan
+    Write-Host "  Workspaces, tabs and panes for your agents, like tmux. Prefix $prefix, then ? for every key."
+    Write-Host '  Layouts: hdl (editor + agent + terminal)  hds (2x2)  hdlm (one per folder)  hsl (swarm)'
+    Write-Host ''
+    $linked = @($agents | Where-Object { $_.found })
+    if ($linked) {
+        Write-Host '  Your agents, linked to Herdr (live status, and sessions that resume after a restart):'
+        foreach ($a in $linked) {
+            if ($a.linked) { Write-Host "    ✓ $($a.target)" -ForegroundColor Green }
+            else { Write-Host "    ✗ $($a.target) (could not link: see $LogFile)" -ForegroundColor Yellow }
+        }
+    } else {
+        Write-Host '  No coding agents found on this PC yet.'
+    }
+    $others = @($agents | Where-Object { -not $_.found } | ForEach-Object { $_.target })
+    if ($others) {
+        Write-Host "  Also supported: $($others -join ', ')." -ForegroundColor DarkGray
+        Write-Host '  Install any of them and winarchy links it the next time Herdr starts.' -ForegroundColor DarkGray
+    }
+    Write-Host ''
+    Write-Host '  This shows once. See it again: winarchy herdr welcome' -ForegroundColor DarkGray
+    Write-Host ''
 }
 
 # --- the four layouts ----------------------------------------------------------------
@@ -388,6 +472,8 @@ function Get-HerdrProfileBlock {
         'function hds { winarchy herdr square @args }      # 2x2 editor / diff / terminal / agent'
         'function hdlm { winarchy herdr multi @args }      # one hdl tab per subdirectory'
         'function hsl { winarchy herdr swarm @args }       # N panes running the same command'
+        '# The first Herdr pane ever opened says hello, once.'
+        "if (`$env:HERDR_PANE_ID -and -not (Test-Path '$($HerdrWelcomeMark -replace "'", "''")')) { winarchy herdr welcome }"
         $HerdrProfileEnd
     ) -join "`r`n"
 }
@@ -521,6 +607,8 @@ function Invoke-Herdr([string]$action, [string]$arg, [string]$arg2) {
         'reload' { Invoke-HerdrReload }
         'keys' { Update-HerdrKeys; Get-HerdrKeysText }
         'shortcuts' { Set-HerdrProfile }
+        'link' { Sync-HerdrIntegrations }
+        'welcome' { Show-HerdrWelcome }
         { $_ -in '', 'status' } {
             "herdr:      $(if (Test-HerdrInstalled) { Get-HerdrExe } else { 'not installed' })"
             if (Test-HerdrInstalled) {
@@ -530,6 +618,6 @@ function Invoke-Herdr([string]$action, [string]$arg, [string]$arg2) {
                 "shortcuts:  hdl, hds, hdlm, hsl in $($PROFILE.CurrentUserAllHosts)"
             }
         }
-        default { throw "usage: winarchy herdr [status|install|layout|square|multi|swarm|config|reload|keys|shortcuts]" }
+        default { throw "usage: winarchy herdr [status|install|layout|square|multi|swarm|config|reload|keys|shortcuts|link|welcome]" }
     }
 }

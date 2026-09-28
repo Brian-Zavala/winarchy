@@ -8,6 +8,12 @@
 # re-renders and reloads Herdr. Delete that copy to go back to this default.
 # Every {{ ... }} is filled in by winarchy.
 
+# Herdr's first-run panel (notifications, then agent integrations) is not needed:
+# winarchy links every agent it finds on PATH for you, and the first Herdr pane says
+# which, once. Herdr would write this itself when the panel is closed, but this file is
+# rewritten on apply, so without it here the panel came back every time.
+onboarding = false
+
 [theme]
 # Herdr ships catppuccin, tokyo-night, dracula, nord, gruvbox, one-dark, solarized,
 # kanagawa, rose-pine, vesper and terminal. winarchy picks the built-in whose name matches
