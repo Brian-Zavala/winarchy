@@ -12,18 +12,24 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge) {
     }
     $p = Get-Paths
 
-    & $step 'Stop winarchy (bar space released, taskbar shown)' {
-        # A graceful close runs winarchy.ahk's OnExit: shows the taskbars, frees the bar strip.
-        Get-OmarchyAhk | ForEach-Object {
-            $proc = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
-            if ($proc) { [void]$proc.CloseMainWindow() }
+    & $step 'Stop winarchy (taskbar shown, minimize buttons back)' {
+        # A graceful close runs winarchy.ahk's OnExit: shows the taskbars, frees the bar strip,
+        # puts back the minimize buttons blockMinimize took off. Force-stop only stragglers.
+        $ids = @(Get-OmarchyAhk | ForEach-Object { [int]$_.ProcessId })
+        if ($ids -and (Close-AhkGracefully $ids)) {
+            for ($i = 0; $i -lt 30 -and (Get-Process -Id $ids -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Milliseconds 100 }
         }
-        Start-Sleep -Seconds 1
         Get-OmarchyAhk | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        # Whatever a force-stop (now or any earlier crash) left without its button.
+        $n = Restore-MinimizeBoxes
+        if ($n) { Write-Host "  gave $n window(s) their minimize button back" }
     }
     & $step 'Exit GlazeWM (restores every window), stop Zebar and Flow Launcher' {
         if ($p.glazewmCli) { & $p.glazewmCli command wm-exit 2>$null; Start-Sleep -Seconds 2 }
         Get-Process glazewm, glazewm-watcher, zebar, Flow.Launcher -ErrorAction SilentlyContinue | Stop-Process -Force
+        # GlazeWM never gives back title bars or rounded corners, even on a clean exit.
+        $n = Restore-WindowFrames
+        if ($n) { Write-Host "  gave $n window(s) their title bar and rounded corners back" }
     }
 
     $entries = @($j.entries)

@@ -234,6 +234,117 @@ function Set-MinimizeAnimation([int]$on) {
     } finally { [Runtime.InteropServices.Marshal]::FreeHGlobal($buf) }
 }
 
+# winarchy.ahk's blockMinimize takes WS_MINIMIZEBOX off windows and tags each one with the
+# property "winarchy.nomin"; its OnExit puts the buttons back. A force-stopped or crashed
+# daemon never runs OnExit, so these find and undo the leftovers from here.
+function Initialize-MinBox {
+    Add-NativeType MinBox @'
+public delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
+[DllImport("user32.dll")]
+public static extern bool EnumWindows(EnumProc f, IntPtr lParam);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)]
+public static extern IntPtr GetPropW(IntPtr hWnd, string name);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)]
+public static extern IntPtr RemovePropW(IntPtr hWnd, string name);
+[DllImport("user32.dll")]
+public static extern IntPtr GetWindowLongPtrW(IntPtr hWnd, int index);
+[DllImport("user32.dll")]
+public static extern IntPtr SetWindowLongPtrW(IntPtr hWnd, int index, IntPtr value);
+[DllImport("user32.dll")]
+public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)]
+public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder name, int max);
+[DllImport("user32.dll")]
+public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+[DllImport("user32.dll")]
+public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+[DllImport("user32.dll")]
+public static extern IntPtr GetWindow(IntPtr hWnd, uint cmd);
+[DllImport("dwmapi.dll")]
+public static extern int DwmGetWindowAttribute(IntPtr hWnd, int attr, out int value, int size);
+[DllImport("dwmapi.dll")]
+public static extern int DwmSetWindowAttribute(IntPtr hWnd, int attr, ref int value, int size);
+'@
+}
+
+function Get-MinimizeBoxStripped {
+    Initialize-MinBox
+    $found = [Collections.Generic.List[IntPtr]]::new()
+    [void][Winarchy.MinBox]::EnumWindows({ param($h, $l)
+            if ([Winarchy.MinBox]::GetPropW($h, 'winarchy.nomin') -ne [IntPtr]::Zero) { $found.Add($h) }
+            $true }, [IntPtr]::Zero)
+    , $found.ToArray()
+}
+
+function Restore-MinimizeBoxes {
+    $windows = Get-MinimizeBoxStripped
+    foreach ($h in $windows) {
+        $style = [Winarchy.MinBox]::GetWindowLongPtrW($h, -16).ToInt64()                  # GWL_STYLE
+        [void][Winarchy.MinBox]::SetWindowLongPtrW($h, -16, [IntPtr]($style -bor 0x20000))   # WS_MINIMIZEBOX
+        # SWP_FRAMECHANGED | NOACTIVATE | NOZORDER | NOMOVE | NOSIZE: redraw the title bar.
+        [void][Winarchy.MinBox]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 0, 0, 0x37)
+        [void][Winarchy.MinBox]::RemovePropW($h, 'winarchy.nomin')
+    }
+    $windows.Count
+}
+
+# GlazeWM's window effects outlive it: on exit (even a clean wm-exit) it resets only
+# transparency and turns the border off; hidden title bars (WS_DLGFRAME removed) and
+# square corners stay, and a force-stop leaves its colored borders too - a resize then
+# flashes the theme's accent. Undo them the way GlazeWM set them. Only resizable, unowned
+# windows with a system menu that lost WS_DLGFRAME *and* have square corners count, so
+# apps that draw their own title bar are left alone. Returns how many were repaired.
+function Restore-WindowFrames {
+    Initialize-MinBox
+    $fixed = [Collections.Generic.List[IntPtr]]::new()
+    [void][Winarchy.MinBox]::EnumWindows({ param($h, $l)
+            if ([Winarchy.MinBox]::GetWindow($h, 4) -ne [IntPtr]::Zero) { return $true }   # GW_OWNER: GlazeWM never manages these
+            $style = [Winarchy.MinBox]::GetWindowLongPtrW($h, -16).ToInt64()
+            if (-not ($style -band 0x40000)) { return $true }                                 # WS_THICKFRAME
+            $color = -1                                                                      # DWMWA_COLOR_DEFAULT
+            [void][Winarchy.MinBox]::DwmSetWindowAttribute($h, 34, [ref]$color, 4)           # DWMWA_BORDER_COLOR
+            $corner = 0
+            [void][Winarchy.MinBox]::DwmGetWindowAttribute($h, 33, [ref]$corner, 4)          # DWMWA_WINDOW_CORNER_PREFERENCE
+            $noTitle = ($style -band 0x800000) -and -not ($style -band 0x400000) -and ($style -band 0x80000)   # WS_BORDER, no WS_DLGFRAME, WS_SYSMENU
+            if ($noTitle -and $corner -eq 1) {                                                # DWMWCP_DONOTROUND
+                [void][Winarchy.MinBox]::SetWindowLongPtrW($h, -16, [IntPtr]($style -bor 0x400000))
+                $corner = 0                                                                  # DWMWCP_DEFAULT
+                [void][Winarchy.MinBox]::DwmSetWindowAttribute($h, 33, [ref]$corner, 4)
+                # SWP_FRAMECHANGED | NOOWNERZORDER | NOACTIVATE | NOZORDER | NOMOVE | NOSIZE
+                [void][Winarchy.MinBox]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 0, 0, 0x237)
+                $fixed.Add($h)
+            }
+            $true }, [IntPtr]::Zero)
+    $fixed.Count
+}
+
+# Ask AutoHotkey scripts to exit the way their tray menu's Exit does (WM_CLOSE to the
+# hidden main window), so their OnExit handlers run. Process.CloseMainWindow() can't: the
+# window is hidden, so .NET sees no main window. Returns how many were asked.
+function Close-AhkGracefully([int[]]$processIds) {
+    Initialize-MinBox
+    $asked = [Collections.Generic.List[IntPtr]]::new()
+    [void][Winarchy.MinBox]::EnumWindows({ param($h, $l)
+            $wp = [uint32]0
+            [void][Winarchy.MinBox]::GetWindowThreadProcessId($h, [ref]$wp)
+            if ($processIds -contains [int]$wp) {
+                $cls = [Text.StringBuilder]::new(64)
+                [void][Winarchy.MinBox]::GetClassName($h, $cls, 64)
+                if ($cls.ToString() -eq 'AutoHotkey') {
+                    [void][Winarchy.MinBox]::PostMessage($h, 0x10, [IntPtr]::Zero, [IntPtr]::Zero)
+                    $asked.Add($h)
+                }
+            }
+            $true }, [IntPtr]::Zero)
+    $asked.Count
+}
+
+# Base64 UTF-16 for powershell -EncodedCommand: no quoting to break on the way through
+# Start-Process -Verb RunAs.
+function ConvertTo-EncodedCommand([string]$script) {
+    [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script))
+}
+
 function Get-KnownFolder([guid]$id) {
     Initialize-Native
     $ptr = [IntPtr]::Zero

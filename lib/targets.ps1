@@ -231,10 +231,22 @@ Register-ScheduledTask -TaskPath '$($gh.path)' -TaskName '$($gh.name)' -Action `
 function Disable-GameHelper {
     $gh = Get-GameHelper
     if (-not $gh.task -and -not (Test-Path $gh.dir)) { return }
-    $script = "Get-CimInstance Win32_Process -Filter `"Name like 'AutoHotkey%'`" | Where-Object { `$_.CommandLine -like '*$($gh.dir)*' } | ForEach-Object { Stop-Process -Id `$_.ProcessId -Force }; " +
-        "Unregister-ScheduledTask -TaskPath '$($gh.path)' -TaskName '$($gh.name)' -Confirm:`$false -ErrorAction SilentlyContinue; Remove-Item -Recurse -Force '$($gh.dir)' -ErrorAction SilentlyContinue"
-    Start-Process (Get-Paths).powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$script`""
-    Log 'game helper: removed'
+    # -EncodedCommand: the quotes of a -Command "..." string didn't survive the trip through
+    # RunAs, so the helper kept running (and kept its exe locked) after an uninstall.
+    Start-Process (Get-Paths).powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $(ConvertTo-EncodedCommand (Get-GameHelperRemoveScript $gh))"
+    if (Test-Path $gh.dir) { Write-Warning "  the game helper is still in $($gh.dir) (permission declined?): run winarchy game-setup remove" }
+    else { Log 'game helper: removed' }
+}
+
+# Run elevated. Matches the helper by its exe (in the admin-only folder), which is always
+# readable, unlike another process's command line.
+function Get-GameHelperRemoveScript($gh) {
+    @"
+Get-CimInstance Win32_Process -Filter "Name like 'AutoHotkey%'" | Where-Object { `$_.ExecutablePath -like '$($gh.dir)\*' } | ForEach-Object { Stop-Process -Id `$_.ProcessId -Force }
+Start-Sleep -Milliseconds 500
+Unregister-ScheduledTask -TaskPath '$($gh.path)' -TaskName '$($gh.name)' -Confirm:`$false -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force '$($gh.dir)' -ErrorAction SilentlyContinue
+"@
 }
 
 function Set-BrowserTheme([string]$theme, $c) {
