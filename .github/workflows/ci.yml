@@ -27,8 +27,17 @@ jobs:
           # The portable zip from AutoHotkey's GitHub releases (autohotkey.com blocks CI runners).
           gh release download --repo AutoHotkey/AutoHotkey --pattern 'AutoHotkey_2*.zip' --output ahk.zip
           Expand-Archive ahk.zip ahk-bin
-          $ahk = Get-Item ahk-bin/AutoHotkey64.exe
+          $ahk = (Get-Item ahk-bin/AutoHotkey64.exe).FullName
+          # AutoHotkey64.exe is a GUI program: & would not wait for it or set $LASTEXITCODE.
+          function Test-AhkLoads([string]$file) {
+            $p = Start-Process $ahk -ArgumentList '/ErrorStdOut', '/validate', "`"$file`"" -Wait -PassThru -RedirectStandardError ahk.err -RedirectStandardOutput ahk.out
+            $err = (Get-Content -Raw ahk.err) + (Get-Content -Raw ahk.out)
+            if ($err) { Write-Host $err }
+            -not $p.ExitCode -and -not $err
+          }
+          # Prove the check can fail before trusting it to pass.
+          Set-Content broken.ahk "#Requires AutoHotkey v2.0`nfoo(( bar"
+          if (Test-AhkLoads (Resolve-Path broken.ahk)) { Write-Error 'the AutoHotkey check passed a broken script'; exit 1 }
           foreach ($s in Get-ChildItem ahk/*.ahk) {
-            & $ahk.FullName /ErrorStdOut /validate $s.FullName
-            if ($LASTEXITCODE) { Write-Error "$($s.Name) failed to load"; exit 1 }
+            if (-not (Test-AhkLoads $s.FullName)) { Write-Error "$($s.Name) failed to load"; exit 1 }
           }
