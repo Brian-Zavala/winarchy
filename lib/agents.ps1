@@ -180,9 +180,10 @@ function Invoke-Agent([switch]$Inline, [switch]$Pick, [string]$Prompt) {
     if (-not (Test-AgentInstalled $key)) {
         throw "$($AgentTable[$key].label) is not installed. Install it with: $($AgentTable[$key].hint)"
     }
-    $cmd = Get-AgentCommand $key -Prompt $Prompt
+    $cmd = @(Get-AgentCommand $key -Prompt $Prompt)
     if ($Inline) {
-        & $cmd[0] @($cmd[1..($cmd.Count - 1)])
+        $rest = @($cmd | Select-Object -Skip 1)
+        & $cmd[0] @rest
         return
     }
     # Omarchy gives agent windows one app-id so window rules can single them out; our
@@ -198,15 +199,25 @@ function Open-MenuRoute([string]$route) {
     Start-Process -FilePath $p.ahk -ArgumentList "`"$Code\ahk\menu.ahk`"", 'open', $route
 }
 
+# Start-Process joins an argument array with bare spaces, so every item is quoted here
+# the way CommandLineToArgvW reads it back.
+function Join-ProcessArgs([string[]]$items) {
+    ($items | ForEach-Object {
+        if ($_ -and $_ -notmatch '[\s"]') { $_ }
+        else { '"' + (($_ -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"' }
+    }) -join ' '
+}
+
 function Start-AgentTerminal([string[]]$cmd) {
     $p = Get-Paths
     $line = ($cmd | ForEach-Object { if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ } }) -join ' '
     if ($p.wt) {
         # The profile supplies the look and the fixed "Omarchy Agent" title that window
-        # rules can match, so no --title here: that would undo it.
-        Start-Process $p.wt -ArgumentList @('-w', 'new', '-p', 'Omarchy Agent', ($p.pwsh ?? 'pwsh'), '-NoExit', '-NoLogo', '-Command', $line)
+        # rules can match, so no --title here: that would undo it. wt splits tabs on ;
+        # even inside quotes, so those are escaped.
+        Start-Process $p.wt -ArgumentList (Join-ProcessArgs @('-w', 'new', '-p', 'Omarchy Agent', ($p.pwsh ?? 'pwsh'), '-NoExit', '-NoLogo', '-Command', ($line -replace ';', '\;')))
     } else {
-        Start-Process ($p.pwsh ?? 'pwsh') -ArgumentList @('-NoExit', '-NoProfile', '-Command', $line)
+        Start-Process ($p.pwsh ?? 'pwsh') -ArgumentList (Join-ProcessArgs @('-NoExit', '-NoProfile', '-Command', $line))
     }
 }
 
