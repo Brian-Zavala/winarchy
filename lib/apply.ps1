@@ -180,7 +180,7 @@ function Write-GlazeConfig([int]$monitorCount) {
     # (None while the bar is turned off: Super+Shift+Space / winarchy bar off.)
     $gapTop = if (Test-Path (Join-Path $Generated 'bar-off')) { $gap } else { [int]$cfg.barHeight + $gap }
     $border = if ($old -match "color:\s*'(#[0-9A-Fa-f]{6})'\s*# theme:focused-border") { $Matches[1] } else {
-        try { (Read-Colors (Read-State).theme).accent } catch { '#7aa2f7' }
+        try { (Read-Colors (Read-State).theme).focused_border } catch { '#7aa2f7' }
     }
     $values = @{
         gap = "$gap"; gap_top = "$gapTop"; focused_border = $border

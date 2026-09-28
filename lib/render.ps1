@@ -5,28 +5,83 @@ function Read-Colors([string]$theme) {
     if (-not (Test-Path $file)) { throw "Theme '$theme' not found ($file). Run: winarchy sync" }
     $c = @{}
     foreach ($line in Get-Content $file) {
-        if ($line -match '^\s*([A-Za-z0-9_]+)\s*=\s*"([^"]*)"') { $c[$Matches[1]] = $Matches[2] }
+        # Double- or single-quoted, or bare; a trailing # comment is dropped.
+        if ($line -match '^\s*([A-Za-z0-9_-]+)\s*=\s*(?:"([^"]*)"|''([^'']*)''|([^#"'']*?))\s*(#.*)?$') {
+            $c[$Matches[1]] = "$($Matches[2])$($Matches[3])$($Matches[4])".Trim()
+        }
     }
-    # Fallbacks for keys some themes leave out.
-    if (-not $c.mode) { $c.mode = 'dark' }
-    if (-not $c.background) { $c.background = '#1a1b26' }
-    if (-not $c.foreground) { $c.foreground = '#a9b1d6' }
-    if (-not $c.accent) { $c.accent = if ($c.blue) { $c.blue } else { $c.foreground } }
-    $fill = @{
-        dark_background = 'background'; darker_background = 'background'; lighter_background = 'selection'
-        selection = 'muted'; muted = 'dark_foreground'; dark_foreground = 'foreground'
-        light_foreground = 'foreground'; bright_foreground = 'foreground'
-        red = 'accent'; green = 'accent'; yellow = 'accent'; blue = 'accent'; magenta = 'accent'; cyan = 'accent'
-        orange = 'yellow'; brown = 'orange'
-        selection_background = 'selection'; selection_foreground = 'foreground'
-        bright_red = 'red'; bright_green = 'green'; bright_yellow = 'yellow'; bright_blue = 'blue'
-        bright_magenta = 'magenta'; bright_cyan = 'cyan'
+    Resolve-ThemeColors $c (Test-Path (Join-Path (Split-Path $file) 'light.mode'))
+}
+
+# Omarchy's bin/omarchy-theme-color resolve_theme_colors, key for key, so a theme that
+# leaves keys out gets the same palette here as on Omarchy.
+function Resolve-ThemeColors([hashtable]$c, [bool]$lightModeFile) {
+    $set = { param($k, $v) if (-not $c[$k] -and $v) { $c[$k] = $v } }
+    $first = { foreach ($v in $args) { if ($v) { return $v } } }
+    $legacy = [ordered]@{
+        background = 'bg'; dark_background = 'dark_bg'; darker_background = 'darker_bg'; lighter_background = 'lighter_bg'
+        foreground = 'fg'; dark_foreground = 'dark_fg'; light_foreground = 'light_fg'; bright_foreground = 'bright_fg'
     }
-    for ($pass = 0; $pass -lt 3; $pass++) {
-        foreach ($k in $fill.Keys) { if (-not $c[$k] -and $c[$fill[$k]]) { $c[$k] = $c[$fill[$k]] } }
+    foreach ($k in $legacy.Keys) { & $set $k $c[$legacy[$k]] }
+    # Themes from before the semantic palette may only have ANSI names.
+    & $set background $c.color0
+    & $set foreground $c.color7
+    # Winarchy's last resort, so a broken theme still renders (Omarchy has none).
+    & $set background '#1a1b26'
+    & $set foreground '#a9b1d6'
+    $c.color0 = $c.background
+    $c.color7 = $c.foreground
+    $ansi = [ordered]@{
+        red = 'color1'; green = 'color2'; yellow = 'color3'; blue = 'color4'; magenta = 'color5'; cyan = 'color6'
+        bright_red = 'color9'; bright_green = 'color10'; bright_yellow = 'color11'; bright_blue = 'color12'
+        bright_magenta = 'color13'; bright_cyan = 'color14'
     }
-    foreach ($k in @($c.Keys)) { if ($c[$k] -match '^#[0-9a-fA-F]{8}$') { $c[$k] = $c[$k].Substring(0, 7) } }
+    foreach ($k in $ansi.Keys) { & $set $k $c[$ansi[$k]] }
+    & $set magenta $c.purple
+    & $set bright_magenta $c.bright_purple
+
+    & $set light_foreground (& $first $c.color7 $c.foreground)
+    & $set bright_foreground (& $first $c.color15 $c.foreground)
+    $c.cursor = $c.bright_foreground
+    & $set lighter_background (& $first $c.color0 $c.background)
+    & $set dark_foreground (& $first $c.color8 $c.foreground)
+    & $set muted (& $first $c.color8 $c.dark_foreground)
+    & $set selection (& $first $c.selection_background $c.color8 $c.color0 $c.background)
+    & $set selection_background $c.selection
+    & $set selection_foreground $c.bright_foreground
+    & $set orange $c.yellow
+    if ($c.orange) { & $set brown (Mix $c.orange '#000000' 0.5) }
+
+    & $set dark_background (Mix $c.background '#000000' 0.25)
+    & $set darker_background (Mix $c.background '#000000' 0.5)
+    foreach ($k in 'red', 'yellow', 'green', 'cyan', 'blue', 'magenta') {
+        if ($c[$k]) { & $set "bright_$k" (Mix $c[$k] '#ffffff' 0.2) }
+    }
+    & $set purple $c.magenta
+    & $set bright_purple $c.bright_magenta
+
+    $toAnsi = [ordered]@{
+        color1 = 'red'; color2 = 'green'; color3 = 'yellow'; color4 = 'blue'; color5 = 'magenta'; color6 = 'cyan'
+        color8 = 'muted'; color9 = 'bright_red'; color10 = 'bright_green'; color11 = 'bright_yellow'
+        color12 = 'bright_blue'; color13 = 'bright_magenta'; color14 = 'bright_cyan'; color15 = 'bright_foreground'
+    }
+    foreach ($k in $toAnsi.Keys) { & $set $k $c[$toAnsi[$k]] }
+    foreach ($k in $legacy.Keys) { if ($c[$k]) { $c[$legacy[$k]] = $c[$k] } }
+
+    # mode: its own key, the legacy theme_type, a light.mode file, then the background.
+    & $set mode $c.theme_type
+    if (-not $c.mode) {
+        $c.mode = if ($lightModeFile) { 'light' }
+                  elseif ($c.background -match '^#[0-9A-Fa-f]{6}$' -and ((ConvertTo-Rgb $c.background) | Measure-Object -Sum).Sum -gt 382) { 'light' }
+                  else { 'dark' }
+    }
     $c.theme_type = $c.mode
+
+    # Winarchy's own: the accent every Windows target uses, and GlazeWM's focused border
+    # (Hyprland's active border, whose first colour is the one GlazeWM can show).
+    & $set accent (& $first $c.blue $c.foreground)
+    $c.focused_border = if ($c.hyprland_active_border -match 'rgba?\(\s*([0-9A-Fa-f]{6})') { "#$($Matches[1].ToLower())" } else { $c.accent }
+    foreach ($k in @($c.Keys)) { if ($c[$k] -match '^#[0-9a-fA-F]{8}$') { $c[$k] = $c[$k].Substring(0, 7) } }
     $c
 }
 

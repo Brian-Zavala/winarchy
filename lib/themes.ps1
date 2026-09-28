@@ -186,7 +186,8 @@ function Get-BarPalette($c) {
         'red' = 'red'; 'green' = 'green'; 'yellow' = 'yellow'; 'blue' = 'blue'; 'magenta' = 'magenta'; 'cyan' = 'cyan'; 'orange' = 'orange'
     }
     $palette = [ordered]@{}
-    foreach ($k in $vars.Keys) { $palette[$k] = $c[$vars[$k]] }
+    # The bar needs every colour; Omarchy leaves a theme's missing ANSI colours empty.
+    foreach ($k in $vars.Keys) { $palette[$k] = $c[$vars[$k]] ?? $c.accent }
     $palette
 }
 
@@ -199,7 +200,7 @@ function Set-BarTheme($c) {
 function Set-GlazeTheme($c) {
     if (-not (Test-Path $GlazeConfig)) { return 'skipped' }
     $yaml = Get-Content -Raw $GlazeConfig
-    $new = [regex]::Replace($yaml, "(?m)^(\s*color:\s*)'#[0-9A-Fa-f]{6}'(\s*# theme:focused-border)", "`${1}'$($c.accent)'`${2}")
+    $new = [regex]::Replace($yaml, "(?m)^(\s*color:\s*)'#[0-9A-Fa-f]{6}'(\s*# theme:focused-border)", "`${1}'$($c.focused_border)'`${2}")
     if ($new -ne $yaml) {
         Write-Utf8 $GlazeConfig $new
         $cli = (Get-Paths).glazewmCli

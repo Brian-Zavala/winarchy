@@ -112,6 +112,33 @@ Describe 'JSONC edits (VS Code settings keep their comments)' {
     }
 }
 
+Describe 'Theme colour fallbacks' {
+    It 'resolves a theme with only the basic colours exactly as Omarchy''s omarchy-theme-color does' {
+        # omarchy-theme-color.tsv: `omarchy-theme-color --file colors.toml --all` from Omarchy (quattro).
+        $Themes = Join-Path $root 'tests\fixtures'
+        $c = Read-Colors 'theme-min'
+        foreach ($line in Get-Content (Join-Path $Themes 'theme-min\omarchy-theme-color.tsv')) {
+            $k, $v = $line -split "`t", 2
+            "$k=$($c[$k])" | Should -Be "$k=$v"
+        }
+    }
+    It 'reads single-quoted values and the legacy theme_type' {
+        $Themes = Join-Path $TestDrive 'themes'
+        New-Item -ItemType Directory -Force "$Themes\t" | Out-Null
+        Set-Content "$Themes\t\colors.toml" "theme_type = 'light'`nbackground = '#fafafa'`nforeground = `"#111111`" # ink"
+        $c = Read-Colors 't'
+        $c.mode | Should -Be 'light'
+        $c.foreground | Should -Be '#111111'
+        $c.red | Should -BeNullOrEmpty
+    }
+    It 'takes GlazeWM''s focused border from Hyprland''s active border when the theme has one' {
+        $Themes = Join-Path $TestDrive 'themes'
+        New-Item -ItemType Directory -Force "$Themes\b" | Out-Null
+        Set-Content "$Themes\b\colors.toml" "accent = `"#7aa2f7`"`nhyprland_active_border = `"rgba(26A269ee) rgba(2ec27eee) 45deg`""
+        (Read-Colors 'b').focused_border | Should -Be '#26a269'
+    }
+}
+
 Describe 'Backup journal' {
     BeforeEach {
         $script:JournalDir = Join-Path $TestDrive ([guid]::NewGuid())

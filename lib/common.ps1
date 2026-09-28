@@ -246,10 +246,10 @@ function ConvertTo-Rgb([string]$hex) {
     $h = $hex.TrimStart('#')
     @([Convert]::ToInt32($h.Substring(0, 2), 16), [Convert]::ToInt32($h.Substring(2, 2), 16), [Convert]::ToInt32($h.Substring(4, 2), 16))
 }
-# a*(1-t) + b*t, like Omarchy's template `mix a b t`.
+# a*(1-t) + b*t, like Omarchy's template `mix a b t`, rounding .5 up as its awk does.
 function Mix([string]$a, [string]$b, [double]$t) {
     $x = ConvertTo-Rgb $a; $y = ConvertTo-Rgb $b
-    '#' + (-join (0..2 | ForEach-Object { '{0:x2}' -f [int][Math]::Round($x[$_] + ($y[$_] - $x[$_]) * $t) }))
+    '#' + (-join (0..2 | ForEach-Object { '{0:x2}' -f [int][Math]::Round($x[$_] + ($y[$_] - $x[$_]) * $t, [MidpointRounding]::AwayFromZero) }))
 }
 function To-Dword([uint32]$v) { [BitConverter]::ToInt32([BitConverter]::GetBytes($v), 0) }
 
