@@ -68,7 +68,7 @@ Super+Space opens it (or left-click the bar's logo); the app launcher is on Supe
 | **Trigger** | Capture (region screenshot, screen recording, **text capture (OCR)**, color picker), Toggle (stay awake, night light, do not disturb, top bar, gaps, transparency), your default **coding agent**, **Herdr**, emoji, calculator, Activity (btop), clipboard, weather |
 | **Style** | Theme and background pickers, next background, font, screensaver and About text, browser toolbar color, your bar CSS, your GlazeWM template |
 | **Setup** | Hardware panels, your settings, your keybindings, **default coding agent**, your own **Herdr config**, your own GlazeWM template, the admin-games helper |
-| **Install / Remove** | Omarchy Quattro's software catalog, on winget — 46 packages in 7 groups: **AI** (Claude Desktop, Ollama, LM Studio, Perplexity) · **Gaming** (Steam, Heroic for Epic, RetroArch, Battle.net, Minecraft, GeForce NOW, Playnite) · **Development** (Git, Python, Node.js, Bun, Deno, Go, Rust, .NET, Java, PHP, Docker) · **Editor** (VS Code, Cursor, Zed, Sublime, Helix, Neovim, Vim, Emacs) · **Terminal** (Windows Terminal, Alacritty, WezTerm, Herdr) · **Service** (1Password, Bitwarden, Dropbox, Spotify, Signal, Tailscale, NordVPN) · **Windows** (PowerToys, WSL, Sunshine, fastfetch, btop). Something you already have stays in the list, dim and ticked, so it still reads as a catalog; Remove only lists what is actually there. Each install runs in a terminal so you can watch it, and is recorded so `winarchy uninstall` takes it back out |
+| **Install / Remove** | Omarchy Quattro's software catalog, on winget — 46 packages in 7 groups: **AI** (Claude Desktop, Ollama, LM Studio, Perplexity) · **Gaming** (Steam, Heroic for Epic, RetroArch, Battle.net, Minecraft, GeForce NOW, Playnite) · **Development** (Git, Python, Node.js, Bun, Deno, Go, Rust, .NET, Java, PHP, Docker) · **Editor** (VS Code, Cursor, Zed, Sublime, Helix, Neovim, Vim, Emacs) · **Terminal** (Windows Terminal, Alacritty, WezTerm, Herdr) · **Service** (1Password, Bitwarden, Dropbox, Spotify, Signal, Tailscale, NordVPN) · **Windows** (PowerToys, WSL, Sunshine, fastfetch, btop). Something you already have stays in the list, dim and ticked, so it still reads as a catalog; Remove only lists what is actually there. Each install runs in a terminal so you can watch it, and is recorded so `winarchy uninstall` can ask whether to keep it or take it back out |
 | **System** | Lock, suspend, restart, shut down, log out, back to normal Windows (also Super+Escape) |
 
 ### AI coding agents and Herdr
@@ -109,7 +109,7 @@ winarchy animations on     window animations       (experimental; first: animati
 winarchy bar off           hide the top bar        (winarchy bar on / toggle; Super+Shift+Space)
 winarchy update            update winarchy, Omarchy themes, Herdr and the apps, and
                            install anything a newer winarchy needs
-winarchy uninstall         back to normal Windows  (-DryRun to preview, -KeepApps)
+winarchy uninstall         back to normal Windows; asks about your apps and settings (-DryRun to preview)
 ```
 
 ## Settings
@@ -211,9 +211,18 @@ are in the menu's Install › Gaming.
 journal newest-first: taskbar, accent and light/dark mode, wallpaper and lock screen, Windows
 Terminal / Flow / VS Code / Claude Code settings, the Windows screensaver, autostart entries,
 PATH, your PowerShell profile (the Herdr shortcuts come back out) and Herdr's config, and
-uninstalls the apps Winarchy installed — including anything from the menu's Install section, and
-Herdr (`-KeepApps` keeps them). Downloaded themes, backgrounds and fonts are kept unless you add
-`-Purge`.
+uninstalls what Winarchy runs on (GlazeWM, Flow Launcher, AutoHotkey, ...; `-KeepApps` keeps
+them). Before it changes anything it asks two questions:
+
+- **Keep the apps you installed through Winarchy?** Anything from the menu's Install section
+  (Cursor, Steam, ...) and Herdr: keep all, remove all, or choose each.
+- **Keep your settings?** `config.json`, your theme, background and font, your own templates
+  (`glazewm.yaml.tpl`, `herdr.toml.tpl`) and branding. Kept settings are applied again
+  automatically the next time you install Winarchy, and the questions you already answered
+  aren't asked again.
+
+`-Yes` keeps both without asking. Downloaded themes and backgrounds are kept unless you add
+`-Purge` (which still keeps your settings if you said so).
 
 ## FAQ
 

@@ -127,8 +127,12 @@ function Save-LockScreen {
     [void](Add-JournalEntry @{ kind = 'lockscreen'; key = 'lockscreen'; path = $img })
 }
 
-function Save-Winget([string]$id, [bool]$preinstalled) {
-    [void](Add-JournalEntry @{ kind = 'winget'; key = "winget|$id"; id = $id; preinstalled = $preinstalled })
+# $source 'menu' = the person picked it from the menu's Install section (theirs to keep
+# or remove at uninstall), as opposed to something winarchy itself needs.
+function Save-Winget([string]$id, [bool]$preinstalled, [string]$source) {
+    $e = @{ kind = 'winget'; key = "winget|$id"; id = $id; preinstalled = $preinstalled }
+    if ($source) { $e.source = $source }
+    [void](Add-JournalEntry $e)
 }
 
 function Save-Note([string]$key, [string]$text) {

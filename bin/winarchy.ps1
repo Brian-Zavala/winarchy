@@ -4,8 +4,11 @@
 
 .DESCRIPTION
   winarchy install [-Yes] [-Adopt]     set everything up (asks a few questions; -Yes = defaults)
-  winarchy uninstall [-KeepApps] [-DryRun] [-Purge]
-                                          undo every change, from the backup journal
+  winarchy uninstall [-KeepApps] [-DryRun] [-Purge] [-Yes]
+                                          undo every change, from the backup journal; asks
+                                          whether to keep the apps you installed through
+                                          winarchy and your settings (a reinstall restores
+                                          them); -Yes keeps both without asking
   winarchy update                      pull the latest winarchy, install anything it now needs,
                                           re-apply, upgrade apps
   winarchy deps                        install whatever winarchy needs and this PC is missing
@@ -100,7 +103,7 @@ $failed = $false
 try {
 switch ($Verb) {
     'install' { Invoke-Install -Yes:$Yes -Adopt:$Adopt }
-    { $_ -in 'uninstall', 'revert' } { Invoke-Uninstall -KeepApps:$KeepApps -DryRun:$DryRun -Purge:$Purge }
+    { $_ -in 'uninstall', 'revert' } { Invoke-Uninstall -KeepApps:$KeepApps -DryRun:$DryRun -Purge:$Purge -Yes:$Yes }
     'update' { Invoke-Update }
     'apply' { Use-Lock { Invoke-Apply -MonitorsOnly:$MonitorsOnly -NoRestart:$NoRestart -Resplit:$Resplit } }
     'doctor' { Invoke-Doctor -Fix:$Fix }

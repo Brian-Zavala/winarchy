@@ -200,7 +200,7 @@ function Install-CatalogItem([string]$key) {
     # what has to be recorded to undo it is not a winget package.
     if ($item.install) { & $item.install; [void](Update-Catalog); return }
     # Journal before the change, so `winarchy uninstall` knows this one was ours.
-    Save-Winget $item.id $false
+    Save-Winget $item.id $false 'menu'
     $ok = Install-WingetPackage $item.id $item.label $item.scope
     [void](Update-Catalog)
     if (-not $ok) { throw "winget could not install $($item.label); try: winget install -e --id $($item.id)" }

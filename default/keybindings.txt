@@ -123,4 +123,4 @@ TERMINAL COMMANDS
   winarchy update               Update Winarchy, themes and apps; install anything newly needed
   winarchy herdr status         Herdr: where it is, its config, its theme (herdr install)
   winarchy agent list           The coding agents, and which one is the default
-  winarchy uninstall            Back to normal Windows (-DryRun to preview, -KeepApps)
+  winarchy uninstall            Back to normal Windows (asks about apps/settings; -DryRun)

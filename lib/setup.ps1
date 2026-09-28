@@ -203,15 +203,24 @@ function Install-Apps {
     }
 }
 
+$Extras = @(
+    @{ id = 'Fastfetch-cli.Fastfetch'; name = 'fastfetch'; have = { Get-Command fastfetch.exe -ErrorAction SilentlyContinue } },
+    @{ id = 'aristocratos.btop4win'; name = 'btop'; have = { (Update-Paths).btopDir } },
+    # The bar's AI agent usage runs Omarchy's collectors, which are Python. Find-Python,
+    # not Get-Command: the Store's `python` stub is on PATH and would pass for one.
+    @{ id = 'Python.Python.3.13'; name = 'Python 3 (the bar''s AI agent usage)'; have = { Find-Python } }
+)
+
+# The winget packages winarchy itself runs on. Uninstall treats these apart from the apps
+# the person picked (it removes them unless -KeepApps, and never asks about each one).
+function Get-CoreWingetIds {
+    @('AutoHotkey.AutoHotkey') + @($Apps | ForEach-Object { $_.id }) + @($Extras | ForEach-Object { $_.id })
+}
+
 # About (fastfetch), Activity (btop) and the screensaver's effects engine (ttfx).
 function Install-Extras {
     Write-Step 'Extras (About, Activity, screensaver effects, agent usage)'
-    foreach ($x in @(
-            @{ id = 'Fastfetch-cli.Fastfetch'; name = 'fastfetch'; have = { Get-Command fastfetch.exe -ErrorAction SilentlyContinue } },
-            @{ id = 'aristocratos.btop4win'; name = 'btop'; have = { (Update-Paths).btopDir } },
-            # The bar's AI agent usage runs Omarchy's collectors, which are Python. Find-Python,
-            # not Get-Command: the Store's `python` stub is on PATH and would pass for one.
-            @{ id = 'Python.Python.3.13'; name = 'Python 3 (the bar''s AI agent usage)'; have = { Find-Python } })) {
+    foreach ($x in $Extras) {
         if (& $x.have) { Save-Winget $x.id $true; Write-Ok "$($x.name): installed"; continue }
         Save-Winget $x.id $false
         if (-not (Install-WingetPackage $x.id $x.name $null)) { Add-Unfinished "$($x.name) (optional) did not install: winget install -e --id $($x.id)" }
@@ -278,22 +287,24 @@ function Install-Dependencies {
     [void](Update-Paths)
 }
 
-# The few questions whose answer depends on the person, not the machine.
-function Get-InstallAnswers($p) {
-    Write-Step 'A few choices (Enter = recommended)'
+# The few questions whose answer depends on the person, not the machine. Restoring the
+# settings an earlier uninstall kept, only what they never answered is asked.
+function Get-InstallAnswers($p, [switch]$Restoring) {
     $cfg = Read-Json $ConfigFile -AsHashtable
     if (-not $cfg) { $cfg = [ordered]@{} }
-    if ([int]$p.input.count -gt 1 -or $p.input.ime) {
+    $ask = { param([string]$key) -not ($Restoring -and $cfg.Contains($key)) }
+    Write-Step $(if ($Restoring) { 'Your choices (kept from before; only new ones are asked)' } else { 'A few choices (Enter = recommended)' })
+    if (([int]$p.input.count -gt 1 -or $p.input.ime) -and (& $ask 'takeOverWinSpace')) {
         Write-Ok "You have $($p.input.count) keyboard layouts/input methods. Windows switches them with Win+Space;"
         Write-Ok 'Winarchy uses Super+Space for the Omarchy menu (Alt+Shift still switches layouts).'
         $cfg.takeOverWinSpace = Read-YesNo 'Use Super+Space for the Omarchy menu?' $true
     }
     $personal = Join-Path $p.startup 'launchers.ahk'
-    if (Test-Path $personal) {
+    if ((Test-Path $personal) -and (& $ask 'launchers')) {
         Write-Ok "Found your own launcher script ($personal)."
         $cfg.launchers = -not (Read-YesNo 'Keep using it instead of winarchy''s app keys?' $true)
     }
-    $cfg.hideTaskbar = Read-YesNo 'Hide the Windows taskbar (the top bar replaces it)?' $true
+    if (& $ask 'hideTaskbar') { $cfg.hideTaskbar = Read-YesNo 'Hide the Windows taskbar (the top bar replaces it)?' $true }
     $wall = Join-Path $p.pictures 'Wallpapers'
     Write-Ok "Your own backgrounds go in $wall (shown as 'Mine' in the picker)."
     New-Item -ItemType Directory -Force $wall | Out-Null
@@ -344,6 +355,12 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     New-Item -ItemType Directory -Force $Data | Out-Null
     Test-Preflight
     if ($Adopt) { return Invoke-Adopt }
+    # An earlier uninstall kept the person's settings: this install puts them back.
+    $restoreFile = Join-Path $Data 'restore.json'
+    $restoring = (Test-Path $restoreFile) -and (Test-Path $ConfigFile)
+    if ($restoring) {
+        Write-Step "Welcome back: restoring your saved settings (theme $((Read-State).theme), background, font, config.json)"
+    }
 
     if (-not (Test-Journaled 'runkeys')) {
         [void](Add-JournalEntry @{ kind = 'runkeys'; key = 'runkeys'; names = @((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).PSObject.Properties.Name | Where-Object { $_ -notlike 'PS*' }) })
@@ -353,7 +370,7 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     Install-HerdrStep
     $p = Update-Paths
 
-    $cfg = Get-InstallAnswers $p
+    $cfg = Get-InstallAnswers $p -Restoring:$restoring
     Write-Json $ConfigFile $cfg
 
     Write-Step 'Configuring'
@@ -363,14 +380,19 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     Write-Ok 'GlazeWM, bar, menus, keys and autostart configured'
 
     Write-Step 'Omarchy themes and backgrounds'
-    if (Read-YesNo 'Download Omarchy''s 22 themes and ~100 backgrounds now (about 110 MB)?' $true) {
+    $downloaded = @(Get-ChildItem $Themes -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName 'colors.toml') }).Count -gt 1
+    if ($restoring -and $downloaded) {
+        Use-Lock { Invoke-Sync -Offline }; Write-Ok 'Already downloaded (kept from before).'
+    } elseif (Read-YesNo 'Download Omarchy''s 22 themes and ~100 backgrounds now (about 110 MB)?' $true) {
         Use-Lock { Invoke-Sync }
     } else { Use-Lock { Invoke-Sync -Offline }; Write-Ok 'Skipped: run "winarchy sync" any time.' }
-    $theme = if (Test-Path (Join-Path $Themes 'tokyo-night\colors.toml')) { 'tokyo-night' }
+    # The theme used last (a reinstall keeps it, with its background), else tokyo-night.
+    $theme = @((Read-State).theme, 'tokyo-night') | Where-Object { $_ -and (Test-Path (Join-Path $Themes "$_\colors.toml")) } | Select-Object -First 1
     if ($theme) { Use-Lock { Invoke-ThemeSet $theme } }
 
     Write-Step 'Starting'
     Start-Everything $p
+    if ($restoring) { Remove-Item $restoreFile -Force -ErrorAction SilentlyContinue; Write-Ok 'Your settings are back.' }
     Write-Host ''
     Write-Host 'Done. Super = the Windows key. Start here:' -ForegroundColor Green
     Write-Host '  Super + K             all keybindings'

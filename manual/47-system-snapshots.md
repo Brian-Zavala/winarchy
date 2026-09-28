@@ -21,6 +21,6 @@ Before it changes anything, it asks two questions:
 - **Keep the apps you installed through Winarchy?** Anything from the menu's _Install_ section (Cursor, Steam and so on) and Herdr: keep all, remove all, or choose each.
 - **Keep your settings?** Your `config.json`, theme, background and font, your own templates, and your branding. Kept settings are applied again the next time you install Winarchy, and the questions you already answered aren't asked again.
 
-`-Yes` keeps both without asking, and `-KeepApps` keeps everything Winarchy runs on (GlazeWM, Flow Launcher, AutoHotkey and the rest). Downloaded themes, backgrounds and fonts are kept unless you add `-Purge`, which still keeps your settings if you said so.
+`-Yes` keeps both without asking, and `-KeepApps` keeps everything Winarchy runs on (GlazeWM, Flow Launcher, AutoHotkey and the rest). Downloaded themes and backgrounds are kept unless you add `-Purge`, which still keeps your settings if you said so.
 
 When it's done, the journal is archived, so a later install starts a fresh one.
