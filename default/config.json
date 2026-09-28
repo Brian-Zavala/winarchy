@@ -1,5 +1,5 @@
 {
-  "_help": "Defaults. Put only the keys you change in %USERPROFILE%\\.winarchy\\config.json, then run: winarchy apply. Reference: docs/config.md",
+  "_help": "Defaults. Put only the keys you change in %USERPROFILE%\\.winarchy\\config.json, then run: winarchy apply. Reference: manual/31-dotfiles.md",
   "clock": "auto",
   "units": "auto",
   "workspaces": "auto",
@@ -13,7 +13,7 @@
     "browser": "auto",
     "editor": "auto",
     "agent": "auto",
-    "files": "explorer.exe"
+    "files": "auto"
   },
   "backgroundDirs": ["~\\Pictures\\Wallpapers"],
   "themeTargets": {
@@ -41,6 +41,7 @@
   "minimizeAllowed": [],
   "gameFocusGuard": true,
   "openOnHoveredMonitor": true,
+  "glazewmManaged": true,
   "focusFollowsCursor": true,
   "animations": {
     "enabled": false,
