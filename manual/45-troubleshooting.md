@@ -1,0 +1,39 @@
+# Troubleshooting
+
+### Something looks wrong
+
+Run `winarchy doctor`. It checks every moving part (the apps, what's running, the bar, Herdr, the agent usage, the monitors and the screensaver) and says what to do about each problem. `winarchy doctor -Fix` repairs what it can: it looks for your apps again and reinstalls anything that went missing.
+
+The log is in `%USERPROFILE%\.winarchy\logs\winarchy.log`, and says what Winarchy did and what failed.
+
+### My settings don't take effect
+
+A `config.json` with a typing mistake is left alone rather than overwritten, and Winarchy runs on the defaults until it's fixed. `winarchy doctor` says where the mistake is. The usual one is a single `\` in a path: in JSON it has to be written `\`, as in `"C:\Games"`.
+
+### Some windows can't be moved or tiled
+
+Windows running as administrator can't be managed by programs that don't, and GlazeWM and AutoHotkey don't. That's a Windows security boundary; see [security](48-security.md). For games, `winarchy game-setup` helps; see [gaming](26-gaming.md).
+
+### A game gets tiled, or the bar shows over it
+
+Windows adds a game to its list the first time Game Bar notices it, and the checks for the launchers' own folders and for Playnite catch most others right away. Still missed? `Super + Ctrl + G` marks the focused window as a game, or add its process name (Task Manager > Details, without `.exe`) to `"games"` in your settings. The log says `game: <name>` when a game is recognised.
+
+### A game keeps minimizing by itself
+
+A fullscreen game minimizes whenever another window takes the foreground. Winarchy gives it straight back unless you pressed a key, clicked or used the gamepad just before, and the log names what took it: `game lost focus: <game> -> <program>`. Games that run as administrator need `winarchy game-setup` for this.
+
+### A window minimized and I can't get it back
+
+`Super + M` restores every minimized window. There's no taskbar to bring one back from, which is why nothing minimizes in the first place. `"blockMinimize": false` in your settings turns that off, or add just that one program's process name to `"minimizeAllowed"`.
+
+### The AI agent icon doesn't show up
+
+It only appears once a coding agent has recorded usage on this PC, or its provider reports limits. If you've used one and it still isn't there, run `winarchy doctor`: it says whether Python 3 is missing (the `python` in WindowsApps is only a Microsoft Store shortcut and doesn't count) and what each agent reported.
+
+### `hdl` says "not inside Herdr"
+
+The layouts build around the pane they run in, so run them in a Herdr pane (_Trigger > Herdr_ opens one), not a plain terminal.
+
+### Starting over
+
+`winarchy uninstall` takes Winarchy back out, keeping your settings if you like, and the install one-liner puts it back. See [system snapshots](47-system-snapshots.md).
