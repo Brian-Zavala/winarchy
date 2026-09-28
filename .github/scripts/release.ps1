@@ -8,13 +8,17 @@ $Verb = 'release'
 . "$PSScriptRoot\..\..\lib\common.ps1"
 . "$PSScriptRoot\..\..\lib\release.ps1"
 
-# A new branch or a force push has no usable "before": take the last commit alone.
-$range = if ($Before -and $Before -notmatch '^0+$' -and (git -C $Code cat-file -t $Before 2>$null)) { "$Before..$After" } else { "$After~1..$After" }
-$messages = @(git -C $Code log --format='%B%x00' $range) -join "`n" -split "`0" | Where-Object { $_.Trim() }
-$subjects = @(git -C $Code log --format='%s' $range)
-
 $file = Get-VersionFile
 $current = if (Test-Path $file) { (Get-Content -Raw $file).Trim() } else { '0.1.0' }
+
+# Everything since the last release, so pushes whose tests failed (never released) count
+# too. Without that tag, the pushed range; a new branch or a force push has no usable
+# "before", so the last commit alone.
+$range = if (git -C $Code rev-parse -q --verify "refs/tags/v$current" 2>$null) { "v$current..$After" }
+    elseif ($Before -and $Before -notmatch '^0+$' -and (git -C $Code cat-file -t $Before 2>$null)) { "$Before..$After" }
+    else { "$After~1..$After" }
+$messages = @(git -C $Code log --format='%B%x00' $range) -join "`n" -split "`0" | Where-Object { $_.Trim() }
+$subjects = @(git -C $Code log --format='%s' $range | Where-Object { $_ -notmatch '^Version \d+\.\d+\.\d+ \[skip ci\]$' })
 $version = Get-NextVersion $current $messages
 [IO.File]::WriteAllText($file, "$version`n")
 

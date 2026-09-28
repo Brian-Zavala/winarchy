@@ -3,7 +3,7 @@ BeforeDiscovery {
     $root = Split-Path -Parent $PSScriptRoot
     $docs = @(Get-ChildItem "$root\manual" -Filter *.md) + @(Get-Item "$root\README.md")
     $chapters = @(Get-ChildItem "$root\manual" -Filter *.md | ForEach-Object { @{ name = $_.Name } })
-    $pages = @($docs | ForEach-Object { @{ name = $_.Name; path = $_.FullName } })
+    $pages = @($docs | ForEach-Object { @{ name = $_.Name; path = $_.FullName; chapter = $_.Name -ne 'README.md' } })
 }
 
 BeforeAll {
@@ -31,7 +31,8 @@ Describe '<name>' -ForEach $pages {
         $text | Should -Not -Match '\b(Super|Ctrl|Alt|Shift)\+\S'
         $text | Should -Not -Match '›'
     }
-    It 'starts with its title' {
+    # The README's title is the logo, as Omarchy's is.
+    It 'starts with its title' -Skip:(-not $chapter) {
         ($text -split "`n" | Where-Object { $_ -match '^#' } | Select-Object -First 1) | Should -Match '^# '
     }
 }
