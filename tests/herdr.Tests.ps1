@@ -153,6 +153,18 @@ Describe 'Herdr layouts (hdl / hds / hdlm / hsl)' {
         # Named outright, not `winarchy`: in 5.1 that resolves to a .ps1 it cannot parse.
         $r | ForEach-Object { $_[3] | Should -Match 'pwsh\.exe.*-File .*winarchy\.ps1.* herdr layout claude' }
     }
+    It 'hdlm: skips dot-folders, and does nothing with no folders, as Omarchy''s does' {
+        $dir = Join-Path $TestDrive 'dots'
+        New-Item -ItemType Directory -Force (Join-Path $dir '.git') | Out-Null
+        Push-Location $dir
+        try { Invoke-HerdrMulti 'claude' } finally { Pop-Location }
+        (Get-Runs).Count | Should -Be 0
+    }
+    It 'hds: runs plain opencode when it is installed' {
+        Mock Test-AgentInstalled { $true } -ParameterFilter { $name -eq 'opencode' }
+        Invoke-HerdrSquare
+        (Get-Runs)[-1][3] | Should -Be 'opencode'
+    }
 }
 
 Describe 'Herdr shell shortcuts' {

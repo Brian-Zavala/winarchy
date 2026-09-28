@@ -362,9 +362,10 @@ function Invoke-HerdrSquare {
     $diff = Split-HerdrPane $editor 'right' 0.5 $ctx.cwd
     $agentPane = Split-HerdrPane $terminal 'right' 0.5 $ctx.cwd
     Invoke-HerdrPane $editor (Get-EditorCommand $ctx.cwd)
-    # Omarchy watches its diff with `hunk diff --watch`; git is what Windows has.
     Invoke-HerdrPane $diff (Get-DiffWatchCommand)
-    Invoke-HerdrPane $agentPane (Get-HerdrAgentCommand ((Get-DefaultAgent) ?? 'opencode'))
+    # Omarchy runs plain opencode here (no unattended flags); without it, the default agent.
+    $agent = if (Test-AgentInstalled 'opencode') { 'opencode' } else { Get-HerdrAgentCommand ((Get-DefaultAgent) ?? 'opencode') }
+    Invoke-HerdrPane $agentPane $agent
 }
 
 # hdlm: one hdl tab per subdirectory of the current directory.
@@ -375,8 +376,8 @@ function Invoke-HerdrMulti([string]$agent, [string]$agent2) {
         try { [void](Invoke-HerdrCli @('workspace', 'rename', $ctx.workspace, (Split-Path -Leaf $ctx.cwd))) }
         catch { Log "herdr workspace rename: $($_.Exception.Message)" }
     }
-    $dirs = @(Get-ChildItem -LiteralPath $ctx.cwd -Directory | Sort-Object Name)
-    if (-not $dirs) { throw "no subdirectories in $($ctx.cwd) to open." }
+    # Omarchy's "$base_dir"/*/ glob: no dot-folders, and no folders means nothing to do.
+    $dirs = @(Get-ChildItem -LiteralPath $ctx.cwd -Directory | Where-Object { -not $_.Name.StartsWith('.') } | Sort-Object Name)
     $first = $true
     foreach ($dir in $dirs) {
         $call = "$(Get-WinarchyCli) herdr layout $(Format-PwshArg $agent)"
@@ -452,7 +453,9 @@ function Get-EditorCommand([string]$cwd) {
 }
 
 # Omarchy runs `hunk diff --watch`; hunk is Linux-only, so this is git's own watch loop.
+# Omarchy watches the diff with `hunk diff --watch`; without hunk, a git loop does it.
 function Get-DiffWatchCommand {
+    if (Get-Command hunk -CommandType Application -ErrorAction SilentlyContinue) { return 'hunk diff --watch' }
     'while ($true) { Clear-Host; git --no-pager diff --stat; git --no-pager diff | Select-Object -First 400; Start-Sleep 2 }'
 }
 
