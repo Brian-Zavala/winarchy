@@ -34,7 +34,10 @@ Describe 'Game ignore rules' {
 
 Describe 'Add-ConfigGame (Super+Ctrl+G / winarchy game-add)' {
     BeforeAll { Mock Log {} }
-    BeforeEach { $ConfigFile = Join-Path $TestDrive ([guid]::NewGuid()) }
+    BeforeEach {
+        $ConfigFile = Join-Path $TestDrive ([guid]::NewGuid())
+        $Generated = Join-Path $TestDrive ([guid]::NewGuid())
+    }
     It 'adds a game to a config.json that does not exist yet' {
         Add-ConfigGame 'Townfall-Win64-Shipping.exe'
         (Read-Json $ConfigFile -AsHashtable).games | Should -Be @('Townfall-Win64-Shipping')
@@ -50,5 +53,44 @@ Describe 'Add-ConfigGame (Super+Ctrl+G / winarchy game-add)' {
     It 'does nothing with an empty name' {
         Add-ConfigGame ''
         Test-Path $ConfigFile | Should -BeFalse
+    }
+    It 'stamps its own write, so winarchy.ahk does not re-apply everything over the game' {
+        Add-ConfigGame 'Game'
+        Test-Path (Join-Path $Generated 'config.selfwrite') | Should -BeTrue
+    }
+    It 'refuses to touch a config.json with a JSON error, and says where' {
+        Set-Content $ConfigFile '{ "gameDirs": ["C:\Games"], "gap": 4 }'
+        { Add-ConfigGame 'Game' } | Should -Throw '*not valid JSON*'
+        Get-Content -Raw $ConfigFile | Should -BeLike '*"C:\Games"*'
+    }
+}
+
+Describe 'config.json with a JSON error' {
+    BeforeAll { Mock Log {}; Mock Write-Warning {} }
+    BeforeEach {
+        $ConfigFile = Join-Path $TestDrive ([guid]::NewGuid())
+        $Generated = Join-Path $TestDrive ([guid]::NewGuid())
+        Set-Content $ConfigFile '{ "gap": 4, }x'
+    }
+    It 'is read as the defaults, with a warning' {
+        (Get-Config).gap | Should -Not -Be 4
+        Should -Invoke Write-Warning -Times 1
+    }
+    It 'is never overwritten' {
+        { Set-ConfigValue 'animations.enabled' $true } | Should -Throw
+        Get-Content -Raw $ConfigFile | Should -Match '"gap": 4, }x'
+    }
+}
+
+Describe 'Set-ConfigValue' {
+    BeforeEach {
+        $ConfigFile = Join-Path $TestDrive ([guid]::NewGuid())
+        $Generated = Join-Path $TestDrive ([guid]::NewGuid())
+    }
+    It 'writes a top-level key as itself, not nested in its own name' {
+        Set-ConfigValue 'gap' 6
+        $c = Read-Json $ConfigFile -AsHashtable
+        $c.gap | Should -Be 6
+        $c.Keys | Should -Be @('gap')
     }
 }

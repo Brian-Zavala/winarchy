@@ -154,12 +154,11 @@ function Get-GameProcesses($cfg, [string[]]$exePaths) {
 function Add-ConfigGame([string]$name) {
     $name = ($name -replace '(?i)\.exe$', '').Trim()
     if (-not $name) { return }
-    $user = Read-Json $ConfigFile -AsHashtable
-    if (-not $user) { $user = @{} }
-    $games = @(@($user.games) | Where-Object { $_ })
+    $games = @(@((Read-UserConfig).games) | Where-Object { $_ })
     if ($games -contains $name) { return }
-    $user.games = $games + $name
-    Write-Json $ConfigFile $user
+    # Through Set-ConfigValue for its selfwrite stamp: without it winarchy.ahk would see
+    # config.json change and run a full apply, restarting the bar over the game.
+    Set-ConfigValue 'games' ($games + $name)
     Log "games: added '$name' to config.json"
 }
 

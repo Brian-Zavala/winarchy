@@ -101,13 +101,7 @@ function Switch-GlazeWM($p) {
 }
 
 function Set-Animations([bool]$on) {
-    $user = Read-Json $ConfigFile -AsHashtable
-    if (-not $user) { $user = [ordered]@{} }
-    if (-not $user.animations) { $user.animations = @{} }
-    $user.animations.enabled = $on
-    Write-Json $ConfigFile $user 8
-    # winarchy.ahk re-applies config.json when it is saved; this change applies itself.
-    Write-Utf8 (Join-Path $Generated 'config.selfwrite') (Get-Item $ConfigFile).LastWriteTime.ToString('yyyyMMddHHmmss')
+    Set-ConfigValue 'animations.enabled' $on
 }
 
 function Invoke-Animations([string]$action) {

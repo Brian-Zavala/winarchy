@@ -63,9 +63,22 @@ function Merge-Hashtable($base, $over) {
     }
     $out
 }
+# The user's config.json as a hashtable, $null when there is none. A file that does not
+# parse throws, saying where: Read-Json would return $null, and the next write would
+# then replace every setting in it with this one change.
+function Read-UserConfig {
+    if (-not (Test-Path -LiteralPath $ConfigFile)) { return $null }
+    $text = Get-Content -Raw -LiteralPath $ConfigFile
+    if (-not "$text".Trim()) { return $null }
+    try { $text | ConvertFrom-Json -AsHashtable }
+    catch { throw "$ConfigFile is not valid JSON, so it was left alone: $(($_.Exception.Message -split "`n")[0]). Fix it (a \ in a path is written \\), then run winarchy apply." }
+}
+
 function Get-Config {
     $def = Read-Json (Join-Path $Code 'default\config.json') -AsHashtable
-    $user = Read-Json $ConfigFile -AsHashtable
+    # Reading goes on with the defaults so the bar and keys keep working; doctor and
+    # every write say what is wrong with the file.
+    $user = try { Read-UserConfig } catch { Log $_.Exception.Message; Write-Warning $_.Exception.Message; $null }
     $cfg = if ($user) { Merge-Hashtable $def $user } else { $def }
     $cfg.Remove('_help')
     $cfg
@@ -75,11 +88,11 @@ function Get-Config {
 # every other key they have. winarchy.ahk re-applies config.json when it is saved, so the
 # selfwrite stamp tells it this change is already being applied by whoever called this.
 function Set-ConfigValue([string]$path, $value) {
-    $user = Read-Json $ConfigFile -AsHashtable
+    $user = Read-UserConfig
     if (-not $user) { $user = [ordered]@{} }
     $parts = @($path -split '\.')
     $node = $user
-    foreach ($part in $parts[0..($parts.Count - 2)]) {
+    foreach ($part in @($parts | Select-Object -SkipLast 1)) {
         if ($node[$part] -isnot [hashtable] -and $node[$part] -isnot [System.Collections.Specialized.OrderedDictionary]) { $node[$part] = @{} }
         $node = $node[$part]
     }

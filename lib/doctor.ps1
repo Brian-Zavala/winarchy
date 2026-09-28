@@ -10,6 +10,8 @@ function Invoke-Doctor([switch]$Fix) {
         else { $script:DoctorProblems++; Write-Host "  FAIL  $name" -ForegroundColor Red; if ($hint) { Write-Host "        -> $hint" -ForegroundColor Yellow } }
     }
     Write-Host 'winarchy doctor' -ForegroundColor Cyan
+    $cfgError = try { [void](Read-UserConfig); $null } catch { $_.Exception.Message }
+    if ($cfgError) { Write-Host "`nConfig"; & $check 'config.json parses' $false $cfgError }
 
     Write-Host "`nApps"
     & $check "Windows 11 (build $($p.build))" ($p.build -ge 22000) 'Windows 11 is required.'

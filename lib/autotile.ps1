@@ -5,13 +5,7 @@
 # requests) -- see lib/autotile-watch.ps1 for the algorithm and its known limits.
 
 function Set-AutoTile([bool]$on) {
-    $user = Read-Json $ConfigFile -AsHashtable
-    if (-not $user) { $user = [ordered]@{} }
-    if (-not $user.autoTiling) { $user.autoTiling = @{} }
-    $user.autoTiling.enabled = $on
-    Write-Json $ConfigFile $user 8
-    # winarchy.ahk re-applies config.json when it is saved; this change applies itself.
-    Write-Utf8 (Join-Path $Generated 'config.selfwrite') (Get-Item $ConfigFile).LastWriteTime.ToString('yyyyMMddHHmmss')
+    Set-ConfigValue 'autoTiling.enabled' $on
 }
 
 function Invoke-AutoTile([string]$action) {
