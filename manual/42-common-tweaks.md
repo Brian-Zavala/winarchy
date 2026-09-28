@@ -14,7 +14,7 @@ On laptop displays, some people prefer not to waste any pixels on window gaps (o
 
 ### Rounded window corners
 
-Winarchy's default design is one of square corners, like Omarchy's. To soften that up a bit, copy GlazeWM's template with _Setup > GlazeWM_ in the Omarchy menu, and change both `style: 'square'` lines under `corner_style` to `style: 'rounded'`. Saving the file reloads GlazeWM.
+Winarchy's default design is one of square corners, like Omarchy's. To soften that up a bit, copy GlazeWM's template with _Setup > Config > GlazeWM_ in the Omarchy menu, and change both `style: 'square'` lines under `corner_style` to `style: 'rounded'`. Saving the file reloads GlazeWM.
 
 ### Keep the Windows taskbar
 
@@ -54,4 +54,4 @@ Every app Winarchy themes can be left alone on its own, for example VS Code:
 
 ### Change the bar's look
 
-Put your CSS in `%USERPROFILE%\.glzr\zebar\omarchy\user.css` (_Style > Top Bar_ opens it). It's loaded after Winarchy's own and never overwritten, and the bar picks it up as soon as you save.
+Put your CSS in `%USERPROFILE%\.glzr\zebar\omarchy\user.css` (_Style > Menu Bar_ opens it). It's loaded after Winarchy's own and never overwritten, and the bar picks it up as soon as you save.

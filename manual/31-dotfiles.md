@@ -1,6 +1,6 @@
 # Dotfiles
 
-Winarchy keeps your settings in one file, `%USERPROFILE%\.winarchy\config.json`, and it only needs the keys you want to change. Everything else comes from [`default/config.json`](../default/config.json). `winarchy config` opens it, as does _Setup > Settings_ in the Omarchy menu.
+Winarchy keeps your settings in one file, `%USERPROFILE%\.winarchy\config.json`, and it only needs the keys you want to change. Everything else comes from [`default/config.json`](../default/config.json). `winarchy config` opens it, as does _Setup > Config > Settings_ in the Omarchy menu.
 
 Like Hyprland, a saved edit takes effect by itself: `config.json` is applied again the moment you save it. From a terminal, `winarchy apply` does the same.
 
@@ -92,11 +92,11 @@ It's JSON, so a `\` in a path is written `\\`. A file with a mistake in it is le
 
 ### GlazeWM
 
-_Setup > GlazeWM_ in the Omarchy menu creates `%USERPROFILE%\.winarchy\glazewm.yaml.tpl`, a copy of [the default template](../templates/glazewm.yaml.tpl). Saving it rewrites GlazeWM's config and reloads GlazeWM. It uses these placeholders: `{{ gap }}`, `{{ gap_top }}`, `{{ focused_border }}`, `{{ workspaces }}`, `{{ animations }}`, `{{ games }}` and `{{ autotile_startup }}`. Delete the file to go back to the default.
+_Setup > Config > GlazeWM_ in the Omarchy menu creates `%USERPROFILE%\.winarchy\glazewm.yaml.tpl`, a copy of [the default template](../templates/glazewm.yaml.tpl). Saving it rewrites GlazeWM's config and reloads GlazeWM. It uses these placeholders: `{{ gap }}`, `{{ gap_top }}`, `{{ focused_border }}`, `{{ workspaces }}`, `{{ animations }}`, `{{ games }}` and `{{ autotile_startup }}`. Delete the file to go back to the default.
 
 ### Herdr
 
-_Setup > Herdr Config_ creates `%USERPROFILE%\.winarchy\herdr.toml.tpl`, a copy of [the default template](../templates/herdr.toml.tpl). Saving it rewrites `%APPDATA%\herdr\config.toml` and reloads a running Herdr. It uses these placeholders: `{{ herdr_theme }}`, `{{ herdr_theme_custom }}`, `{{ herdr_accent }}` and `{{ herdr_shell }}`. Delete the file to go back to the default.
+_Setup > Config > Herdr_ creates `%USERPROFILE%\.winarchy\herdr.toml.tpl`, a copy of [the default template](../templates/herdr.toml.tpl). Saving it rewrites `%APPDATA%\herdr\config.toml` and reloads a running Herdr. It uses these placeholders: `{{ herdr_theme }}`, `{{ herdr_theme_custom }}`, `{{ herdr_accent }}` and `{{ herdr_shell }}`. Delete the file to go back to the default.
 
 The default keeps Omarchy's tmux-shaped bindings (prefix `Ctrl + Space`) and points Herdr's panes at PowerShell 7, which `winarchy` and the `hdl`, `hds`, `hdlm` and `hsl` shortcuts need. `winarchy herdr status` says where everything is.
 
@@ -110,7 +110,7 @@ _Setup > Keybindings_ opens your launcher script: your own `Startup\launchers.ah
 
 ### The bar and menu
 
-Put your CSS in `%USERPROFILE%\.glzr\zebar\omarchy\user.css`. It's loaded last and never overwritten, and the bar picks it up as soon as you save. _Style > Top Bar_ opens it.
+Put your CSS in `%USERPROFILE%\.glzr\zebar\omarchy\user.css`. It's loaded last and never overwritten, and the bar picks it up as soon as you save. _Style > Menu Bar_ opens it.
 
 ### Screensaver and About
 
