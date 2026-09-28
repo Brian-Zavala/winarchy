@@ -5,6 +5,11 @@ function Find-First([string[]]$candidates) {
     foreach ($c in $candidates) { if ($c -and (Test-Path -LiteralPath $c)) { return (Resolve-Path -LiteralPath $c).Path } }
     $null
 }
+# Split-Path throws on $null/'' even with -ErrorAction, so anything not found goes through here.
+function Get-ParentDir([string]$path) {
+    if ($path) { Split-Path $path }
+}
+
 function Find-Program([string]$name) {
     $c = Get-Command $name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($c) { $c.Source }
@@ -137,7 +142,7 @@ function Update-Paths {
     $flowSettings = Join-Path $env:APPDATA 'FlowLauncher\Settings\Settings.json'
     $flowHotkey = (Read-Json $flowSettings).Hotkey
     $nvimConfig = Join-Path $env:LOCALAPPDATA 'nvim'
-    $glazeDir = Find-First @((Join-Path $env:ProgramFiles 'glzr.io\GlazeWM'), (Split-Path (Find-Program glazewm) -ErrorAction SilentlyContinue))
+    $glazeDir = Find-First @((Join-Path $env:ProgramFiles 'glzr.io\GlazeWM'), (Get-ParentDir (Find-Program glazewm)))
     $culture = Get-Culture
     $browser = Find-Browser
     $p = [ordered]@{
@@ -148,8 +153,8 @@ function Update-Paths {
         ahk            = Find-AutoHotkey
         pwsh           = Find-Pwsh
         powershell     = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-        glazewmOfficial    = Find-First @((Join-Path "$glazeDir" 'glazewm.exe'))
-        glazewmCliOfficial = Find-First @((Join-Path "$glazeDir" 'cli\glazewm.exe'), (Join-Path "$glazeDir" 'glazewm.exe'))
+        glazewmOfficial    = if ($glazeDir) { Find-First @((Join-Path $glazeDir 'glazewm.exe')) }
+        glazewmCliOfficial = if ($glazeDir) { Find-First @((Join-Path $glazeDir 'cli\glazewm.exe'), (Join-Path $glazeDir 'glazewm.exe')) }
         zebar          = Find-First @((Join-Path $env:ProgramFiles 'glzr.io\Zebar\zebar.exe'), (Find-Program zebar))
         flow           = Find-First @((Join-Path $flowDir 'Flow.Launcher.exe'))
         flowSettings   = $flowSettings
@@ -162,9 +167,9 @@ function Update-Paths {
         nvimOmarchy    = (Test-Path (Join-Path $nvimConfig 'lua\plugins\theme.lua'))
         vscode        = Find-Program code
         vscodeSettings = Join-Path $env:APPDATA 'Code\User\settings.json'
-        btopDir        = Split-Path (Find-First @(
+        btopDir        = Get-ParentDir (Find-First @(
                             (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\aristocratos.btop4win_*\btop4win\btop4win.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName,
-                            (Find-Program btop4win.exe))) -ErrorAction SilentlyContinue
+                            (Find-Program btop4win.exe)))
         fastfetch      = Find-Program fastfetch.exe
         # Herdr installs itself outside winget, at a stable alias path plus the PATH entry
         # its own installer adds (which a shell started before the install won't have).
