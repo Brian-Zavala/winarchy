@@ -156,6 +156,7 @@ Describe 'Uninstall keeps what changed since install' {
         $script:home_ = Join-Path $TestDrive ([guid]::NewGuid())
         New-Item -ItemType Directory $script:home_ | Out-Null
         function Undo { foreach ($e in (Read-Journal).entries) { Restore-JournalEntry $e $script:JournalDir } }
+        Mock Log {}
     }
     It 'takes only the Herdr block out of the PowerShell profile' {
         $f = Join-Path $script:home_ 'profile.ps1'
