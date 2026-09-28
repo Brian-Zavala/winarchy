@@ -1853,6 +1853,14 @@ if BlockMinimize {
 ; Super + left drag: move the window from anywhere inside it.
 ; The window follows the mouse; on release drop.ps1 re-tiles a tiled window
 ; where it was dropped (Hyprland-style), or re-homes it on the other monitor.
+;
+; This hands the actual move to Windows' own SC_MOVE (the same modal loop a real
+; titlebar drag uses) instead of polling WinMove in a loop. WinMove-per-tick doesn't
+; know about per-monitor DPI: dragging across two monitors with different scaling made
+; the window appear stuck at the source monitor's edge (Windows clipping/virtualizing
+; its rect against the wrong DPI) and then snap to fill the whole destination monitor
+; once it crossed over. SC_MOVE is DPI-aware frame by frame, so the window tracks the
+; cursor smoothly across the boundary with no clipping or resize surprise.
 #LButton::
 {
     PerMonitorDpi()
@@ -1862,15 +1870,14 @@ if BlockMinimize {
     info := GlazeWindowInfo(hwnd)
     if info && info.state != "tiling" && info.state != "floating"
         return  ; fullscreen / minimized
-    CoordMode "Mouse", "Screen"
-    MouseGetPos &sx, &sy
-    WinGetPos &wx, &wy, , , hwnd
     WinActivate hwnd
-    while GetKeyState("LButton", "P") {
-        MouseGetPos &x, &y
-        WinMove wx + x - sx, wy + y - sy, , , hwnd
-        Sleep 10
-    }
+    ; SC_MOVE (0xF012) starts Windows' native interactive move loop, tracking the
+    ; still-held physical LButton; KeyWait blocks here until it's released and the loop ends.
+    PostMessage 0x0112, 0xF012, , , hwnd   ; WM_SYSCOMMAND, SC_MOVE
+    ; "P": #LButton suppresses the button-down message, so the logical (message-based)
+    ; state never registers "down" - without P this would return immediately.
+    KeyWait "LButton", "P"
+    CoordMode "Mouse", "Screen"
     MouseGetPos &x, &y
     if info
         Run('"' Env("pwsh", "pwsh.exe") '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "' Env("code") '\lib\drop.ps1" -Id ' info.id ' -X ' x ' -Y ' y ' -Cli "' GlazeCli '"', , "Hide")
