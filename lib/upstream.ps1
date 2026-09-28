@@ -123,7 +123,8 @@ function Invoke-UpstreamCheck([string]$Since, [switch]$Json, [switch]$Write) {
         $readme = Join-Path $Code 'README.md'
         if (Test-Path $readme) {
             $t = Get-Content -Raw $readme
-            $n = $t -replace 'Tracks Omarchy v[\d.]+', "Tracks Omarchy $release"
+            # Digits and inner dots only: the sentence's own full stop stays.
+            $n = $t -replace 'Tracks Omarchy v\d+(\.\d+)*', "Tracks Omarchy $release"
             if ($n -ne $t) { Write-Utf8 $readme $n }
         }
     }

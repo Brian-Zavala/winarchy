@@ -2,7 +2,17 @@
 
 # Winarchy
 
-Winarchy is [Omarchy](https://omarchy.org)'s look, keys and themes on Windows 11: tiling windows, the Omarchy top bar and menu, its twenty-two themes, Herdr and the AI coding-agent workflow, installed in one command and undone in one command. Unofficial, and not affiliated with Omarchy or 37signals. Tracks Omarchy v4.0.4.
+Most people never choose their desktop. They take whatever Microsoft ships, pile a few tweaks on top, and call it a setup. That's a shame, because the computer you stare at all day should be a joy to use, not a compromise you've learned to tolerate.
+
+[Omarchy](https://omarchy.org) showed what happens when somebody makes all the choices for you and makes them well. It's beautiful and fast, and it's opinionated in the best sense: tiling windows, keyboard first, themes that actually look good. But it's Linux, and plenty of us are stuck on Windows for work, for games, or for software that simply won't leave.
+
+So Winarchy brings the good parts over. It's Omarchy's look, its keys and its flow, on Windows 11. Windows tile themselves the way they do in Hyprland. The top bar and the menu are Omarchy's. All twenty-two themes come with it, and switching between them repaints the whole desktop, from the terminal to the editor to the wallpaper. Herdr and the AI coding-agent workflow come too, so you can hand work to an agent and keep your hands on the keyboard.
+
+This is omakase. You don't assemble it from forty plugins and a weekend of YAML. One command installs the lot. If it isn't for you, one command takes it all back out and puts your machine back the way it was.
+
+It won't make Windows into Linux, and it doesn't pretend to. It just makes the time you spend on Windows a lot more pleasant.
+
+*Unofficial, and not affiliated with Omarchy or 37signals. Tracks Omarchy v4.0.4.*
 
 Open PowerShell (not as administrator) and run:
 
