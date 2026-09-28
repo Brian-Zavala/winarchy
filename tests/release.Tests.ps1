@@ -11,7 +11,10 @@ BeforeAll {
 Describe 'Get-NextVersion' {
     It 'bumps the patch by default' { Get-NextVersion '0.1.9' @('Fix a thing') | Should -Be '0.1.10' }
     It 'bumps the minor for [minor]' { Get-NextVersion '0.1.9' @('Fix', "New menu`n`n[minor]") | Should -Be '0.2.0' }
-    It 'bumps the major for [major], over [minor]' { Get-NextVersion '0.4.2' @('[minor] a', '[major] b') | Should -Be '1.0.0' }
+    It 'bumps the major for [major], over [minor]' { Get-NextVersion '0.4.2' @("a`n`n[minor]", "b`n`n[major]") | Should -Be '1.0.0' }
+    It 'ignores a message that only mentions [major] in a sentence' {
+        Get-NextVersion '0.1.0' @('Bumps the minor/major when a commit says [minor]/[major]') | Should -Be '0.1.1'
+    }
     It 'reads a v prefix and a trailing newline' { Get-NextVersion "v1.2.3`n" @() | Should -Be '1.2.4' }
     It 'refuses something that is not a version' { { Get-NextVersion 'abc' @() } | Should -Throw }
 }
@@ -52,7 +55,7 @@ Describe 'The release script' {
         Set-Content "$repo\default\upstream.json" '{ "release": "v4.0.4" }'
         Set-Content "$repo\CHANGELOG.md" "# Changelog`n`n## Unreleased`n`n- Something new`n"
         git -C $repo init -q -b main; git -C $repo -c user.name=t -c user.email=t@t commit -q --allow-empty -m first
-        git -C $repo -c user.name=t -c user.email=t@t commit -q --allow-empty -m "Add a feature [minor]"
+        git -C $repo -c user.name=t -c user.email=t@t commit -q --allow-empty -m "Add a feature" -m "[minor]"
         $out = Join-Path $TestDrive 'out.txt'
         $env:GITHUB_OUTPUT = $out
         try { pwsh -NoProfile -File "$repo\.github\scripts\release.ps1" -Before (git -C $repo rev-parse HEAD~1) -After HEAD | Out-Null }
@@ -60,7 +63,8 @@ Describe 'The release script' {
         (Get-Content -Raw "$repo\version").Trim() | Should -Be '0.2.0'
         $o = Get-Content $out
         $o | Should -Contain 'version=0.2.0'
-        $o | Should -Contain 'file=version'
+        # The name git tracks, not the one Windows would also answer to.
+        $o | Should -Contain 'file=VERSION'
         ($o | Where-Object { $_ -like 'description=*' }) | Should -BeLike '*v0.2.0 · tracks Omarchy v4.0.4'
         Get-Content -Raw (($o | Where-Object { $_ -like 'notes=*' }) -replace '^notes=') | Should -Match 'Something new'
         Get-Content -Raw "$repo\CHANGELOG.md" | Should -Match '## 0\.2\.0 — \d{4}-\d\d-\d\d'

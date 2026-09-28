@@ -1,22 +1,22 @@
 # Versioning: every push to main is a release (the `version` job in .github/workflows/ci.yml).
 # The version is semver in the `version` file; a push bumps the patch, or the minor/major
-# when one of its commit messages says [minor] / [major]. The CHANGELOG's Unreleased
+# when one of its commit messages has [minor] / [major] on a line of its own. The CHANGELOG's Unreleased
 # section, when it has entries, becomes that version's section and its release notes.
 
+# The file under its real name: Windows would answer to 'version' for a file git tracks as
+# 'VERSION', and `git add version` would then stage a second file.
 function Get-VersionFile {
-    foreach ($name in 'version', 'VERSION') {
-        $f = Join-Path $Code $name
-        if (Test-Path -LiteralPath $f) { return $f }
-    }
-    Join-Path $Code 'version'
+    $f = Get-ChildItem -LiteralPath $Code -File | Where-Object { $_.Name -in 'version', 'VERSION' } | Select-Object -First 1
+    if ($f) { $f.FullName } else { Join-Path $Code 'version' }
 }
 
 function Get-NextVersion([string]$current, [string[]]$messages) {
     if ($current.Trim() -notmatch '^v?(\d+)\.(\d+)\.(\d+)$') { throw "not a version: '$current'" }
     $major, $minor, $patch = [int]$Matches[1], [int]$Matches[2], [int]$Matches[3]
     $all = $messages -join "`n"
-    if ($all -match '\[major\]') { return "$($major + 1).0.0" }
-    if ($all -match '\[minor\]') { return "$major.$($minor + 1).0" }
+    # On a line of its own, so a message that merely mentions [major] doesn't count.
+    if ($all -match '(?m)^\s*\[major\]\s*$') { return "$($major + 1).0.0" }
+    if ($all -match '(?m)^\s*\[minor\]\s*$') { return "$major.$($minor + 1).0" }
     "$major.$minor.$($patch + 1)"
 }
 
