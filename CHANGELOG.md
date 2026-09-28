@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.1 — 2026-09-28
+
 - `winarchy uninstall` asks two questions before it changes anything: keep the apps you installed through Winarchy (the menu's Install section and Herdr: keep all, remove all, or choose each), and keep your settings (config.json, theme, background, font, your own templates and branding). Kept settings are applied again automatically the next time you install, and the questions you already answered aren't asked again; a reinstall also keeps your last theme instead of switching to Tokyo Night. `-Yes` keeps both without asking. What Winarchy runs on (GlazeWM, Flow Launcher, AutoHotkey, ...) is still removed unless `-KeepApps`.
 - Screenshot auto-copy (`screenshotAutoCopy`) is now on by default: every new file in your Screenshots folder goes to the clipboard as an image, whatever made it, so a screenshot pastes straight into Claude Code and other terminal apps. Set it to `false` to turn it off.
 
