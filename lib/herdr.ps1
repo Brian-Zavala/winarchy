@@ -86,6 +86,8 @@ function Get-HerdrTheme([string]$theme) {
     $pick = $cfg.themeTargets.herdr
     # A theme name in config.json pins Herdr to it; true/"auto" matches on the name.
     if ($pick -is [string] -and $pick -notin @('auto', 'true', 'false')) { return $pick }
+    # false: Herdr does not follow the theme, and keeps its plain terminal palette.
+    if ($pick -eq $false -or $pick -eq 'false') { return 'terminal' }
     if ($theme -and $HerdrThemes -contains $theme) { return $theme }
     'terminal'
 }

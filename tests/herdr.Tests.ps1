@@ -303,3 +303,14 @@ Describe 'Menu wiring' {
         Get-Content -Raw (Join-Path $Code 'ahk\winarchy.ahk') | Should -Match 'herdr\.toml\.tpl", "apply-herdr"'
     }
 }
+
+Describe 'themeTargets.herdr' {
+    It 'false keeps Herdr on its plain terminal palette, even for a theme Herdr has' {
+        Mock Get-Config { @{ themeTargets = @{ herdr = $false } } }
+        Get-HerdrTheme 'tokyo-night' | Should -Be 'terminal'
+    }
+    It 'auto follows a theme Herdr has' {
+        Mock Get-Config { @{ themeTargets = @{ herdr = 'auto' } } }
+        Get-HerdrTheme 'tokyo-night' | Should -Be 'tokyo-night'
+    }
+}
