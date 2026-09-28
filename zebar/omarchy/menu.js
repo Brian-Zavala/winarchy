@@ -42,6 +42,8 @@ let apps = null;     // apps.json: what Windows lists in Start (apps route)
 let catalog = null;  // catalog.json: what winarchy can install, and what is already there
 let herdrKeys = null;// parsed herdr-keys.txt (Learn > Herdr)
 let defaults = null; // defaults.json: the coding agents, and which one is the default
+let flags = null;    // menu-flags.json: what this PC has, for rows with a "when" (Omarchy's
+                     // `when` conditions: Hibernate, the laptop display and touchpad)
 
 const stack = [];
 let route = null;
@@ -93,7 +95,7 @@ function reset() {
   items = [];
   sel = tab = 0;
   groups = [];
-  index = status = keys = fonts = herdrKeys = defaults = null;
+  index = status = keys = fonts = herdrKeys = defaults = flags = null;
   $('search').value = '';
   palette(null);
   $('card').className = '';
@@ -243,6 +245,7 @@ $('scrim').onclick = () => busy || close();
 
 // ---------------------------------------------------------------- routes
 async function load(name) {
+  if (!flags) flags = (await get('menu-flags.json')) ?? {};
   if (name === 'background' || name === 'theme') {
     [index, status] = await Promise.all([get('index.json'), get('status.json')]);
   } else if (name === 'keys' && !keys) {
@@ -395,7 +398,7 @@ function currentItems() {
     }));
   }
   const m = menus?.[route];
-  return (m?.items ?? []).filter(i => matches(i.label, q));
+  return (m?.items ?? []).filter(i => (!i.when || flags?.[i.when]) && matches(i.label, q));
 }
 
 // ---------------------------------------------------------------- rendering
@@ -459,7 +462,10 @@ function renderList(entry) {
       const label = span('label', it.label);
       // Font picker: each font previews itself (quoted; Nerd Font icons keep their glyphs).
       if (it.font) label.style.fontFamily = `"${it.font.replace(/["\\]/g, '\\$&')}", var(--font), monospace`;
-      row.append(span('icon', it.icon ?? ''), label);
+      const icon = span('icon', it.icon ?? '');
+      // A glyph from Omarchy's own font (its logo), as Omarchy's menu marks with iconFont.
+      if (it.iconFont) icon.style.fontFamily = `'${it.iconFont}'`;
+      row.append(icon, label);
       if (it.route) row.append(span('hint', '\uf105'));
       else if (it.current) row.append(span('hint', '\uf00c'));
     }

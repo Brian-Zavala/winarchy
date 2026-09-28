@@ -4,27 +4,27 @@
     "items": [
       {
         "label": "Apps",
-        "icon": "",
+        "icon": "󰀻",
         "route": "apps"
       },
       {
         "label": "Learn",
-        "icon": "",
+        "icon": "󰧑",
         "route": "learn"
       },
       {
         "label": "Trigger",
-        "icon": "",
+        "icon": "󱓞",
         "route": "trigger"
       },
       {
         "label": "Style",
-        "icon": "",
+        "icon": "",
         "route": "style"
       },
       {
         "label": "Setup",
-        "icon": "",
+        "icon": "",
         "route": "setup"
       },
       {
@@ -44,7 +44,7 @@
       },
       {
         "label": "About",
-        "icon": "",
+        "icon": "",
         "action": [
           "about"
         ]
@@ -65,13 +65,17 @@
         "route": "keys"
       },
       {
-        "label": "Herdr keys",
-        "icon": "",
-        "route": "herdr-keys"
+        "label": "Winarchy",
+        "icon": "",
+        "action": [
+          "url",
+          "https://github.com/Brian-Zavala/winarchy/tree/main/manual"
+        ],
+        "iconFont": "omarchy"
       },
       {
         "label": "Omarchy",
-        "icon": "",
+        "icon": "",
         "action": [
           "url",
           "https://omarchy.org/manual/"
@@ -79,23 +83,15 @@
       },
       {
         "label": "GlazeWM",
-        "icon": "",
+        "icon": "",
         "action": [
           "url",
           "https://github.com/glzr-io/glazewm#readme"
         ]
       },
       {
-        "label": "Zebar",
-        "icon": "",
-        "action": [
-          "url",
-          "https://github.com/glzr-io/zebar#readme"
-        ]
-      },
-      {
         "label": "Neovim",
-        "icon": "",
+        "icon": "",
         "action": [
           "url",
           "https://www.lazyvim.org/keymaps"
@@ -103,10 +99,23 @@
       },
       {
         "label": "PowerShell",
-        "icon": "",
+        "icon": "",
         "action": [
           "url",
           "https://learn.microsoft.com/powershell/"
+        ]
+      },
+      {
+        "label": "Herdr",
+        "icon": "",
+        "route": "herdr-keys"
+      },
+      {
+        "label": "Community",
+        "icon": "󰙯",
+        "action": [
+          "url",
+          "https://github.com/Brian-Zavala/winarchy/issues"
         ]
       }
     ]
@@ -114,11 +123,6 @@
   "trigger": {
     "title": "Trigger",
     "items": [
-      {
-        "label": "Capture",
-        "icon": "",
-        "route": "capture"
-      },
       {
         "label": "Emoji",
         "icon": "",
@@ -128,9 +132,41 @@
         ]
       },
       {
+        "label": "Capture",
+        "icon": "",
+        "route": "capture"
+      },
+      {
         "label": "Toggle",
-        "icon": "",
+        "icon": "󰔎",
         "route": "toggle"
+      },
+      {
+        "label": "Hardware",
+        "icon": "",
+        "route": "hardware"
+      },
+      {
+        "label": "Agent",
+        "icon": "󰚩",
+        "action": [
+          "agent"
+        ]
+      },
+      {
+        "label": "Herdr",
+        "icon": "",
+        "action": [
+          "herdr"
+        ]
+      },
+      {
+        "label": "Clipboard",
+        "icon": "",
+        "action": [
+          "send",
+          "#v"
+        ]
       },
       {
         "label": "Calculator",
@@ -148,33 +184,11 @@
         ]
       },
       {
-        "label": "Agent",
-        "icon": "󰚩",
-        "action": [
-          "agent"
-        ]
-      },
-      {
-        "label": "Herdr",
-        "icon": "",
-        "action": [
-          "herdr"
-        ]
-      },
-      {
         "label": "Task Manager",
         "icon": "",
         "action": [
           "run",
           "taskmgr.exe"
-        ]
-      },
-      {
-        "label": "Clipboard",
-        "icon": "",
-        "action": [
-          "send",
-          "#v"
         ]
       },
       {
@@ -208,7 +222,7 @@
       },
       {
         "label": "Text",
-        "icon": "",
+        "icon": "󰴑",
         "action": [
           "wm",
           "ocr"
@@ -216,7 +230,7 @@
       },
       {
         "label": "Color",
-        "icon": "",
+        "icon": "󰃉",
         "action": [
           "wm",
           "colorpicker"
@@ -229,15 +243,23 @@
     "items": [
       {
         "label": "Stay Awake",
-        "icon": "",
+        "icon": "󰅶",
         "action": [
           "wm",
           "awake"
         ]
       },
       {
+        "label": "Notifications",
+        "icon": "󰂛",
+        "action": [
+          "wm",
+          "dnd"
+        ]
+      },
+      {
         "label": "Screensaver",
-        "icon": "",
+        "icon": "󱄄",
         "action": [
           "wm",
           "screensaver-toggle"
@@ -245,23 +267,15 @@
       },
       {
         "label": "Nightlight",
-        "icon": "",
+        "icon": "󰔎",
         "action": [
           "wm",
           "nightlight"
         ]
       },
       {
-        "label": "Do Not Disturb",
-        "icon": "",
-        "action": [
-          "wm",
-          "dnd"
-        ]
-      },
-      {
-        "label": "Top Bar",
-        "icon": "",
+        "label": "Menu Bar",
+        "icon": "󰍜",
         "action": [
           "wm",
           "bar"
@@ -269,34 +283,74 @@
       },
       {
         "label": "Window Gaps",
-        "icon": "",
+        "icon": "",
         "action": [
           "wm",
           "gaps"
         ]
       },
       {
-        "label": "Window Transparency",
-        "icon": "",
-        "action": [
-          "wm",
-          "transparency"
-        ]
-      },
-      {
-        "label": "Window Animations",
-        "icon": "󰗘",
+        "label": "Animations",
+        "icon": "󰕟",
         "action": [
           "animations",
           "toggle"
         ]
       },
       {
+        "label": "Window Transparency",
+        "icon": "󰂵",
+        "action": [
+          "wm",
+          "transparency"
+        ]
+      },
+      {
         "label": "Restore All Windows",
-        "icon": "",
+        "icon": "",
         "action": [
           "wm",
           "restore-all"
+        ]
+      }
+    ]
+  },
+  "hardware": {
+    "title": "Hardware",
+    "items": [
+      {
+        "label": "Laptop Display",
+        "icon": "󰛧",
+        "action": [
+          "display",
+          "laptop"
+        ],
+        "when": "laptop"
+      },
+      {
+        "label": "Mirror Display",
+        "icon": "󰍹",
+        "action": [
+          "display",
+          "mirror"
+        ],
+        "when": "laptop"
+      },
+      {
+        "label": "Touchpad",
+        "icon": "󰟸",
+        "action": [
+          "settings",
+          "ms-settings:devices-touchpad"
+        ],
+        "when": "laptop"
+      },
+      {
+        "label": "Displays",
+        "icon": "󰍹",
+        "action": [
+          "settings",
+          "ms-settings:display"
         ]
       }
     ]
@@ -306,13 +360,44 @@
     "items": [
       {
         "label": "Theme",
-        "icon": "",
+        "icon": "󰸌",
         "route": "theme"
       },
       {
         "label": "Background",
         "icon": "",
         "route": "background"
+      },
+      {
+        "label": "Font",
+        "icon": "",
+        "route": "font"
+      },
+      {
+        "label": "Menu Bar",
+        "icon": "󰍜",
+        "action": [
+          "edit",
+          "bar-css"
+        ]
+      },
+      {
+        "label": "GlazeWM",
+        "icon": "",
+        "action": [
+          "edit",
+          "glaze-config"
+        ]
+      },
+      {
+        "label": "Screensaver",
+        "icon": "󱄄",
+        "route": "style-screensaver"
+      },
+      {
+        "label": "About",
+        "icon": "",
+        "route": "style-about"
       },
       {
         "label": "Next Background",
@@ -322,41 +407,10 @@
         ]
       },
       {
-        "label": "Font",
-        "icon": "",
-        "route": "font"
-      },
-      {
-        "label": "Screensaver",
-        "icon": "",
-        "route": "style-screensaver"
-      },
-      {
-        "label": "About",
-        "icon": "",
-        "route": "style-about"
-      },
-      {
         "label": "Browser Toolbar",
         "icon": "",
         "action": [
           "browser-setup"
-        ]
-      },
-      {
-        "label": "Top Bar (your CSS)",
-        "icon": "",
-        "action": [
-          "edit",
-          "bar-css"
-        ]
-      },
-      {
-        "label": "GlazeWM",
-        "icon": "",
-        "action": [
-          "edit",
-          "glaze-config"
         ]
       }
     ]
@@ -364,14 +418,6 @@
   "style-screensaver": {
     "title": "Screensaver",
     "items": [
-      {
-        "label": "Preview",
-        "icon": "",
-        "action": [
-          "wm",
-          "screensaver"
-        ]
-      },
       {
         "label": "Edit Text",
         "icon": "",
@@ -382,9 +428,17 @@
       },
       {
         "label": "Restore Default",
-        "icon": "",
+        "icon": "",
         "action": [
           "branding-reset",
+          "screensaver"
+        ]
+      },
+      {
+        "label": "Preview",
+        "icon": "󱄄",
+        "action": [
+          "wm",
           "screensaver"
         ]
       }
@@ -393,13 +447,6 @@
   "style-about": {
     "title": "About",
     "items": [
-      {
-        "label": "Show",
-        "icon": "",
-        "action": [
-          "about"
-        ]
-      },
       {
         "label": "Edit Text",
         "icon": "",
@@ -410,9 +457,16 @@
       },
       {
         "label": "Restore Default",
-        "icon": "",
+        "icon": "",
         "action": [
           "branding-reset",
+          "about"
+        ]
+      },
+      {
+        "label": "Show",
+        "icon": "",
+        "action": [
           "about"
         ]
       }
@@ -484,15 +538,62 @@
     "items": [
       {
         "label": "Monitors",
-        "icon": "",
+        "icon": "󰍹",
         "action": [
           "settings",
           "ms-settings:display"
         ]
       },
       {
+        "label": "Keybindings",
+        "icon": "",
+        "action": [
+          "edit",
+          "keybindings"
+        ]
+      },
+      {
+        "label": "Input",
+        "icon": "",
+        "action": [
+          "settings",
+          "ms-settings:typing"
+        ]
+      },
+      {
+        "label": "Network",
+        "icon": "󰛳",
+        "action": [
+          "settings",
+          "ms-settings:network"
+        ]
+      },
+      {
+        "label": "Defaults",
+        "icon": "",
+        "route": "setup-default"
+      },
+      {
+        "label": "Config",
+        "icon": "",
+        "route": "setup-config"
+      },
+      {
+        "label": "Security",
+        "icon": "",
+        "route": "setup-security"
+      },
+      {
+        "label": "Reset Computer",
+        "icon": "󰑓",
+        "action": [
+          "settings",
+          "ms-settings:recovery"
+        ]
+      },
+      {
         "label": "Audio",
-        "icon": "",
+        "icon": "",
         "action": [
           "settings",
           "ms-settings:sound"
@@ -500,18 +601,10 @@
       },
       {
         "label": "Bluetooth",
-        "icon": "",
+        "icon": "󰂯",
         "action": [
           "settings",
           "ms-settings:bluetooth"
-        ]
-      },
-      {
-        "label": "Network",
-        "icon": "",
-        "action": [
-          "settings",
-          "ms-settings:network"
         ]
       },
       {
@@ -523,55 +616,86 @@
         ]
       },
       {
-        "label": "Input",
-        "icon": "",
+        "label": "Admin Games",
+        "icon": "󰊗",
         "action": [
-          "settings",
-          "ms-settings:typing"
+          "game-setup"
         ]
-      },
+      }
+    ]
+  },
+  "setup-default": {
+    "title": "Defaults",
+    "items": [
       {
-        "label": "Settings",
-        "icon": "",
-        "action": [
-          "edit",
-          "config"
-        ]
-      },
-      {
-        "label": "Keybindings",
-        "icon": "",
-        "action": [
-          "edit",
-          "keybindings"
-        ]
-      },
-      {
-        "label": "Default Agent",
+        "label": "Agent",
         "icon": "󰚩",
         "route": "agent"
       },
       {
-        "label": "Herdr Config",
-        "icon": "",
+        "label": "Browser",
+        "icon": "",
+        "action": [
+          "settings",
+          "ms-settings:defaultapps"
+        ]
+      },
+      {
+        "label": "Terminal",
+        "icon": "",
+        "action": [
+          "settings",
+          "ms-settings:developers"
+        ]
+      }
+    ]
+  },
+  "setup-config": {
+    "title": "Config",
+    "items": [
+      {
+        "label": "GlazeWM",
+        "icon": "",
+        "action": [
+          "edit",
+          "glaze-config"
+        ]
+      },
+      {
+        "label": "Herdr",
+        "icon": "",
         "action": [
           "edit",
           "herdr-config"
         ]
       },
       {
-        "label": "Admin Games",
-        "icon": "󰊗",
+        "label": "Settings",
+        "icon": "",
         "action": [
-          "game-setup"
+          "edit",
+          "config"
+        ]
+      }
+    ]
+  },
+  "setup-security": {
+    "title": "Security",
+    "items": [
+      {
+        "label": "Sign-in Options",
+        "icon": "",
+        "action": [
+          "settings",
+          "ms-settings:signinoptions"
         ]
       },
       {
-        "label": "GlazeWM",
-        "icon": "",
+        "label": "Windows Security",
+        "icon": "󰒃",
         "action": [
-          "edit",
-          "glaze-config"
+          "url",
+          "windowsdefender:"
         ]
       }
     ]
@@ -580,24 +704,59 @@
     "title": "Update",
     "items": [
       {
+        "label": "Winarchy",
+        "icon": "",
+        "action": [
+          "upgrade"
+        ],
+        "iconFont": "omarchy"
+      },
+      {
+        "label": "Config",
+        "icon": "",
+        "route": "update-config"
+      },
+      {
+        "label": "Themes & Backgrounds",
+        "icon": "󰸌",
+        "action": [
+          "sync"
+        ]
+      },
+      {
+        "label": "Process",
+        "icon": "",
+        "route": "update-process"
+      },
+      {
+        "label": "Firmware",
+        "icon": "",
+        "action": [
+          "settings",
+          "ms-settings:windowsupdate"
+        ]
+      },
+      {
+        "label": "Password",
+        "icon": "",
+        "action": [
+          "settings",
+          "ms-settings:signinoptions"
+        ]
+      },
+      {
+        "label": "Timezone",
+        "icon": "",
+        "action": [
+          "settings",
+          "ms-settings:dateandtime"
+        ]
+      },
+      {
         "label": "Check for Updates",
         "icon": "",
         "action": [
           "update-check"
-        ]
-      },
-      {
-        "label": "Update Winarchy & apps",
-        "icon": "",
-        "action": [
-          "upgrade"
-        ]
-      },
-      {
-        "label": "Themes & Backgrounds",
-        "icon": "",
-        "action": [
-          "sync"
         ]
       },
       {
@@ -613,13 +772,55 @@
         "action": [
           "doctor"
         ]
+      }
+    ]
+  },
+  "update-config": {
+    "title": "Config",
+    "items": [
+      {
+        "label": "GlazeWM",
+        "icon": "",
+        "action": [
+          "config-reset",
+          "glazewm"
+        ]
       },
       {
-        "label": "Reload GlazeWM",
-        "icon": "",
+        "label": "Herdr",
+        "icon": "",
         "action": [
-          "glaze",
-          "wm-reload-config"
+          "config-reset",
+          "herdr"
+        ]
+      }
+    ]
+  },
+  "update-process": {
+    "title": "Process",
+    "items": [
+      {
+        "label": "Menu Bar",
+        "icon": "󰍜",
+        "action": [
+          "restart",
+          "bar"
+        ]
+      },
+      {
+        "label": "GlazeWM",
+        "icon": "",
+        "action": [
+          "restart",
+          "glazewm"
+        ]
+      },
+      {
+        "label": "Herdr",
+        "icon": "",
+        "action": [
+          "restart",
+          "herdr"
         ]
       }
     ]
@@ -629,7 +830,7 @@
     "items": [
       {
         "label": "Screensaver",
-        "icon": "",
+        "icon": "󱄄",
         "action": [
           "wm",
           "screensaver"
@@ -644,28 +845,36 @@
       },
       {
         "label": "Suspend",
-        "icon": "",
+        "icon": "󰒲",
         "action": [
           "sleep"
         ]
       },
       {
+        "label": "Hibernate",
+        "icon": "󰤁",
+        "action": [
+          "hibernate"
+        ],
+        "when": "hibernate"
+      },
+      {
         "label": "Logout",
-        "icon": "",
+        "icon": "󰍃",
         "action": [
           "logout"
         ]
       },
       {
-        "label": "Restart",
-        "icon": "",
+        "label": "Reboot",
+        "icon": "󰜉",
         "action": [
-          "restart"
+          "reboot"
         ]
       },
       {
         "label": "Shutdown",
-        "icon": "",
+        "icon": "󰐥",
         "action": [
           "shutdown"
         ]

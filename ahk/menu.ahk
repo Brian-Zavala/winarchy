@@ -19,7 +19,8 @@ OnError ScriptLogError
 ;   menu.ahk apply-glaze | update-check | animations <toggle> | glaze <glazewm command>
 ;   menu.ahk wm <bar|gaps|awake|transparency|colorpicker>        (-> running winarchy.ahk)
 ;   menu.ahk panel <audio|bluetooth>                             (toggle Windows' quick panel)
-;   menu.ahk lock | sleep | restart | shutdown | logout | upgrade | uninstall
+;   menu.ahk lock | sleep | hibernate | reboot | shutdown | logout | upgrade | uninstall
+;   menu.ahk restart <bar|glazewm|herdr> | config-reset <glazewm|herdr> | display <laptop|mirror>
 ;   menu.ahk bar-start                                           (start Zebar with no console: see Restart-Bar)
 
 MenuTitle := "Zebar - omarchy / menu ahk_exe zebar.exe"
@@ -98,7 +99,14 @@ switch verb {
         ; Modern Standby laptops refuse SetSuspendState: turning the screens off is how they sleep.
         if !DllCall("PowrProf\SetSuspendState", "int", 0, "int", 0, "int", 0)
             DllCall("PostMessage", "ptr", 0xFFFF, "uint", 0x112, "ptr", 0xF170, "ptr", 2)
-    case "restart": Run "shutdown.exe /r /t 0", , "Hide"
+    case "hibernate": DllCall("PowrProf\SetSuspendState", "int", 1, "int", 0, "int", 0)
+    case "reboot": Run "shutdown.exe /r /t 0", , "Hide"
+    ; Update > Process: start one part again (Omarchy's omarchy-restart-*).
+    case "restart": RestartPart(arg)
+    ; Update > Config: back to winarchy's own template (yours is kept as .bak).
+    case "config-reset": ResetConfig(arg)
+    ; Trigger > Hardware (Omarchy's omarchy-hyprland-monitor-internal[-mirror]).
+    case "display": ToggleDisplay(arg)
     case "shutdown": Run "shutdown.exe /s /t 0", , "Hide"
     case "logout": Run "shutdown.exe /l", , "Hide"
     case "upgrade": RunInTerminal("Update", '"' Env("pwsh", "pwsh") '" -NoProfile -ExecutionPolicy Bypass -File "' Env("code") '\bin\winarchy.ps1" update')
@@ -122,7 +130,7 @@ EditFile(target) {
     }
     if !FileExist(file) && target = "config" {
         f := FileOpen(file, "w", "UTF-8-RAW")
-        f.Write('{`n  "_help": "Only the settings you change. See docs/config.md, then run: winarchy apply"`n}`n')
+        f.Write('{`n  "_help": "Only the settings you change. See manual/31-dotfiles.md; saving applies them"`n}`n')
         f.Close()
     }
     editor := Env("editor", "notepad.exe")
@@ -143,6 +151,50 @@ HerdrTemplate() {
         f.Close()
     }
     return file
+}
+
+RestartPart(part) {
+    switch part {
+        case "bar":
+            ; Closed, then started again here: winarchy.ahk would only notice after 5 s.
+            while ProcessExist("zebar.exe")
+                ProcessClose "zebar.exe"
+            try Run('"' Env("zebar") '" startup', , "Hide")
+        case "glazewm":
+            try RunWait('"' Env("glazewmCli") '" command wm-reload-config', , "Hide")
+            Osd("GlazeWM reloaded")
+        case "herdr":
+            Notify(OmarchyCmdWait("herdr", "config") ? "Herdr reload failed (Update > Doctor shows why)" : "Herdr reloaded")
+    }
+}
+
+; Your copy of a template goes aside as .bak, and apply renders winarchy's own again.
+ResetConfig(which) {
+    file := Env("data") (which = "herdr" ? "\herdr.toml.tpl" : "\glazewm.yaml.tpl")
+    if !FileExist(file)
+        return Osd("Already on the default " (which = "herdr" ? "Herdr" : "GlazeWM") " config")
+    FileMove file, file ".bak", true
+    if which = "herdr"
+        Notify(OmarchyCmdWait("herdr", "config") ? "Herdr config failed (Update > Doctor shows why)" : "Herdr config reset (yours: herdr.toml.tpl.bak)")
+    else
+        Notify(OmarchyCmdWait("apply", "-MonitorsOnly") ? "GlazeWM config failed (Update > Doctor shows why)" : "GlazeWM config reset (yours: glazewm.yaml.tpl.bak)")
+}
+
+; Laptop Display: off while another monitor is on, back on otherwise. Mirror Display:
+; duplicate the laptop screen on the other one, and back to extended the next time.
+ToggleDisplay(what) {
+    flag := Env("data") "\generated\display-mirror"
+    if what = "mirror" {
+        mirrored := FileExist(flag)
+        try Run("DisplaySwitch.exe " (mirrored ? "/extend" : "/clone"), , "Hide")
+        if mirrored {
+            try FileDelete flag
+        } else {
+            try FileAppend "", flag
+        }
+        return
+    }
+    try Run("DisplaySwitch.exe " (MonitorGetCount() > 1 ? "/external" : "/extend"), , "Hide")
 }
 
 ; Launch or attach to the persistent Herdr session (omarchy-launch-terminal-herdr).

@@ -577,6 +577,7 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Respli
     try { Initialize-Herdr } catch { Log "herdr FAILED: $($_.Exception.Message)" }
     # The pickers' index.json format follows the code, so rebuild it here too (not only on sync).
     try { Update-Index } catch { Log "picker index FAILED: $($_.Exception.Message)" }
+    try { Write-MenuFlags } catch { Log "menu flags FAILED: $($_.Exception.Message)" }
     if (-not (Test-Path (Join-Path $Pack 'theme.css'))) {
         try { Set-BarTheme (Read-Colors (Read-State).theme) } catch { Log "no theme yet: $($_.Exception.Message)" }
     }
@@ -586,4 +587,14 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Respli
         Restart-OmarchyAhk $p
     }
     Log "applied: $monitors monitor(s), AutoHotkey $($p.ahk), browser $($p.browserName)"
+}
+
+# menu-flags.json: what this PC has, for the menu rows Omarchy shows only `when` it does
+# (Hibernate, the laptop display and touchpad rows).
+function Write-MenuFlags {
+    $power = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Power' -ErrorAction SilentlyContinue
+    Write-Json (Join-Path $Pack 'menu-flags.json') ([ordered]@{
+        laptop = [bool](Get-Paths).battery
+        hibernate = [int]$power.HibernateEnabled -eq 1
+    })
 }

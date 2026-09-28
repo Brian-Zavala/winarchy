@@ -289,8 +289,8 @@ Describe 'Menu wiring' {
         @($m.trigger.items | Where-Object { $_.action -contains 'herdr' }).Count | Should -Be 1
         @($m.trigger.items | Where-Object { $_.action -contains 'agent' }).Count | Should -Be 1
         @($m.learn.items | Where-Object route -eq 'herdr-keys').Count | Should -Be 1
-        @($m.setup.items | Where-Object route -eq 'agent').Count | Should -Be 1
-        @($m.setup.items | Where-Object { $_.action -contains 'herdr-config' }).Count | Should -Be 1
+        @($m.'setup-default'.items | Where-Object route -eq 'agent').Count | Should -Be 1
+        @($m.'setup-config'.items | Where-Object { $_.action -contains 'herdr-config' }).Count | Should -Be 1
     }
     It 'names both generated routes in menu.js, or menu.ahk open <route> falls back to root' {
         $js = Get-Content -Raw (Join-Path $Code 'zebar\omarchy\menu.js')
