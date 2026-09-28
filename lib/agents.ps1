@@ -88,9 +88,11 @@ $AgentTable = [ordered]@{
     }
 }
 
-# What `hdl c` and `hdl cx` mean, plus the spellings Omarchy's default-agent accepts.
+# Omarchy's shell shorthands (default/bash/aliases: c = opencode, cx = claude,
+# cy = codex), which `hdl c` runs, plus the spellings Omarchy's default-agent accepts.
+# `a` is the default agent (omarchy-agent --inline); Get-HerdrAgentCommand handles it.
 $AgentAlias = @{
-    c = 'claude'; 'claude-code' = 'claude'; cx = 'codex'
+    c = 'opencode'; cx = 'claude'; cy = 'codex'; 'claude-code' = 'claude'
     'open-code' = 'opencode'; 'github-copilot' = 'copilot'
     cursor = 'cursor-agent'; 'oh-my-pi' = 'omp'; openrouter = 'ori'
     antigravity = 'agy'; 'antigravity-cli' = 'agy'; gemini = 'agy'; 'gemini-cli' = 'agy'

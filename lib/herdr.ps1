@@ -328,7 +328,7 @@ function Rename-HerdrTab([string]$tab, [string]$name) {
 # this is a PowerShell command line, and it goes through `winarchy agent -Inline` so the
 # unattended flags stay in one place (lib/agents.ps1).
 function Get-HerdrAgentCommand([string]$agent) {
-    $key = Resolve-AgentName $agent
+    $key = if ($agent -eq 'a') { Get-DefaultAgent } else { Resolve-AgentName $agent }
     # Something that isn't one of ours is run as typed: Omarchy takes any command here.
     if (-not $key) { return $agent }
     $cmd = Get-AgentCommand $key

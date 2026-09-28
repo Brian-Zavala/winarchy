@@ -245,8 +245,9 @@ Describe 'Coding agents' {
         }
     }
     It 'resolves Omarchy''s short names and spellings' {
-        Resolve-AgentName 'c' | Should -Be 'claude'
-        Resolve-AgentName 'cx' | Should -Be 'codex'
+        Resolve-AgentName 'c' | Should -Be 'opencode'
+        Resolve-AgentName 'cx' | Should -Be 'claude'
+        Resolve-AgentName 'cy' | Should -Be 'codex'
         Resolve-AgentName 'Claude-Code' | Should -Be 'claude'
         Resolve-AgentName 'gemini' | Should -Be 'agy'
         Resolve-AgentName 'nonsense' | Should -BeNullOrEmpty

@@ -54,3 +54,18 @@ Describe 'Invoke-Agent -Inline' {
         Remove-Item function:global:fake-agent
     }
 }
+
+Describe 'Agent shorthands (Omarchy default/bash/aliases)' {
+    It 'maps c, cx and cy the way Omarchy does' {
+        Resolve-AgentName 'c' | Should -Be 'opencode'
+        Resolve-AgentName 'cx' | Should -Be 'claude'
+        Resolve-AgentName 'cy' | Should -Be 'codex'
+    }
+    It 'runs the default agent for a in hdl' {
+        . "$root\lib\herdr.ps1"
+        Mock Get-DefaultAgent { 'codex' }
+        Mock Get-AgentCommand { 'codex', '--yolo' }
+        Get-HerdrAgentCommand 'a' | Should -Be 'codex --yolo'
+        Should -Invoke Get-AgentCommand -ParameterFilter { $name -eq 'codex' }
+    }
+}

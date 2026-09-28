@@ -141,7 +141,7 @@ Inside a Herdr pane, Omarchy's layouts are one word each:
 | `hdlm <agent> [<agent2>]` | One `hdl` tab per subfolder of the current folder — a whole monorepo at once |
 | `hsl <count> <command>` | A swarm: `count` panes in an even grid, all running the same command (`hsl 4 claude`) |
 
-`<agent>` is any agent name or Omarchy's shorthand (`c` = Claude Code, `cx` = Codex); anything else
+`<agent>` is any agent name or Omarchy's shorthand (`c` = OpenCode, `cx` = Claude Code, `cy` = Codex, `a` = your default agent); anything else
 is run as typed. The shortcuts live in your PowerShell profile between `winarchy herdr shortcuts`
 markers and call `winarchy herdr layout|square|multi|swarm`.
 
