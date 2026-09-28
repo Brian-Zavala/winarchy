@@ -180,8 +180,9 @@ OnMessage 0x5558, (*) => WorkMonitor()   ; menu.ahk / OSDs asking (see WorkingMo
 ; Hyprland's follow_mouse, re-asserted (see FocusFollowWatch): GlazeWM's own
 ; focus_follows_cursor stops following once the pointer touches a window it doesn't
 ; manage - the bar, the launcher, a picker - which is most of the top of the screen.
+; Focus switches as soon as the pointer touches another window.
 if Env("focusFollowsCursor", "1") = "1"
-    SetTimer FocusFollowWatch, 110
+    SetTimer FocusFollowWatch, 30
 ; Keep the dwindle auto-tiling watcher alive (see AutoTileGuard).
 if Env("autoTiling", "1") = "1"
     SetTimer AutoTileGuard, 5000
@@ -2405,16 +2406,14 @@ UnhookFocusMove(*) {
 ; bar, Flow Launcher and the pickers, so the strip along the top of every screen is
 ; exactly that; its cursor_jump warps can re-steal focus too (#760). Measured on this
 ; PC: the pointer crossed five windows over 5.5 s without focus moving once. Clicking a
-; managed window is what unsticks GlazeWM, so that is what this does - when the pointer
-; genuinely moves and then settles over another ordinary window, focus it.
+; managed window is what unsticks GlazeWM, so that is what this does - the moment the
+; pointer moves onto another ordinary window (its edge, not its middle), focus it, like
+; Hyprland's follow_mouse = 1. It used to wait for the pointer to settle, and stopping
+; cancelled the wait, so focus only moved after travelling well into the window.
+; Runs every 30 ms: the per-tick path is just MouseGetPos; the costlier checks (Busy,
+; eligibility) only run when there is a window to hand focus to.
 FocusFollowWatch() {
-    static lastX := -1, lastY := -1, pending := 0, pendingAt := 0
-    ; A game or fullscreen window owns its own focus; Super is held while dragging or
-    ; resizing, where the pointer is carrying a window rather than choosing one.
-    if Busy() || GetKeyState("LWin", "P") {
-        pending := 0
-        return
-    }
+    static lastX := -1, lastY := -1, tried := 0, triedAt := 0
     PerMonitorDpi()
     CoordMode "Mouse", "Screen"
     MouseGetPos &x, &y, &hwnd
@@ -2422,24 +2421,20 @@ FocusFollowWatch() {
     lastX := x, lastY := y
     ; Focus may only follow real movement: never take focus off the window being typed
     ; in because the pointer happens to be resting somewhere else.
-    if !moved || !hwnd {
-        pending := 0
+    if !moved || !hwnd
         return
-    }
     hwnd := DllCall("GetAncestor", "ptr", hwnd, "uint", 2, "ptr")      ; GA_ROOT
-    if !hwnd || hwnd = WinExist("A") || !FocusFollowEligible(hwnd) {
-        pending := 0
+    if !hwnd || hwnd = WinExist("A")
         return
-    }
-    ; Settle first, so sweeping the pointer across the screen focuses the window it
-    ; comes to rest over, not every window on the way.
-    if hwnd != pending {
-        pending := hwnd, pendingAt := A_TickCount
+    ; Activation can fail to take (foreground lock, GlazeWM re-asserting its focus):
+    ; retry, but not on every tick.
+    if hwnd = tried && A_TickCount - triedAt < 250
         return
-    }
-    if A_TickCount - pendingAt < 150
+    ; A game or fullscreen window owns its own focus; Super is held while dragging or
+    ; resizing, where the pointer is carrying a window rather than choosing one.
+    if GetKeyState("LWin", "P") || !FocusFollowEligible(hwnd) || Busy()
         return
-    pending := 0
+    tried := hwnd, triedAt := A_TickCount
     try WinActivate "ahk_id " hwnd
 }
 
