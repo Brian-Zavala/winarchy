@@ -187,6 +187,48 @@ function Import-LegacyBackup([string]$dir) {
 }
 
 # --- restore ----------------------------------------------------------------------
+# Run values of the apps winarchy installs, the only ones uninstall takes out of Run.
+$WinarchyRunPattern = '(?i)\\(glazewm|zebar|Flow\.Launcher|AutoHotkey\w*)\.exe|winarchy'
+
+# The Flow Launcher settings Set-FlowTheme writes; the rest of the file is Flow's own.
+$FlowOwnedKeys = 'Theme', 'UseSound', 'BackdropType', 'ColorScheme', 'QueryBoxFont', 'ResultFont', 'ResultSubFont'
+
+# Files winarchy only writes a part of. Copying the install-day file back would lose
+# every change made to them since, so uninstall takes out just winarchy's part.
+# Returns $false for a file winarchy owns whole, which the journal copy restores.
+function Restore-PartOwnedFile($e, [string]$dir) {
+    $path = $e.path
+    $leaf = Split-Path $path -Leaf
+    # Gone since: nothing of ours left in it to take out.
+    if (-not (Test-Path -LiteralPath $path)) {
+        return $leaf -in 'profile.ps1', 'Microsoft.PowerShell_profile.ps1', 'btop.conf' -or $path -like '*\.vscode\extensions\extensions.json'
+    }
+    if ($leaf -in 'profile.ps1', 'Microsoft.PowerShell_profile.ps1') {
+        Remove-HerdrProfile $path
+    } elseif ($path -like '*\.vscode\extensions\extensions.json') {
+        Write-Json $path @(@(Read-Json $path) | Where-Object { $_ -and $_.identifier.id -ne 'local.omarchy-theme' }) 12
+    } elseif ($path -like '*\FlowLauncher\Settings\Settings.json' -and $e.existed -and $e.copy) {
+        $was = Read-Json (Join-Path $dir $e.copy)
+        $s = Read-Json $path
+        if (-not $s -or -not $was) { return $false }
+        foreach ($k in $FlowOwnedKeys) {
+            if ($was.PSObject.Properties.Name -contains $k) { $s | Add-Member -Force -NotePropertyName $k -NotePropertyValue $was.$k }
+            else { $s.PSObject.Properties.Remove($k) }
+        }
+        Write-Json $path $s
+    } elseif ($leaf -eq 'btop.conf' -and $e.existed -and $e.copy) {
+        $was = Get-Content -Raw (Join-Path $dir $e.copy)
+        $t = Get-Content -Raw -LiteralPath $path
+        foreach ($k in 'color_theme', 'theme_background') {
+            if ($was -match "(?m)^$k\s*=.*$") { $line = $Matches[0]; $t = [regex]::new("(?m)^$k\s*=.*$").Replace($t, $line.Replace('$', '$$'), 1) }
+        }
+        Write-Utf8 $path $t
+    } else { return $false }
+    # A file that only ever held winarchy's part goes, as it would have with the copy.
+    if (-not $e.existed -and -not (Get-Content -Raw -LiteralPath $path).Trim().Trim('[]').Trim()) { Remove-Item -LiteralPath $path -Force }
+    $true
+}
+
 function Set-JsonPointer($obj, [string]$pointer, $value, [bool]$remove) {
     $parts = $pointer -split '\.'
     for ($i = 0; $i -lt $parts.Count - 1; $i++) {
@@ -213,6 +255,7 @@ function Restore-JournalEntry($e, [string]$dir) {
             }
         }
         'file' {
+            if (Restore-PartOwnedFile $e $dir) { return }
             if ($e.existed -and $e.copy) { Copy-Item -Force (Join-Path $dir $e.copy) $e.path }
             elseif (-not $e.existed) { Remove-Item -LiteralPath $e.path -Force -ErrorAction SilentlyContinue }
         }
@@ -259,9 +302,11 @@ function Restore-JournalEntry($e, [string]$dir) {
         }
         'taskbar' { Restore-Taskbar $e }
         'runkeys' {
+            # Only what the apps winarchy set up added at login: anything else installed
+            # since then is yours. (The GlazeWM value winarchy writes is its own reg entry.)
             $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
             (Get-ItemProperty $runKey).PSObject.Properties |
-                Where-Object { $_.Name -notlike 'PS*' -and $e.names -notcontains $_.Name } |
+                Where-Object { $_.Name -notlike 'PS*' -and $e.names -notcontains $_.Name -and "$($_.Value)" -match $WinarchyRunPattern } |
                 ForEach-Object { Write-Host "  removing Run\$($_.Name)"; Remove-ItemProperty $runKey -Name $_.Name }
         }
         'envpath' {

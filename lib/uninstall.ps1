@@ -65,6 +65,12 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge) {
         }
     }
     foreach ($e in $entries | Where-Object { $_.kind -eq 'note' }) { Write-Host "  note: $($e.text)" }
+    # Done with this journal: a later install starts a new one instead of reusing
+    # install-day originals that no longer describe this PC. Its copies stay in $dir.
+    if (-not $DryRun) {
+        Rename-Item (Join-Path $dir 'journal.json') "journal-undone-$(Get-Date -Format 'yyyyMMdd-HHmmss').json" -ErrorAction SilentlyContinue
+        $script:JournalDir = $null; $script:JournalCache = $null
+    }
 
     if ($Purge) {
         & $step "Delete downloaded themes/backgrounds and settings ($Data, keeping backup\)" {

@@ -2,7 +2,7 @@
 BeforeAll {
     $Verb = 'test'
     $root = Split-Path -Parent $PSScriptRoot
-    foreach ($f in 'common', 'detect', 'render', 'themes', 'targets', 'journal', 'apply') { . "$root\lib\$f.ps1" }
+    foreach ($f in 'common', 'detect', 'render', 'themes', 'targets', 'journal', 'apply', 'herdr') { . "$root\lib\$f.ps1" }
     $Code = $root
 }
 
@@ -144,6 +144,79 @@ Describe 'Backup journal' {
         Set-Content $f 'x'
         foreach ($e in (Read-Journal).entries) { Restore-JournalEntry $e $script:JournalDir }
         Test-Path $f | Should -BeFalse
+    }
+}
+
+Describe 'Uninstall keeps what changed since install' {
+    BeforeEach {
+        $script:JournalDir = Join-Path $TestDrive ([guid]::NewGuid())
+        New-Item -ItemType Directory $script:JournalDir | Out-Null
+        Set-Content (Join-Path $script:JournalDir 'journal.json') '{"entries":[]}'
+        $script:JournalCache = $null
+        $script:home_ = Join-Path $TestDrive ([guid]::NewGuid())
+        New-Item -ItemType Directory $script:home_ | Out-Null
+        function Undo { foreach ($e in (Read-Journal).entries) { Restore-JournalEntry $e $script:JournalDir } }
+    }
+    It 'takes only the Herdr block out of the PowerShell profile' {
+        $f = Join-Path $script:home_ 'profile.ps1'
+        Set-Content $f 'Set-Alias ll ls'
+        Save-File $f
+        [void](Set-HerdrProfile $f)
+        Add-Content $f 'Set-Alias later gci'
+        Undo
+        $t = Get-Content -Raw $f
+        $t | Should -Match 'Set-Alias ll ls'
+        $t | Should -Match 'Set-Alias later gci'
+        $t | Should -Not -Match ([regex]::Escape($HerdrProfileBegin))
+    }
+    It 'deletes a profile that only ever held the Herdr block' {
+        $f = Join-Path $script:home_ 'profile.ps1'
+        Save-File $f
+        [void](Set-HerdrProfile $f)
+        Undo
+        Test-Path $f | Should -BeFalse
+    }
+    It 'takes only the Omarchy theme out of VS Code extensions.json' {
+        $f = Join-Path $script:home_ '.vscode\extensions\extensions.json'
+        New-Item -ItemType Directory (Split-Path $f) | Out-Null
+        Set-Content $f '[]'
+        Save-File $f
+        Set-Content $f '[{"identifier":{"id":"local.omarchy-theme"}},{"identifier":{"id":"later.ext"}}]'
+        Undo
+        $ids = @((Get-Content -Raw $f | ConvertFrom-Json) | ForEach-Object { $_.identifier.id })
+        $ids | Should -Be @('later.ext')
+    }
+    It 'puts back only the Flow Launcher settings winarchy set' {
+        $f = Join-Path $script:home_ 'FlowLauncher\Settings\Settings.json'
+        New-Item -ItemType Directory (Split-Path $f) | Out-Null
+        Set-Content $f '{"Theme":"Win11Light","Hotkey":"Alt + Space"}'
+        Save-File $f
+        Set-Content $f '{"Theme":"Omarchy","UseSound":false,"Hotkey":"Ctrl + Space"}'
+        Undo
+        $s = Get-Content -Raw $f | ConvertFrom-Json
+        $s.Theme | Should -Be 'Win11Light'
+        $s.Hotkey | Should -Be 'Ctrl + Space'
+        $s.PSObject.Properties.Name | Should -Not -Contain 'UseSound'
+    }
+    It 'puts back only the btop theme lines' {
+        $f = Join-Path $script:home_ 'btop.conf'
+        Set-Content $f "color_theme = `"Default`"`ntheme_background = True`nupdate_ms = 2000"
+        Save-File $f
+        Set-Content $f "color_theme = `"omarchy`"`ntheme_background = False`nupdate_ms = 500"
+        Undo
+        $t = Get-Content -Raw $f
+        $t | Should -Match 'color_theme = "Default"'
+        $t | Should -Match 'theme_background = True'
+        $t | Should -Match 'update_ms = 500'
+    }
+    It 'takes out only the Run values of apps winarchy set up' {
+        $vals = @{ Steam = 'steam.exe'; Discord = 'C:\Discord\Update.exe'; 'Flow.Launcher' = 'C:\Users\x\AppData\Local\FlowLauncher\Flow.Launcher.exe' }
+        Mock Get-ItemProperty { [pscustomobject]$vals } -ParameterFilter { $Path -like '*CurrentVersion\Run' }
+        Mock Remove-ItemProperty {}
+        Mock Write-Host {}
+        Restore-JournalEntry @{ kind = 'runkeys'; names = @('Steam') } $script:JournalDir
+        Should -Invoke Remove-ItemProperty -Times 1 -Exactly
+        Should -Invoke Remove-ItemProperty -ParameterFilter { $Name -eq 'Flow.Launcher' } -Times 1
     }
 }
 
