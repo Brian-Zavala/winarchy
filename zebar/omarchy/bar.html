@@ -202,22 +202,38 @@
       function renderWindows(win) {
         const el = $('winstrip');
         const list = win?.windows ?? [];
-        syncList(el, list, w => w.icon, w => {
-          const img = document.createElement('img');
-          img.src = `./icons/${w.icon}.png`;
-          img.onerror = () => {
-            const span = document.createElement('span');
-            span.dataset.key = img.dataset.key;
-            span.className = img.className + ' fallback';
-            span.title = img.title;
-            span.textContent = ICONS.appFallback;
-            span.onclick = img.onclick;
-            img.replaceWith(span);
+        syncList(el, list, w => w.icon, w => windowIcon(w, `./icons/${w.icon}.png`), (elm, w) => {
+          bindWindowIcon(elm, w);
+          // The glyph stands in only until the icon is cached: look again every few seconds,
+          // since the element for this app is kept (and so never loads it) otherwise.
+          if (elm.tagName !== 'SPAN' || Date.now() - (elm._tried ?? 0) < 5000) return;
+          elm._tried = Date.now();
+          const probe = new Image();
+          probe.onload = () => {
+            if (!elm.isConnected) return;
+            const img = windowIcon(w, probe.src);
+            img.dataset.key = elm.dataset.key;
+            elm.replaceWith(img);
           };
-          bindWindowIcon(img, w);
-          return img;
-        }, (elm, w) => bindWindowIcon(elm, w));
+          probe.src = `./icons/${w.icon}.png?${elm._tried}`;
+        });
         updateChevron();
+      }
+      function windowIcon(w, src) {
+        const img = document.createElement('img');
+        img.src = src;
+        img.onerror = () => {
+          const span = document.createElement('span');
+          span.dataset.key = img.dataset.key;
+          span.className = img.className + ' fallback';
+          span.title = img.title;
+          span.textContent = ICONS.appFallback;
+          span.onclick = img.onclick;
+          span._tried = Date.now();
+          img.replaceWith(span);
+        };
+        bindWindowIcon(img, w);
+        return img;
       }
       function bindWindowIcon(el, w) {
         el.className = (w.focused ? 'win focused' : 'win') + (el.tagName === 'SPAN' ? ' fallback' : '');
@@ -324,7 +340,7 @@
       $('logo').onclick = () => act('open', 'root');
       $('logo').oncontextmenu = e => { e.preventDefault(); act('terminal'); };
 
-      // Clock: left click = calendar (Win+N, as Quattro's calendar popup); right click = next format.
+      // Clock: left click = calendar (Super + Ctrl + Alt + D, as Quattro's calendar popup); right click = next format.
       $('clock').onclick = () => act('calendar');
       $('clock').oncontextmenu = e => {
         e.preventDefault();
@@ -420,7 +436,7 @@
       });
 
       // status.json (theme version) and indicators.json (stay awake) are written by
-      // omarchy.ps1 / winarchy.ahk. A new theme swaps theme.css without restarting Zebar.
+      // winarchy.ps1 / winarchy.ahk. A new theme swaps theme.css without restarting Zebar.
       let themeVersion = null;
       async function poll() {
         const get = f => fetch(`./${f}?t=${Date.now()}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);

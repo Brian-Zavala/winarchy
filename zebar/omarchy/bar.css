@@ -1,4 +1,4 @@
-/* Omarchy top bar. Colors come from theme.css (written by omarchy.ps1 theme-set);
+/* Omarchy top bar. Colors come from theme.css (written by winarchy theme-set);
    the initial values below are Tokyo Night fallbacks. Registered as colors so a new
    theme fades in instead of snapping. */
 @property --bg { syntax: '<color>'; inherits: true; initial-value: #1a1b26; }
