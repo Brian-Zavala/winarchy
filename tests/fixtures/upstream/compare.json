@@ -1,0 +1,416 @@
+{
+  "html_url": "https://github.com/omacom/omarchy/compare/b2ffea57429d92c425b2ac9d86edda7a0d8c062b...b18ab4952b88b95efe7758ee5f9bd3bb47483875",
+  "total_commits": 16,
+  "commits": [
+    {
+      "sha": "09c2b28afae4258378b1d4f32b5cfe7e6c55d263",
+      "html_url": "https://github.com/omacom/omarchy/commit/09c2b28afae4258378b1d4f32b5cfe7e6c55d263",
+      "commit": {
+        "message": "Remove standard SSH allow rules when disabling SSH",
+        "committer": {
+          "date": "2026-09-23T10:45:50Z"
+        }
+      }
+    },
+    {
+      "sha": "1d0165aeb3c2ca94569ea13fe3924c4504313b78",
+      "html_url": "https://github.com/omacom/omarchy/commit/1d0165aeb3c2ca94569ea13fe3924c4504313b78",
+      "commit": {
+        "message": "Test SSH firewall rule removal and failures",
+        "committer": {
+          "date": "2026-09-23T10:49:54Z"
+        }
+      }
+    },
+    {
+      "sha": "93f566d2586fb241a609f06c49f487181fa706c1",
+      "html_url": "https://github.com/omacom/omarchy/commit/93f566d2586fb241a609f06c49f487181fa706c1",
+      "commit": {
+        "message": "Remove saved fingerprint templates for the invoking user",
+        "committer": {
+          "date": "2026-09-23T14:07:12Z"
+        }
+      }
+    },
+    {
+      "sha": "0a8ccbbfa9228d9b80152193f649a27f8217066e",
+      "html_url": "https://github.com/omacom/omarchy/commit/0a8ccbbfa9228d9b80152193f649a27f8217066e",
+      "commit": {
+        "message": "Test fingerprint template cleanup and account boundaries",
+        "committer": {
+          "date": "2026-09-23T14:07:12Z"
+        }
+      }
+    },
+    {
+      "sha": "fdd2c5dc147b2ec9262c49562e77d7c0cf052744",
+      "html_url": "https://github.com/omacom/omarchy/commit/fdd2c5dc147b2ec9262c49562e77d7c0cf052744",
+      "commit": {
+        "message": "Resolve fingerprint sudo callers strictly by UID",
+        "committer": {
+          "date": "2026-09-24T09:18:44Z"
+        }
+      }
+    },
+    {
+      "sha": "27e1f73e3582fc35419491171e78df0ee8326cec",
+      "html_url": "https://github.com/omacom/omarchy/commit/27e1f73e3582fc35419491171e78df0ee8326cec",
+      "commit": {
+        "message": "Remove SSH service limits and application firewall rules",
+        "committer": {
+          "date": "2026-09-24T09:18:44Z"
+        }
+      }
+    },
+    {
+      "sha": "d03e2f2cf5cc3d1e8d5381b9bb48c60d8fa19853",
+      "html_url": "https://github.com/omacom/omarchy/commit/d03e2f2cf5cc3d1e8d5381b9bb48c60d8fa19853",
+      "commit": {
+        "message": "Test fingerprint cleanup with numeric username collisions",
+        "committer": {
+          "date": "2026-09-24T09:18:44Z"
+        }
+      }
+    },
+    {
+      "sha": "f8ead5cf5f3daa6efa1229418afe445245b9685a",
+      "html_url": "https://github.com/omacom/omarchy/commit/f8ead5cf5f3daa6efa1229418afe445245b9685a",
+      "commit": {
+        "message": "Test SSH service and application firewall cleanup",
+        "committer": {
+          "date": "2026-09-24T09:18:44Z"
+        }
+      }
+    },
+    {
+      "sha": "973541460367b5dbfe8ef1c2fd821eca05f8d82b",
+      "html_url": "https://github.com/omacom/omarchy/commit/973541460367b5dbfe8ef1c2fd821eca05f8d82b",
+      "commit": {
+        "message": "Run fingerprint removal fixtures as real nonroot callers",
+        "committer": {
+          "date": "2026-09-26T12:00:15Z"
+        }
+      }
+    },
+    {
+      "sha": "091d65fc4087a9506f12f1690d20e5251c321116",
+      "html_url": "https://github.com/omacom/omarchy/commit/091d65fc4087a9506f12f1690d20e5251c321116",
+      "commit": {
+        "message": "Merge pull request #13048 from AFOliveira/fix/sshd-firewall-cleanup-20260923",
+        "committer": {
+          "date": "2026-09-28T08:39:10Z"
+        }
+      }
+    },
+    {
+      "sha": "8273b6c2d7e6b048061485297b5ba54d436ba1f3",
+      "html_url": "https://github.com/omacom/omarchy/commit/8273b6c2d7e6b048061485297b5ba54d436ba1f3",
+      "commit": {
+        "message": "Merge pull request #13049 from AFOliveira/fix/fingerprint-template-cleanup-20260923",
+        "committer": {
+          "date": "2026-09-28T08:43:13Z"
+        }
+      }
+    },
+    {
+      "sha": "fa729f139ce0d7dce7addc4e1da26c1cc870db4d",
+      "html_url": "https://github.com/omacom/omarchy/commit/fa729f139ce0d7dce7addc4e1da26c1cc870db4d",
+      "commit": {
+        "message": "Read the default browser from mimeapps.list when launching (#13520)",
+        "committer": {
+          "date": "2026-09-28T09:43:34Z"
+        }
+      }
+    },
+    {
+      "sha": "f814639556592cb78b0a96d99cdcff60cdfd9403",
+      "html_url": "https://github.com/omacom/omarchy/commit/f814639556592cb78b0a96d99cdcff60cdfd9403",
+      "commit": {
+        "message": "Hand the terminal launcher the focused window's pid from Lua (#13521)",
+        "committer": {
+          "date": "2026-09-28T09:48:28Z"
+        }
+      }
+    },
+    {
+      "sha": "de63134b88ba78a75f131a8662c6569252dbfdc0",
+      "html_url": "https://github.com/omacom/omarchy/commit/de63134b88ba78a75f131a8662c6569252dbfdc0",
+      "commit": {
+        "message": "Collapse identical notifications from the same sender into one toast (#13522)",
+        "committer": {
+          "date": "2026-09-28T10:04:15Z"
+        }
+      }
+    },
+    {
+      "sha": "97a9fce54f5df007afe7b8637ddc09314f38ad00",
+      "html_url": "https://github.com/omacom/omarchy/commit/97a9fce54f5df007afe7b8637ddc09314f38ad00",
+      "commit": {
+        "message": "Hand browser and web app launches to the running browser directly (#13530)",
+        "committer": {
+          "date": "2026-09-28T12:04:31Z"
+        }
+      }
+    },
+    {
+      "sha": "b18ab4952b88b95efe7758ee5f9bd3bb47483875",
+      "html_url": "https://github.com/omacom/omarchy/commit/b18ab4952b88b95efe7758ee5f9bd3bb47483875",
+      "commit": {
+        "message": "Add a no-animations mode, on by default in VMs (#13550)",
+        "committer": {
+          "date": "2026-09-28T13:46:05Z"
+        }
+      }
+    }
+  ],
+  "files": [
+    {
+      "filename": "bin/omarchy-cmd-browser-handoff",
+      "status": "added"
+    },
+    {
+      "filename": "bin/omarchy-cmd-default-browser",
+      "status": "added"
+    },
+    {
+      "filename": "bin/omarchy-cmd-terminal-cwd",
+      "status": "modified"
+    },
+    {
+      "filename": "bin/omarchy-hw-vm",
+      "status": "added"
+    },
+    {
+      "filename": "bin/omarchy-launch-browser",
+      "status": "modified"
+    },
+    {
+      "filename": "bin/omarchy-launch-terminal",
+      "status": "modified"
+    },
+    {
+      "filename": "bin/omarchy-launch-webapp",
+      "status": "modified"
+    },
+    {
+      "filename": "bin/omarchy-menu-keybindings",
+      "status": "modified"
+    },
+    {
+      "filename": "bin/omarchy-remove-security-fingerprint",
+      "status": "modified"
+    },
+    {
+      "filename": "bin/omarchy-remove-security-sshd",
+      "status": "modified"
+    },
+    {
+      "filename": "bin/omarchy-toggle-animations",
+      "status": "added"
+    },
+    {
+      "filename": "default/hypr/bindings/applications.lua",
+      "status": "modified"
+    },
+    {
+      "filename": "default/hypr/helpers.lua",
+      "status": "modified"
+    },
+    {
+      "filename": "default/hypr/toggles/no-animations.lua",
+      "status": "added"
+    },
+    {
+      "filename": "default/omarchy/omarchy-menu.jsonc",
+      "status": "modified"
+    },
+    {
+      "filename": "install/user/all.sh",
+      "status": "modified"
+    },
+    {
+      "filename": "install/user/hardware/vm-no-animations.sh",
+      "status": "added"
+    },
+    {
+      "filename": "shell/Commons/Style.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/Ui/Button.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/Ui/CursorSurface.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/Ui/KeyboardPanel.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/Ui/MultiSelect.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/Ui/PanelActionButton.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/Ui/PanelSlider.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/Ui/PopupCard.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/Ui/SpeedTestOverlay.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/Ui/Toggle.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/Ui/ToggleSwitch.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/Ui/WidgetButton.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/agents/Panel.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/background/Background.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/bar/Bar.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/bar/widgets/ActiveWindow.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/bar/widgets/Tray.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/notifications/NotificationLogic.js",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/notifications/Service.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/notifications/components/NotificationCard.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/osd/Osd.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/panels/audio/Panel.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/panels/bluetooth/Panel.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/panels/clock/Panel.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/panels/dropbox/Panel.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/panels/elsewhen/CityRow.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/panels/elsewhen/DaylightStrip.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/panels/elsewhen/Globe.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/panels/elsewhen/HeroTitle.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/panels/elsewhen/Panel.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/panels/network/Panel.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/panels/power/Panel.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/panels/tailscale/Panel.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/panels/weather/Panel.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/polkit/PolkitAgent.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "shell/plugins/services/media/BarWidget.qml",
+      "status": "modified"
+    },
+    {
+      "filename": "test/shell.d/browser-handoff-test.sh",
+      "status": "added"
+    },
+    {
+      "filename": "test/shell.d/default-browser-lookup-test.sh",
+      "status": "added"
+    },
+    {
+      "filename": "test/shell.d/keybindings-menu-test.sh",
+      "status": "modified"
+    },
+    {
+      "filename": "test/shell.d/launch-browser-test.sh",
+      "status": "modified"
+    },
+    {
+      "filename": "test/shell.d/notifications-test.sh",
+      "status": "modified"
+    },
+    {
+      "filename": "test/shell.d/remove-security-sshd-firewall-test.sh",
+      "status": "added"
+    },
+    {
+      "filename": "test/shell.d/security-fingerprint-remove-test.sh",
+      "status": "added"
+    },
+    {
+      "filename": "test/shell.d/terminal-cwd-test.sh",
+      "status": "modified"
+    },
+    {
+      "filename": "test/shell.d/toggle-test.sh",
+      "status": "modified"
+    }
+  ]
+}

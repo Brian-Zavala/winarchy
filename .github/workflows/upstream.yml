@@ -1,0 +1,52 @@
+name: upstream
+# Once a day: what changed in Omarchy since Winarchy last reviewed it. The report goes into
+# one pull request (branch upstream-sync), updated each day until it is merged; merging it
+# marks those commits as reviewed. Porting a change is its own, reviewed commit.
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+concurrency: upstream
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Check Omarchy
+        id: check
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./.github/scripts/upstream.ps1
+      # A pull request opened with GITHUB_TOKEN starts no workflow, so the tests run here.
+      - name: Tests
+        if: steps.check.outputs.changed == 'true'
+        shell: pwsh
+        run: |
+          Install-Module Pester -MinimumVersion 5.5 -Force -Scope CurrentUser -SkipPublisherCheck
+          $r = Invoke-Pester ./tests -PassThru -Output Normal
+          if ($r.FailedCount) { exit 1 }
+      - name: Open or update the pull request
+        if: steps.check.outputs.changed == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BODY: ${{ steps.check.outputs.body }}
+          HEAD: ${{ steps.check.outputs.head }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -C upstream-sync
+          git add default/upstream.json docs/upstream.md default/config.json README.md
+          git commit -m "Upstream: Omarchy up to $($env:HEAD.Substring(0, 7)) [skip version]"
+          git push --force origin upstream-sync
+          if ($LASTEXITCODE) { exit 1 }
+          $pr = gh pr list --head upstream-sync --state open --json number --jq '.[0].number'
+          $title = "Upstream: Omarchy changes up to $($env:HEAD.Substring(0, 7))"
+          if ($pr) { gh pr edit $pr --title $title --body-file $env:BODY }
+          else { gh pr create --base main --head upstream-sync --title $title --body-file $env:BODY }
