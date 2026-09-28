@@ -2,6 +2,7 @@
 #SingleInstance Force
 #NoTrayIcon
 #Include lib\env.ahk
+OnError ScriptLogError
 
 ; Omarchy's app launchers (default/hypr/bindings/utilities.lua), mapped to what this
 ; PC has. Started by winarchy.ahk when config.json "launchers" is true; set it to

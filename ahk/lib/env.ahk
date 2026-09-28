@@ -129,3 +129,12 @@ WorkingMonitor() {
     DetectHiddenWindows prev
     return mon >= 1 && mon <= MonitorGetCount() ? mon : MonitorUnderMouse()
 }
+
+; An error in a helper script goes to the log, not a modal dialog (which would pop over
+; a game). winarchy.ahk and game-helper.ahk have their own; the others call OnError with it.
+ScriptLogError(err, mode) {
+    try FileAppend FormatTime(, "HH:mm:ss") " [" RegExReplace(A_ScriptName, "\.ahk$") "] error: "
+        . (err is Error ? Type(err) ": " err.Message " (" RegExReplace(err.File, ".*\\") ":" err.Line ")" : String(err))
+        . "`n", Env("log", A_Temp "\winarchy.log"), "UTF-8"
+    return 1
+}

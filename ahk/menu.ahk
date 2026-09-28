@@ -3,6 +3,7 @@
 #SingleInstance Off
 #Include lib\env.ahk
 #Include lib\osd.ahk
+OnError ScriptLogError
 ; Action dispatcher for the Zebar bar + Omarchy menu widget (whitelisted in zpack.json),
 ; and for winarchy.ahk hotkeys that open the menu.
 ;   menu.ahk open <route>        open/toggle the Omarchy menu (root, system, keys, background, theme, ...)
