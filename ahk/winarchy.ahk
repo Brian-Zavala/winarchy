@@ -187,6 +187,11 @@ if Env("focusFollowsCursor", "1") = "1"
 if Env("autoTiling", "1") = "1"
     SetTimer AutoTileGuard, 5000
 WriteIndicators()
+; AHK gives each function one timer, so a one-shot SetTimer WriteIndicators, -N would
+; replace this repeating one: one-shots go through their own function object instead.
+WriteIndicatorsOnce() => WriteIndicators()
+WriteIndicatorsSoon(ms) => SetTimer(WriteIndicatorsOnce, -ms)
+UacWatchOnce() => UacWatch()
 SetTimer WriteIndicators, 5000     ; nightlight / do-not-disturb also change from Quick Settings
 SetTimer UacWatch, 1000
 ; Running-windows list for the bar's chevron flyout (bar.html -> windows.json).
@@ -623,7 +628,7 @@ ToggleNightlight() {
         hex .= Format("{:02X}", x)
     RegWrite hex, "REG_BINARY", NightlightKey(), "Data"
     Osd("Nightlight " (on ? "off" : "on"))
-    SetTimer WriteIndicators, -300
+    WriteIndicatorsSoon(300)
 }
 
 ; --- Do not disturb (Omarchy: notification silencing) ---------------------------
@@ -656,7 +661,7 @@ ToggleDnd() {
         return
     }
     Osd("Do not disturb " (now ? "on" : "off"))
-    SetTimer WriteIndicators, -100
+    WriteIndicatorsSoon(100)
 }
 
 ; --- Text capture (OCR): snip a region, its text lands on the clipboard ----------
@@ -1276,7 +1281,7 @@ IsGame(hwnd) {
         . (admin ? "; runs as administrator" (GameHelper() ? "" : ": run 'winarchy game-setup' once so Super+W and the bar can close it") : ""))
     if info
         try Run('"' GlazeCli '" command --id ' info.id ' ignore', , "Hide")
-    SetTimer WriteIndicators, -10                     ; the game icon in the bar
+    WriteIndicatorsSoon(10)                     ; the game icon in the bar
     return true
 }
 
@@ -1337,7 +1342,7 @@ PruneGames() {
             if GameParked.Has(hwnd)
                 GameParked.Delete(hwnd)
             WmLog("game closed: " name)
-            SetTimer WriteIndicators, -10
+            WriteIndicatorsSoon(10)
         }
     }
 }
@@ -1592,7 +1597,7 @@ MarkAsGame() {
         if info
             try Run('"' GlazeCli '" command --id ' info.id ' ignore', , "Hide")
         WmLog("game: " name " (marked by hand, Super+Ctrl+G)")
-        SetTimer WriteIndicators, -10
+        WriteIndicatorsSoon(10)
     }
     OmarchyCmd("game-add", name)
     Osd("Marked " name " as a game")
@@ -2260,7 +2265,7 @@ ShowUacPrompt() {
     Sleep 200
     if UacWindow() = hwnd
         DllCall("SwitchToThisWindow", "Ptr", hwnd, "Int", 1)
-    SetTimer UacWatch, -1500
+    SetTimer UacWatchOnce, -1500
 }
 
 IsTerminal() {
