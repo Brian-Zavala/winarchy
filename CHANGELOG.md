@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Faster installs. The theme and background download (about 110 MB) now runs in the background while the apps install, thumbnails included, so the install no longer waits for it at the end.
+- The screensaver's effects engine (ttfx) and the window-animation GlazeWM come ready-made from Winarchy's releases, pinned by hash, instead of being compiled on each PC. Window animations no longer need Rust, the Visual C++ build tools (several GB) and about 10 minutes of compiling: `winarchy animations setup` downloads them in seconds, and compiles only if that download fails. The GlazeWM build is GPL-3.0 and its complete source is published with it. PCs without Rust now get the screensaver effects too.
+- Fixed: a plain bar (Zebar's own starter bar) could show instead of Winarchy's. Zebar puts it in when it starts and finds no settings, for example when it started before the install had written them. The install now writes Zebar's settings before Zebar is installed. `winarchy apply` removes the starter bar, Winarchy repairs it by itself within seconds when it shows up, and `winarchy doctor` checks for it.
+
 ## 0.1.26 — 2026-09-29
 
 - New Windows Terminal tabs open PowerShell 7: install and apply make it Terminal's default profile when the default was still Windows PowerShell (or unset). A default you picked yourself stays, and uninstall puts the old one back unless you changed it since.

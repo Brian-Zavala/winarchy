@@ -98,6 +98,8 @@ function Invoke-Doctor([switch]$Fix) {
     $zpack = Read-Json (Join-Path $Pack 'zpack.json')
     $priv = @($zpack.widgets | ForEach-Object { $_.privileges.shellCommands.program }) | Where-Object { $_ -like '*AutoHotkey*' } | Select-Object -First 1
     & $check 'Zebar may run AutoHotkey (menu actions)' ($priv -and (Test-Path $priv)) 'winarchy apply (AutoHotkey moved)'
+    # Zebar's generic starter bar in place of winarchy's: its settings.json was reset.
+    & $check 'Zebar opens the winarchy bar at startup' ($null -eq (Get-ZebarStartupConfigs (Read-Json $ZebarSettings))) 'winarchy apply'
     $lnk = Join-Path $p.startup 'winarchy.lnk'
     $target = if (Test-Path $lnk) { (New-Object -ComObject WScript.Shell).CreateShortcut($lnk).Arguments } else { '' }
     & $check 'starts at login (Startup\winarchy.lnk)' ($target -like "*$Code*") 'winarchy apply'

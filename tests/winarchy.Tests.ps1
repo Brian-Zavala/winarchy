@@ -541,6 +541,60 @@ Describe 'Bundled theme' {
     }
 }
 
+Describe 'Zebar startup' {
+    It 'opens winarchy''s bar when Zebar has no settings yet' {
+        $c = @(Get-ZebarStartupConfigs $null)
+        $c.Count | Should -Be 1
+        $c[0].pack | Should -Be 'omarchy'
+        $c[0].widget | Should -Be 'bar'
+    }
+    It 'replaces the starter bar Zebar''s first run writes' {
+        $cur = '{"startupConfigs":[{"pack":"glzr-io.starter","widget":"with-glazewm","preset":"default"}]}' | ConvertFrom-Json
+        $c = Get-ZebarStartupConfigs $cur
+        @($c | ForEach-Object { "$($_.pack)/$($_.widget)" }) -join ',' | Should -Be 'omarchy/bar'
+    }
+    It 'drops the starter bar next to winarchy''s, and keeps your own widgets' {
+        $cur = '{"startupConfigs":[{"pack":"mine","widget":"clock","preset":"p"},{"pack":"glzr-io.starter","widget":"vanilla","preset":"default"},{"pack":"omarchy","widget":"bar","preset":"default"}]}' | ConvertFrom-Json
+        @(Get-ZebarStartupConfigs $cur | ForEach-Object { "$($_.pack)/$($_.widget)" }) -join ',' | Should -Be 'omarchy/bar,mine/clock'
+    }
+    It 'leaves settings that already open winarchy''s bar alone' {
+        $cur = '{"startupConfigs":[{"pack":"omarchy","widget":"bar","preset":"default"},{"pack":"mine","widget":"clock","preset":"p"}]}' | ConvertFrom-Json
+        Get-ZebarStartupConfigs $cur | Should -BeNullOrEmpty
+    }
+    It 'writes the file once, journaled first' {
+        $ZebarSettings = Join-Path $TestDrive 'zebar\settings.json'
+        New-Item -ItemType Directory -Force (Split-Path $ZebarSettings) | Out-Null
+        Set-Content $ZebarSettings '{"startupConfigs":[{"pack":"glzr-io.starter","widget":"with-glazewm","preset":"default"}]}'
+        Mock Save-File {}
+        Set-ZebarStartup
+        Set-ZebarStartup
+        Should -Invoke Save-File -Times 1
+        $s = Get-Content -Raw $ZebarSettings | ConvertFrom-Json
+        @($s.startupConfigs).Count | Should -Be 1
+        $s.startupConfigs[0].pack | Should -Be 'omarchy'
+    }
+}
+
+Describe 'Sync' {
+    BeforeEach {
+        Mock Save-OmarchyFiles {}
+        Mock Add-BundledThemes {}
+        Mock Initialize-Branding {}
+        Mock Update-Index {}
+        $Themes = Join-Path $TestDrive 'themes'; $Walls = Join-Path $TestDrive 'walls'; $Thumbs = Join-Path $TestDrive 'thumbs'
+    }
+    It 'downloads, then rebuilds the pickers' {
+        Invoke-Sync
+        Should -Invoke Save-OmarchyFiles -Times 1
+        Should -Invoke Update-Index -Times 1
+    }
+    It 'only rebuilds the pickers offline' {
+        Invoke-Sync -Offline
+        Should -Invoke Save-OmarchyFiles -Times 0
+        Should -Invoke Update-Index -Times 1
+    }
+}
+
 Describe 'Zebar client download' {
     It 'saves the esm.sh bundle as it is' {
         $d = Join-Path $TestDrive ([guid]::NewGuid()); New-Item -ItemType Directory $d | Out-Null

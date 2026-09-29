@@ -430,16 +430,38 @@ function Write-ZebarPack($p, $cfg) {
         try { Save-ZebarClient $cfg.zebarClientVersion $Pack }
         catch { Log "Zebar client FAILED: $($_.Exception.Message) (the bar needs it; winarchy apply tries again)" }
     }
-    $settings = Join-Path $env:USERPROFILE '.glzr\zebar\settings.json'
-    $want = [ordered]@{
-        '$schema' = 'https://github.com/glzr-io/zebar/raw/v3.3.1/resources/settings-schema.json'
-        startupConfigs = @([ordered]@{ pack = 'omarchy'; widget = 'bar'; preset = 'default' })
-    }
-    $cur = Read-Json $settings
-    if (-not $cur -or -not ($cur.startupConfigs | Where-Object { $_.pack -eq 'omarchy' -and $_.widget -eq 'bar' })) {
-        Save-File $settings
-        Write-Json $settings $want
-    }
+    Set-ZebarStartup
+}
+
+$ZebarSettings = Join-Path $env:USERPROFILE '.glzr\zebar\settings.json'
+
+# The widgets Zebar opens when it starts, or $null when $cur needs no change. Zebar's own
+# first run (settings.json missing) writes its starter bar (glzr-io.starter) as the only
+# one: that generic bar then shows instead of winarchy's. So the starter is dropped,
+# winarchy's bar comes first, and any other widget the person added stays.
+function Get-ZebarStartupConfigs($cur) {
+    $all = @($cur.startupConfigs | Where-Object { $_ })
+    $keep = @($all | Where-Object { $_.pack -ne 'glzr-io.starter' -and -not ($_.pack -eq 'omarchy' -and $_.widget -eq 'bar') })
+    $bar = [ordered]@{ pack = 'omarchy'; widget = 'bar'; preset = 'default' }
+    $want = @($bar) + $keep
+    $ours = @($all | Where-Object { $_.pack -eq 'omarchy' -and $_.widget -eq 'bar' })
+    if ($cur -and $ours.Count -eq 1 -and $all.Count -eq $want.Count) { return $null }
+    $want
+}
+
+# Writes Zebar's settings.json so it opens winarchy's bar (Get-ZebarStartupConfigs). Apply
+# runs it, and install before GlazeWM + Zebar are even installed: with the file already
+# there, Zebar never has a first run, so it never sets up its starter bar.
+function Set-ZebarStartup {
+    $cur = Read-Json $ZebarSettings
+    $configs = Get-ZebarStartupConfigs $cur
+    if ($null -eq $configs) { return }
+    Save-File $ZebarSettings
+    Write-Json $ZebarSettings ([ordered]@{
+            '$schema' = 'https://github.com/glzr-io/zebar/raw/v3.3.1/resources/settings-schema.json'
+            startupConfigs = @($configs)
+        })
+    if ($cur) { Log "Zebar settings: set to open winarchy's bar (it had $(@($cur.startupConfigs | ForEach-Object { "$($_.pack)/$($_.widget)" }) -join ', '))" }
 }
 
 # Fetches Zebar's client as $dir\zebar.mjs. esm.sh serves it as one self-contained file.

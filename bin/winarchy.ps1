@@ -83,7 +83,9 @@ param(
     # recent scan and only refreshes the limits (what opening the usage panel wants).
     [switch]$Force, [switch]$LimitsOnly,
     # bg: "x,y" on the monitor the background picker covers (it plays the reveal there).
-    [string]$Covered
+    [string]$Covered,
+    # sync: install's own background download (Start-ThemeDownload), not for a person to run.
+    [switch]$Background
 )
 
 $ErrorActionPreference = 'Stop'
@@ -128,7 +130,9 @@ switch ($Verb) {
     'apply' { Use-Lock { Invoke-Apply -MonitorsOnly:$MonitorsOnly -NoRestart:$NoRestart -Resplit:$Resplit } }
     'doctor' { Invoke-Doctor -Fix:$Fix }
     'detect' { $p = Update-Paths; $p | ConvertTo-Json -Depth 4 }
-    'sync' { Use-Lock { Invoke-Sync -Offline:$Offline } }
+    # The background one takes no lock: the install that started it holds that one, and
+    # it only adds files (each lands whole, renamed from .part).
+    'sync' { if ($Background) { Save-OmarchyFiles $ThemeDownloadProgress; New-MissingThumbs } else { Use-Lock { Invoke-Sync -Offline:$Offline } } }
     { $_ -in 'theme', 'theme-set' } {
         if (-not $Arg -or $Arg -eq 'list') {
             Get-ChildItem $Themes -Directory | Where-Object Name -NotLike '_*' | ForEach-Object {

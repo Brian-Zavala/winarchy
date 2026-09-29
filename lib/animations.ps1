@@ -1,15 +1,19 @@
 # Window animations (experimental): GlazeWM built from its open animation pull request
 # (glzr-io/glazewm#1392), which animates with DWM-thumbnail stand-ins inside the WM.
 # The official GlazeWM stays installed; `winarchy animations on|off` switches between
-# them. Built locally from source (GPL-3.0); nothing is redistributed.
+# them. Setup downloads the build .github/workflows/prebuilt.yml published for the pinned
+# commit (GPL-3.0, released with its complete source); `winarchy animations build`, or a
+# commit with no published build, compiles it on this PC instead.
 
 $AnimDir = Join-Path $Data 'glazewm-animations'
 $AnimSrc = Join-Path $Data 'build\glazewm'
 $SwitchFlag = Join-Path $Data 'generated\glazewm-switch.flag'
 
+# All three of its files ($AnimFiles), or $null: Defender can take any one of them, and a
+# build missing one is put back (Restore-AnimationFiles) rather than run.
 function Get-AnimationBuild {
     $exe = Join-Path $AnimDir 'glazewm.exe'
-    if (-not (Test-Path $exe) -or -not (Test-Path (Join-Path $AnimDir 'cli\glazewm.exe'))) { return $null }
+    foreach ($f in $AnimFiles.Values) { if (-not (Test-Path (Join-Path $AnimDir $f))) { return $null } }
     $info = Read-Json (Join-Path $AnimDir 'build.json')
     [ordered]@{ exe = $exe; cli = Join-Path $AnimDir 'cli\glazewm.exe'; commit = $info.commit; built = $info.built }
 }
@@ -48,6 +52,12 @@ function Install-BuildTools {
     }
     $env:Path = @([Environment]::GetEnvironmentVariable('Path', 'Machine'), [Environment]::GetEnvironmentVariable('Path', 'User'),
         (Join-Path $env:USERPROFILE '.cargo\bin')) -join ';'
+}
+
+# The build of the pinned commit is installed (built here or downloaded).
+function Test-AnimationBuildInPlace {
+    $b = Get-AnimationBuild
+    [bool]($b -and $b.commit -eq (Get-Config).animations.source.commit)
 }
 
 # The build for the pinned commit is on disk already (a reinstall, or Defender took the
@@ -96,15 +106,52 @@ function Invoke-AnimationBuild {
 # build output -> installed name
 $AnimFiles = [ordered]@{ 'glazewm.exe' = 'glazewm.exe'; 'glazewm-watcher.exe' = 'glazewm-watcher.exe'; 'glazewm-cli.exe' = 'cli\glazewm.exe' }
 
+# Its files can't be replaced while it runs.
+function Assert-AnimationBuildStopped {
+    $running = Get-Process glazewm -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$AnimDir*" }
+    if ($running) { throw 'the animation build is running: winarchy animations off, then try again' }
+}
+
 # Copies the build output into place (after a build, or to put back what antivirus removed).
 function Install-AnimationFiles {
     $out = Join-Path $AnimSrc 'target\release'
     if (-not (Test-Path (Join-Path $out 'glazewm.exe'))) { throw 'no animation build to install: winarchy animations build (about 10 minutes)' }
-    # Stop our build if it is running, so its files can be replaced.
-    $running = Get-Process glazewm -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$AnimDir*" }
-    if ($running) { throw 'the animation build is running: winarchy animations off, then try again' }
+    Assert-AnimationBuildStopped
     New-Item -ItemType Directory -Force (Join-Path $AnimDir 'cli') | Out-Null
     foreach ($f in $AnimFiles.GetEnumerator()) { Copy-Item -Force (Join-Path $out $f.Key) (Join-Path $AnimDir $f.Value) }
+}
+
+# The published build of the pinned commit, or $null: none yet, or config.json points
+# animations.source at another commit (that one is built here).
+function Get-AnimationPrebuilt {
+    $pin = Get-Prebuilt 'glazewm-animations'
+    if ($pin -and $pin.commit -eq (Get-Config).animations.source.commit) { $pin }
+}
+
+# Downloads the published build (its zip holds the installed layout: glazewm.exe,
+# glazewm-watcher.exe, cli\glazewm.exe) and puts it in place, no compiler needed.
+function Install-AnimationPrebuilt($pin) {
+    Assert-AnimationBuildStopped
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) "winarchy-glazewm-$([guid]::NewGuid().ToString('N'))"
+    try {
+        Log "downloading the GlazeWM animation build ($($pin.commit.Substring(0, 12)))"
+        Save-PinnedFile $pin.url $pin.sha256 "$tmp.zip"
+        Expand-Archive -LiteralPath "$tmp.zip" -DestinationPath $tmp -Force
+        foreach ($f in $AnimFiles.Values) {
+            if (-not (Test-Path -LiteralPath (Join-Path $tmp $f))) { throw "the download has no $f" }
+        }
+        New-Item -ItemType Directory -Force (Join-Path $AnimDir 'cli') | Out-Null
+        foreach ($f in $AnimFiles.Values) { Copy-Item -Force -LiteralPath (Join-Path $tmp $f) (Join-Path $AnimDir $f) }
+        Write-Json (Join-Path $AnimDir 'build.json') ([ordered]@{ repo = $pin.source; commit = $pin.commit; built = (Get-Date).ToString('s'); prebuilt = $pin.url })
+        Log "animation build ready: $AnimDir (downloaded)"
+    } finally { Remove-Item -LiteralPath $tmp, "$tmp.zip" -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+# Puts back a build that is gone (Defender took it): the one built here, else the download.
+function Restore-AnimationFiles {
+    if (Test-Path (Join-Path $AnimSrc 'target\release\glazewm.exe')) { return Install-AnimationFiles }
+    if ($pin = Get-AnimationPrebuilt) { return Install-AnimationPrebuilt $pin }
+    Install-AnimationFiles
 }
 
 # Defender's behaviour model can quarantine the build (Behavior:Win32/Persistence.A!ml): it
@@ -144,11 +191,20 @@ function Request-AnimationExclusion {
 # helper carries Super+1..0 over admin windows), then switch.
 function Invoke-AnimationSetup {
     if (Test-AnimationExclusionNeeded) { Add-AnimationExclusion }
-    if (Test-AnimationBuildOutput) {
-        if (-not (Get-AnimationBuild)) { Install-AnimationFiles; Log 'animation build installed from the earlier build' }
+    if (Test-AnimationBuildInPlace) {
+        Log 'animation build: already in place'
+    } elseif (Test-AnimationBuildOutput) {
+        Install-AnimationFiles; Log 'animation build installed from the earlier build'
     } else {
-        Install-BuildTools
-        Invoke-AnimationBuild
+        $done = $false
+        if ($pin = Get-AnimationPrebuilt) {
+            try { Install-AnimationPrebuilt $pin; $done = $true }
+            catch { Log "animation build download failed ($($_.Exception.Message)): building it here instead" }
+        }
+        if (-not $done) {
+            Install-BuildTools
+            Invoke-AnimationBuild
+        }
     }
     # Without it animations still work; only the keys over admin windows don't (doctor says so).
     if (-not (Test-GameHelperCurrent)) {
@@ -159,8 +215,9 @@ function Invoke-AnimationSetup {
 
 # What the install says before asking: the good and the bad in plain words, so the choice
 # is an informed one. Only the cost differs between a first build and a restore.
-function Get-AnimationPitch([bool]$ready, [string[]]$tools) {
+function Get-AnimationPitch([bool]$ready, [string[]]$tools, [bool]$prebuilt) {
     $cost = if ($ready) { 'It is already built on this PC, so turning it back on takes a few seconds.' }
+    elseif ($prebuilt) { 'It downloads a ready-made build (a few MB), so it takes a few seconds.' }
     elseif ($tools) {
         $size = if ($tools -match 'Visual C\+\+') { 'several GB' } else { 'a few hundred MB' }
         "It is built on this PC: first it installs $($tools -join ', ') (free, $size), then compiles for about 10 minutes."
@@ -195,10 +252,11 @@ function Invoke-AnimationOffer {
     if ((Get-Config).animations.enabled -and (Get-AnimationBuild)) { return }
     Write-Step 'Window animations (optional, experimental)'
     if ($script:AssumeYes) { Write-Ok 'Skipped (unattended): winarchy animations setup adds them.'; return }
-    $ready = Test-AnimationBuildOutput
-    $tools = if ($ready) { @() } else { @(Get-MissingBuildTools | ForEach-Object name) }
+    $ready = (Test-AnimationBuildOutput) -or (Test-AnimationBuildInPlace)
+    $prebuilt = -not $ready -and [bool](Get-AnimationPrebuilt)
+    $tools = if ($ready -or $prebuilt) { @() } else { @(Get-MissingBuildTools | ForEach-Object name) }
     Write-Host ''
-    foreach ($line in Get-AnimationPitch $ready $tools) {
+    foreach ($line in Get-AnimationPitch $ready $tools $prebuilt) {
         $color = switch -Wildcard ($line) { '  + *' { 'Green' } '  - *' { 'Yellow' } default { 'Gray' } }
         Write-Host "    $line" -ForegroundColor $color
     }
@@ -254,7 +312,7 @@ function Invoke-Animations([string]$action) {
         'setup' { Invoke-AnimationSetup }
         'allow' {
             Add-AnimationExclusion
-            if (-not (Get-AnimationBuild)) { Install-AnimationFiles; Log 'animation build restored' }
+            if (-not (Get-AnimationBuild)) { Restore-AnimationFiles; Log 'animation build restored' }
             Use-Lock { Invoke-Apply }
         }
         'on' {
