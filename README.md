@@ -24,13 +24,17 @@ irm https://raw.githubusercontent.com/Brian-Zavala/winarchy/main/install.ps1 | i
 
 Rather read it before you run it? Good instinct. Here's [install.ps1](install.ps1).
 
+## Uninstall
+
 Changed your mind? One line puts Windows back exactly as it was:
 
 ```powershell
 winarchy uninstall
 ```
 
-Add `-DryRun` to see what it would undo first. See [system snapshots](manual/47-system-snapshots.md).
+Add `-DryRun` to see what it would undo first.
+
+Before it touches anything, it asks whether to keep the apps you installed through Winarchy, and whether to keep your settings: your `config.json`, theme, background, font, templates and branding. Keep them, and the install one-liner above puts them all back next time without asking the setup questions again. See [system snapshots](manual/47-system-snapshots.md).
 
 ## The Winarchy Manual
 
