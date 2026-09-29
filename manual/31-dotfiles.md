@@ -25,7 +25,7 @@ It's JSON, so a `\` in a path is written `\\`. A file with a mistake in it is le
 | `gap` | `10` | Gap between windows and around the edges, in pixels at 100% scaling |
 | `barHeight` | `26` | Height of the top bar, in pixels at 100% scaling. It grows with `textSize` above 12 |
 | `textSize` | `12` | Text size of the bar, its panels and the terminals, in px from 9 to 20. The bar's Display panel sets it, as does `winarchy text-size` |
-| `hideTaskbar` | `true` | Hide the Windows taskbar while GlazeWM runs (it comes back if GlazeWM stops) |
+| `hideTaskbar` | `true` | Hide the Windows taskbar while GlazeWM runs (it comes back if GlazeWM stops). _Trigger > Toggle > Taskbar_, or `winarchy taskbar on\|off\|toggle` |
 | `hideDesktopIcons` | `true` on a new install | Hide the desktop icons (Explorer's "Show desktop icons" off). An existing install keeps its icons; `false` puts back what the PC had |
 | `takeOverWinSpace` | `true` | `Super + Space` opens the Omarchy menu. `false` leaves `Win + Space` to Windows' layout switching; the menu then stays on `Super + Alt + Space`, and the launcher on `Alt + Space` |
 | `launchers` | `true` | Winarchy's app keys (`Super + Return` terminal, `Super + Shift + B` browser, ...). `false` if you use your own launcher script. Either way, a key your own Startup script binds stays yours |
@@ -43,7 +43,7 @@ It's JSON, so a `\` in a path is written `\\`. A file with a mistake in it is le
 | Key | Default | What it does |
 |---|---|---|
 | `apps.terminal` / `browser` / `editor` / `files` | `"auto"` | The programs the launcher keys and menus open. `"auto"` finds Windows Terminal, your default browser, Neovim then VS Code then Notepad, and File Explorer |
-| `apps.agent` | `"auto"` | The coding agent _Trigger > Agent_ and the Herdr layouts start: `claude`, `codex`, `copilot`, `opencode`, `crush`, `cursor-agent`, `grok`, `agy`, `muse`, `omp`, `ori`, `pi`, `hermes` or `openclaw`. `"auto"` means none is chosen yet, as on Omarchy. See [AI](17-ai.md) |
+| `apps.agent` | `"auto"` | The coding agent _Trigger > Agent_ and the Herdr layouts start: `claude`, `codex`, `copilot`, `opencode`, `crush`, `cursor-agent`, `grok`, `agy`, `muse`, `omp`, `ori`, `pi`, `hermes` or `openclaw`. `"auto"` means Claude Code once it's installed, and none before that. See [AI](17-ai.md) |
 
 ### Look
 
@@ -59,7 +59,7 @@ It's JSON, so a `\` in a path is written `\\`. A file with a mistake in it is le
 | `themeTargets.herdr` | `"auto"` | `"auto"` uses the Herdr theme with your Omarchy theme's name (`catppuccin`, `catppuccin-latte`, `tokyo-night`, `dracula`, `nord`, `gruvbox`, `one-dark`, `solarized`, `kanagawa`, `rose-pine`, `vesper`) and otherwise `"terminal"`, which draws Herdr in your terminal's palette, and Winarchy themes the terminal. Name a Herdr theme to pin it, or `false` to keep Herdr on its terminal palette |
 | `screensaver.enabled` | `true` | Omarchy's screensaver, in place of Windows' own (uninstalling restores it) |
 | `screensaver.idleSeconds` | `150` | Idle time before it starts |
-| `animations.enabled` | `false` | Experimental window animations from a GlazeWM build with its animation pull request. The install offers them as its last step; later, `winarchy animations setup` does everything (build tools, the build, a Defender exclusion, switching on), or `winarchy animations build`, then `winarchy animations on`. That build can't have Windows' "UI access", so its keys stop working in front of admin windows unless you run `winarchy game-setup`. It switches itself off if it crashes twice in five minutes, or if Windows Defender removes it (it is unsigned and built on your PC): `winarchy animations allow` excludes its three files from Defender with one admin prompt and puts them back without a rebuild |
+| `animations.enabled` | `false` | Experimental window animations from a GlazeWM build with its animation pull request. The install offers them as its last step; later, `winarchy animations setup` does everything (the build, a Defender exclusion, switching on). Setup downloads a ready-made build from Winarchy's releases (GPL-3.0, published with its source) when there is one for the pinned commit, and otherwise installs the build tools and compiles it. `winarchy animations build` always compiles it on your PC, then `winarchy animations on` switches to it. That build can't have Windows' "UI access", so its keys stop working in front of admin windows unless you run `winarchy game-setup`. It switches itself off if it crashes twice in five minutes, or if Windows Defender removes it (it is unsigned): `winarchy animations allow` excludes its three files from Defender with one admin prompt and puts them back without a rebuild |
 | `animations.moveMs` / `openMs` / `closeMs` | `379` / `410` / `149` | Durations, from Omarchy's `looknfeel.lua` |
 | `animations.workspaceSwitch` | `false` | Slide between workspaces (Omarchy keeps this off too) |
 | `animations.source` | | The GlazeWM repo and commit `winarchy animations build` compiles |
@@ -90,7 +90,7 @@ It's JSON, so a `\` in a path is written `\\`. A file with a mistake in it is le
 | `omarchyRepo` | `"omacom/omarchy"` | The GitHub repo the themes and backgrounds come from |
 | `omarchyTag` | `"v4.0.4"` | The Omarchy release they come from. `winarchy update` moves it to the latest |
 | `zebarClientVersion` | `"3.0.3"` | The version of Zebar's client library the bar loads |
-| `ttfxUrl` | `null` | A download for the screensaver's effects engine, used instead of building it with Rust |
+| `ttfxUrl` | `null` | Your own download for the screensaver's effects engine. By default Winarchy downloads its own pinned build, and builds it with Rust only when that download fails |
 
 ## Beyond config.json
 

@@ -85,8 +85,10 @@
         mute: '\u{F075F}',
         btOn: '\u{F00AF}',
         btOff: '\u{F00B2}',
-        battery: ['\u{F008E}', '\u{F007A}', '\u{F007C}', '\u{F007E}', '\u{F0080}', '\u{F0079}'],
-        charging: '\u{F0084}',
+        // Quattro's omarchy.power: ten steps on battery, ten charging, and full.
+        battery: ['\u{F007A}', '\u{F007B}', '\u{F007C}', '\u{F007D}', '\u{F007E}', '\u{F007F}', '\u{F0080}', '\u{F0081}', '\u{F0082}', '\u{F0079}'],
+        charging: ['\u{F089C}', '\u{F0086}', '\u{F0087}', '\u{F0088}', '\u{F089D}', '\u{F0089}', '\u{F089E}', '\u{F008A}', '\u{F008B}', '\u{F0085}'],
+        batteryFull: '\u{F0085}',
         chevron: '\u{F0141}',       // chevron-left (running-windows flyout)
         monitor: '\u{F0379}',       // Quattro's display widget: monitor, or monitor-multiple
         monitors: '\u{F037A}',
@@ -440,15 +442,21 @@
         $('cpu').title = cpu ? `CPU ${Math.round(cpu.usage)}%` : 'CPU';
       }
 
+      // Quattro's omarchy.power: click = the Power panel (Super+Ctrl+P), right click = the
+      // percentage next to the icon (bar-state.json, as Toggle > Battery Percentage).
+      let batteryPercent = false;
       function renderBattery(bat) {
         const el = $('battery');
         if (!bat || bat.state === 'unknown') { el.classList.add('hidden'); return; }
         el.classList.remove('hidden');
-        setText(el, bat.isCharging
-          ? ICONS.charging
-          : ICONS.battery[Math.min(5, Math.floor(bat.chargePercent / 20))]);
-        el.title = `Battery ${Math.round(bat.chargePercent)}%`;
+        const pct = Math.round(bat.chargePercent);
+        const i = Math.max(0, Math.min(9, Math.floor(pct / 10)));
+        const glyph = bat.state === 'full' ? ICONS.batteryFull : bat.isCharging ? ICONS.charging[i] : ICONS.battery[i];
+        setText(el, batteryPercent ? `${pct}% ${glyph}` : glyph);
+        el.title = `Battery ${pct}%${bat.isCharging ? ' (charging)' : ''}\nClick: power panel · Right-click: ${batteryPercent ? 'hide' : 'show'} the percentage`;
       }
+      $('battery').onclick = () => act('power-panel');
+      $('battery').oncontextmenu = e => { e.preventDefault(); act('battery-percentage'); };
 
       // Each provider's output is a new object when it emits (the group's map too), so only
       // the one that changed is drawn again: the cpu and network ticks every 5 s used to
@@ -644,8 +652,12 @@
           themeVersion = status.themeVersion;
         },
         'indicators.json': ind => { lastInd = ind; renderIndicators(ind); },
-        // Double-click transparency (bar-state.json is written by `menu.ahk bar-clear`).
-        'bar-state.json': barState => document.documentElement.classList.toggle('clear', !!barState?.clear),
+        // Double-click transparency and the battery percentage (bar-state.json is written by
+        // `menu.ahk bar-clear` / `battery-percentage`).
+        'bar-state.json': barState => {
+          document.documentElement.classList.toggle('clear', !!barState?.clear);
+          if (!!barState?.percent !== batteryPercent) { batteryPercent = !!barState?.percent; renderBattery(providers.outputMap.battery); }
+        },
         'windows.json': windows => { lastWindows = windows; renderWindows(windows); },
       }));
       every(3000, async () => {

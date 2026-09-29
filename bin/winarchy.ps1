@@ -40,6 +40,9 @@
   winarchy agent [-Inline] [-Pick] [-Prompt <text>] | agent list
                                           start the default coding agent, unattended
   winarchy default-agent <name>        pick it (claude, codex, copilot, opencode, ...)
+  winarchy agent-make <theme|plugin|app>
+                                          start it asking what to make (the usage panel's tiles)
+  winarchy agent-login <claude|codex>  sign in again, then refresh its limits
   winarchy agent-usage [-Force] [<agent>]
                                           refresh the bar's agent usage (limits, tokens by
                                           day and model); runs by itself every 15 minutes
@@ -50,6 +53,8 @@
                                           this for the focused window, then applies it)
   winarchy weather | update-check      refresh the bar's weather / update indicator
   winarchy bar [on|off|toggle]         the top bar (Super+Shift+Space); off stays off
+  winarchy taskbar [on|off|toggle|status]
+                                          hide the Windows taskbar (on after install)
   winarchy animations [on|off|toggle|setup|build|allow|status]
                                           window animations (experimental GlazeWM build);
                                           setup: tools + build + Defender exclusion + on;
@@ -81,7 +86,9 @@ param(
     # recent scan and only refreshes the limits (what opening the usage panel wants).
     [switch]$Force, [switch]$LimitsOnly,
     # bg: "x,y" on the monitor the background picker covers (it plays the reveal there).
-    [string]$Covered
+    [string]$Covered,
+    # sync: install's own background download (Start-ThemeDownload), not for a person to run.
+    [switch]$Background
 )
 
 $ErrorActionPreference = 'Stop'
@@ -116,7 +123,9 @@ switch ($Verb) {
     'apply' { Use-Lock { Invoke-Apply -MonitorsOnly:$MonitorsOnly -NoRestart:$NoRestart -Resplit:$Resplit } }
     'doctor' { Invoke-Doctor -Fix:$Fix }
     'detect' { $p = Update-Paths; $p | ConvertTo-Json -Depth 4 }
-    'sync' { Use-Lock { Invoke-Sync -Offline:$Offline } }
+    # The background one takes no lock: the install that started it holds that one, and
+    # it only adds files (each lands whole, renamed from .part).
+    'sync' { if ($Background) { Save-OmarchyFiles $ThemeDownloadProgress; New-MissingThumbs } else { Use-Lock { Invoke-Sync -Offline:$Offline } } }
     { $_ -in 'theme', 'theme-set' } {
         if (-not $Arg -or $Arg -eq 'list') {
             Get-ChildItem $Themes -Directory | Where-Object Name -NotLike '_*' | ForEach-Object {
@@ -147,6 +156,7 @@ switch ($Verb) {
     'update-check' { Invoke-UpdateCheck }
     'animations' { Invoke-Animations $Arg }
     'autotile' { Invoke-AutoTile $Arg }
+    'taskbar' { Invoke-Taskbar $Arg }
     'bar' {
         # The running winarchy.ahk owns the bar (Omarchy: Super+Shift+Space).
         $wm = @{ '' = 'bar'; 'toggle' = 'bar'; 'on' = 'bar-on'; 'off' = 'bar-off' }[[string]$Arg]
@@ -199,6 +209,9 @@ switch ($Verb) {
             }
         } else { Invoke-Agent -Inline:$Inline -Pick:$Pick -Prompt $Prompt }
     }
+    # The usage panel's "Make something" tiles and its "Sign in" (lib/agents.ps1).
+    'agent-make' { Invoke-AgentMake $Arg }
+    'agent-login' { Invoke-AgentLogin $Arg }
     # The bar's agent indicator: run every usage collector and rebuild agents.json.
     # winarchy.ahk runs this on a timer; -Force rescans and re-asks for limits now.
     'agent-usage' {
@@ -214,9 +227,12 @@ switch ($Verb) {
         else {
             $key = Set-DefaultAgent $Arg
             Use-Lock { Invoke-Apply -NoRestart }
-            # Omarchy's omarchy-default-agent starts the agent it just chose.
+            # Omarchy's omarchy-default-agent starts the agent it just chose; picked from a
+            # Make something tile, it starts on what the tile asked for.
             # (Set-DefaultAgent already said how to install one that is missing.)
-            if (Test-AgentInstalled $key) { Invoke-Agent }
+            if (Test-AgentInstalled $key) {
+                if ($make = Pop-AgentMakePending) { Invoke-AgentMake $make } else { Invoke-Agent }
+            }
         }
     }
     'config' {

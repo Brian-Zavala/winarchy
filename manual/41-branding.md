@@ -18,4 +18,4 @@ The screensaver starts after 2.5 minutes idle, on every monitor, and never while
 
 The same options are under _Style > About_, for the _About_ screen you get from the Omarchy menu. The file is `%USERPROFILE%\.winarchy\branding\about.txt`, and _Show_ opens the About screen so you can see the change. The About screen is fastfetch, so the art sits next to your PC's details.
 
-Your branding is kept when you uninstall Winarchy and say to keep your settings, and it's back the next time you install.
+Your branding is kept when you uninstall Winarchy (unless you use `-Purge`), and it's back the next time you install.

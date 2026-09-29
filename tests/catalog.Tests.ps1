@@ -203,9 +203,8 @@ Describe 'Your own terminal apps' {
         @(Get-CustomTuis).Count | Should -Be 0
         Should -Invoke Remove-TuiShortcut -ParameterFilter { $item.label -eq 'Music' }
     }
-    It 'is a setting uninstall can keep' {
-        . "$root\lib\uninstall.ps1"
-        $SettingsItems | Should -Contain 'tuis.json'
+    It 'is a setting uninstall keeps (in the data folder, which only -Purge clears)' {
+        Split-Path (Get-CustomTuiFile) | Should -Be $Data
     }
 }
 

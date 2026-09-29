@@ -277,9 +277,21 @@ Describe 'Coding agents' {
         # --yolo belongs to crush's interactive command only; `crush run` never prompts.
         (Get-AgentCommand 'crush' -Prompt 'fix it') | Should -Be @('crush', 'run', 'fix it')
     }
-    It 'chooses no default by itself' {
+    It 'defaults to Claude Code once it is installed' {
         Mock Get-Config { @{ apps = @{ agent = 'auto' } } }
+        Mock Test-AgentInstalled { $name -eq 'claude' }
+        Get-DefaultAgent | Should -Be 'claude'
+    }
+    It 'chooses nothing by itself while Claude Code is missing, so the chooser opens' {
+        Mock Get-Config { @{ apps = @{ agent = 'auto' } } }
+        Mock Test-AgentInstalled { $false }
         Get-DefaultAgent | Should -BeNullOrEmpty
+    }
+    It 'keeps the agent you picked, installed or not' {
+        Mock Get-Config { @{ apps = @{ agent = 'codex' } } }
+        Mock Test-AgentInstalled { $true }
+        Get-DefaultAgent | Should -Be 'codex'
+        Should -Invoke Test-AgentInstalled -Times 0
     }
 }
 

@@ -46,6 +46,23 @@ Describe 'menu.json rows' {
 }
 
 Describe 'the bar' {
+    It 'opens the Power panel from the battery icon, and a desktop keeps the Power menu' {
+        $bar | Should -Match "\$\('battery'\)\.onclick = \(\) => act\('power-panel'\)"
+        $bar | Should -Match "barState\?\.percent"
+        $ahk | Should -Match '(?s)case "power-panel":\s+if HasBattery\(\)\s+OpenPanel\("power", "p", WritePowerState\)\s+else\s+OpenMenu\("power"\)'
+        (Get-Content -Raw (Join-Path $root 'ahk\winarchy.ahk')) | Should -Match '#\^p::[^\n]*power-panel'
+        foreach ($f in 'html', 'css', 'js') { Test-Path (Join-Path $root "zebar\omarchy\power.$f") | Should -BeTrue }
+    }
+    It 'toggles the battery percentage from Toggle, on a laptop only' {
+        $row = $menu.toggle.items | Where-Object label -EQ 'Battery Percentage'
+        $row.action | Should -Be @('battery-percentage')
+        $row.when | Should -Be 'laptop'
+    }
+    It 'keeps both bar switches in bar-state.json when one is flipped' {
+        $ahk | Should -Match 'case "bar-clear": ToggleBarState\("clear"\)'
+        $ahk | Should -Match 'case "battery-percentage": ToggleBarState\("percent"\)'
+        $ahk | Should -Match '\{"clear":[^\n]*,"percent":'
+    }
     It 'toggles transparency on a double-click on empty bar space, through bar-state.json' {
         $bar | Should -Match "addEventListener\('dblclick'"
         $bar | Should -Match "bar-state\.json"
@@ -73,7 +90,7 @@ Describe 'the bar panels' {
         }
     }
     It 'has menu.ahk verbs for everything the panels send' {
-        foreach ($f in 'network', 'audio', 'bluetooth') {
+        foreach ($f in 'network', 'audio', 'bluetooth', 'usage') {
             $js = Get-Content -Raw (Join-Path $root "zebar\omarchy\$f.js")
             foreach ($m in [regex]::Matches($js, "act\('([a-z-]+)'")) { $ahk | Should -Match "case\s[^`n]*`"$($m.Groups[1].Value)`"" -Because "$f.js sends $($m.Groups[1].Value)" }
         }

@@ -2,6 +2,9 @@
 # Mirrors Omarchy's bin/omarchy-theme-set, omarchy-theme-bg-set and omarchy-theme-bg-next.
 
 # --- sync -------------------------------------------------------------------------
+# Install's background download reports here (Save-OmarchyFiles, Wait-ThemeDownload).
+$ThemeDownloadProgress = Join-Path $Generated 'theme-download.json'
+
 function New-Thumb([string]$src, [string]$dst, [int]$Width = 480) {
     Add-Type -AssemblyName PresentationCore, WindowsBase
     $bi = [System.Windows.Media.Imaging.BitmapImage]::new()
@@ -72,55 +75,68 @@ function Get-SyncTarget([string]$path) {
 }
 
 function Invoke-Sync([switch]$Offline) {
-    $cfg = Get-Config
-    $repo = $cfg.omarchyRepo; $tag = (Read-State).omarchyTag ?? $cfg.omarchyTag
     New-Item -ItemType Directory -Force $Themes, $Walls, $Thumbs | Out-Null
-    if (-not $Offline) {
-        try {
-            Log "fetching $repo@$tag file list"
-            $tree = Invoke-RestMethod "https://api.github.com/repos/$repo/git/trees/${tag}?recursive=1" -TimeoutSec 30
-            $want = @($tree.tree | Where-Object { $_.type -eq 'blob' } | ForEach-Object {
-                $dest = Get-SyncTarget $_.path
-                if ($dest) { @{ path = $_.path; size = $_.size; dest = $dest } }
-            })
-            $todo = @($want | Where-Object { -not ((Test-Path $_.dest) -and (Get-Item $_.dest).Length -eq $_.size) })
-            $total = ($todo | Measure-Object size -Sum).Sum
-            if ($todo) { Log ("downloading {0} file(s), {1:N0} MB" -f $todo.Count, ($total / 1MB)) }
-            # 8 at a time: one file after another spends most of its time waiting on each
-            # request (measured: 8 backgrounds in 2.9 s one by one, 0.37 s together).
-            $todo | ForEach-Object { Split-Path $_.dest } | Sort-Object -Unique | ForEach-Object { New-Item -ItemType Directory -Force $_ | Out-Null }
-            $base = "https://raw.githubusercontent.com/$repo/$tag"
-            $n = 0; $i = 0; $bytes = 0
-            $sw = [Diagnostics.Stopwatch]::StartNew()
-            $todo | ForEach-Object -ThrottleLimit 8 -Parallel {
-                $ProgressPreference = 'SilentlyContinue'
-                $f = $_
-                $url = "$using:base/$($f.path)"
-                try {
-                    Invoke-WebRequest $url -OutFile "$($f.dest).part" -TimeoutSec 120
-                    Move-Item -Force "$($f.dest).part" $f.dest
-                    @{ ok = $true; size = $f.size }
-                } catch {
-                    Remove-Item "$($f.dest).part" -ErrorAction SilentlyContinue
-                    @{ ok = $false; size = $f.size; error = "download failed: $url ($($_.Exception.Message))" }
-                }
-            } | ForEach-Object {
-                $i++
-                if ($_.ok) { $n++; $bytes += $_.size } else { Log $_.error }
-                $rate = $bytes / 1MB / [Math]::Max(0.1, $sw.Elapsed.TotalSeconds)
-                Write-UiProgress 'downloading' $i $todo.Count ('{0:N0}/{1:N0} MB  {2:N1} MB/s' -f ($bytes / 1MB), ($total / 1MB), $rate)
-            }
-            Log "downloaded $n new file(s)$(if ($n) { ' in {0:N1} s' -f $sw.Elapsed.TotalSeconds })"
-        } catch { Log "offline or GitHub unavailable, using local files ($($_.Exception.Message))" }
-    }
+    if (-not $Offline) { Save-OmarchyFiles }
     Add-BundledThemes
     # The logo and about text come with the first sync, after install's first apply.
     Initialize-Branding
     Update-Index
 }
 
-# A theme ships with the code (default/themes), so declining or failing the download
-# still leaves one to apply. Only fills in what is missing: a downloaded copy wins.
+# The download half of a sync: what the pinned Omarchy tag has that is missing here, 8 at a
+# time. Offline or GitHub unreachable, it logs that and leaves the local files as they are.
+# $ProgressFile gets {done, count, bytes, total} after each file (install's background
+# download: Wait-ThemeDownload shows it).
+function Save-OmarchyFiles([string]$ProgressFile) {
+    $cfg = Get-Config
+    $repo = $cfg.omarchyRepo; $tag = (Read-State).omarchyTag ?? $cfg.omarchyTag
+    New-Item -ItemType Directory -Force $Themes, $Walls | Out-Null
+    try {
+        Log "fetching $repo@$tag file list"
+        $tree = Invoke-RestMethod "https://api.github.com/repos/$repo/git/trees/${tag}?recursive=1" -TimeoutSec 30
+        $want = @($tree.tree | Where-Object { $_.type -eq 'blob' } | ForEach-Object {
+            $dest = Get-SyncTarget $_.path
+            if ($dest) { @{ path = $_.path; size = $_.size; dest = $dest } }
+        })
+        $todo = @($want | Where-Object { -not ((Test-Path $_.dest) -and (Get-Item $_.dest).Length -eq $_.size) })
+        $total = ($todo | Measure-Object size -Sum).Sum
+        if ($todo) { Log ("downloading {0} file(s), {1:N0} MB" -f $todo.Count, ($total / 1MB)) }
+        # 8 at a time: one file after another spends most of its time waiting on each
+        # request (measured: 8 backgrounds in 2.9 s one by one, 0.37 s together).
+        $todo | ForEach-Object { Split-Path $_.dest } | Sort-Object -Unique | ForEach-Object { New-Item -ItemType Directory -Force $_ | Out-Null }
+        $base = "https://raw.githubusercontent.com/$repo/$tag"
+        $n = 0; $i = 0; $bytes = 0
+        $sw = [Diagnostics.Stopwatch]::StartNew()
+        $todo | ForEach-Object -ThrottleLimit 8 -Parallel {
+            $ProgressPreference = 'SilentlyContinue'
+            $f = $_
+            $url = "$using:base/$($f.path)"
+            try {
+                Invoke-WebRequest $url -OutFile "$($f.dest).part" -TimeoutSec 120
+                Move-Item -Force "$($f.dest).part" $f.dest
+                @{ ok = $true; size = $f.size }
+            } catch {
+                Remove-Item "$($f.dest).part" -ErrorAction SilentlyContinue
+                @{ ok = $false; size = $f.size; error = "download failed: $url ($($_.Exception.Message))" }
+            }
+        } | ForEach-Object {
+            $i++
+            if ($_.ok) { $n++; $bytes += $_.size } else { Log $_.error }
+            $rate = $bytes / 1MB / [Math]::Max(0.1, $sw.Elapsed.TotalSeconds)
+            Write-UiProgress 'downloading' $i $todo.Count ('{0:N0}/{1:N0} MB  {2:N1} MB/s' -f ($bytes / 1MB), ($total / 1MB), $rate)
+            if ($ProgressFile) { Write-ThemeProgress $ProgressFile $i $todo.Count $bytes $total }
+        }
+        Log "downloaded $n new file(s)$(if ($n) { ' in {0:N1} s' -f $sw.Elapsed.TotalSeconds })"
+    } catch { Log "offline or GitHub unavailable, using local files ($($_.Exception.Message))" }
+}
+
+# Written whole each time; a reader that catches it mid-write just skips that poll.
+function Write-ThemeProgress([string]$file, [int]$done, [int]$count, [double]$bytes, [double]$total) {
+    try { [IO.File]::WriteAllText($file, (@{ done = $done; count = $count; bytes = $bytes; total = $total } | ConvertTo-Json -Compress)) } catch {}
+}
+
+# A theme ships with the code (default/themes), so a failed download still leaves one
+# to apply. Only fills in what is missing: a downloaded copy wins.
 function Add-BundledThemes {
     foreach ($dir in Get-ChildItem (Join-Path $Code 'default\themes') -Directory -ErrorAction SilentlyContinue) {
         $dst = Join-Path $Themes $dir.Name
@@ -141,11 +157,9 @@ function Update-Index {
     # Theme previews are the picker's big cover-flow cards, so they are twice the width of the
     # wallpaper thumbs. The width is in the folder name: Update-Thumb only compares timestamps.
     Remove-Item (Join-Path $Thumbs '_themes') -Recurse -Force -ErrorAction SilentlyContinue
-    # Pass one collects the thumbnails that are missing, New-Thumbs makes them all at once,
-    # pass two builds the index (and makes, one by one, any the batch could not).
-    $script:ThumbQueue = [Collections.Generic.List[object]]::new()
-    try { [void](Get-IndexData) } finally { $queue = $script:ThumbQueue; $script:ThumbQueue = $null }
-    New-Thumbs @($queue)
+    # Pass one makes the thumbnails that are missing all at once, pass two builds the index
+    # (and makes, one by one, any the batch could not).
+    New-MissingThumbs
     $script:CloudSkipped = @{}
     try { $data = Get-IndexData } finally { $skipped = $script:CloudSkipped; $script:CloudSkipped = $null }
     foreach ($d in $skipped.Keys) {
@@ -157,6 +171,16 @@ function Update-Index {
     Write-Utf8 (Join-Path $Pack 'index.json') ($index | ConvertTo-Json -Depth 6 -Compress)
     Write-Status (Read-State)
     Log "index: $(@($themeList).Count) themes, $(($groups | ForEach-Object { $_.items.Count } | Measure-Object -Sum).Sum) backgrounds in $($groups.Count) groups"
+}
+
+# Update-Index's first pass on its own: collects the thumbnails that are missing, then
+# New-Thumbs makes them all at once. Install's background download runs it too, so the
+# pickers' thumbnails are ready by the time install gets there.
+function New-MissingThumbs {
+    New-Item -ItemType Directory -Force $Themes, $Thumbs | Out-Null
+    $script:ThumbQueue = [Collections.Generic.List[object]]::new()
+    try { [void](Get-IndexData) } finally { $queue = $script:ThumbQueue; $script:ThumbQueue = $null }
+    New-Thumbs @($queue)
 }
 
 function Get-IndexData {
@@ -269,7 +293,7 @@ function Get-BarPalette($c) {
 function Set-BarTheme($c) {
     $palette = Get-BarPalette $c
     $lines = foreach ($k in $palette.Keys) { "  --${k}: $($palette[$k]);" }
-    Write-Utf8 (Join-Path $Pack 'theme.css') ("/* Generated by winarchy theme-set. */`n:root {`n  color-scheme: $($c.mode);`n$($lines -join "`n")`n}`n")
+    Write-PackFile 'theme.css' ("/* Generated by winarchy theme-set. */`n:root {`n  color-scheme: $($c.mode);`n$($lines -join "`n")`n}`n")
 }
 
 function Set-GlazeTheme($c) {

@@ -107,6 +107,31 @@ $AgentAlias = @{
     'muse-code' = 'muse'; musecode = 'muse'
 }
 
+# How each agent signs in again, the commands the usage collectors' help text names:
+# the usage panel's "Sign in" runs one in a terminal (winarchy agent-login).
+$AgentLogin = [ordered]@{
+    claude = @('claude', 'auth', 'login')
+    codex = @('codex', 'login')
+}
+
+# The usage panel's "Make something" tiles, as on Omarchy's agents panel: each starts the
+# default agent with a starter prompt, in the folder the thing it makes lives in. Omarchy's
+# prompts point at its skill's guides; ours point at agents\make\<kind>.md ({0}).
+$AgentMake = [ordered]@{
+    theme = @{
+        dir = $Themes
+        prompt = "Make me a new Winarchy theme. Ask me what look or inspiration I have in mind, then build it following the guide in {0} and switch to it."
+    }
+    plugin = @{
+        dir = Join-Path $env:USERPROFILE '.glzr\zebar'
+        prompt = "Make me a new Winarchy bar plugin, which on Windows is a Zebar widget pack. Ask me what I'd like it to do, then build it following the guide in {0} and start it."
+    }
+    app = @{
+        dir = Join-Path $Data 'apps'
+        prompt = "Make me a new app for my Winarchy desktop. Ask me what it should do, then build it following the guide in {0} and add it so it shows up in Start and the app launcher."
+    }
+}
+
 function Resolve-AgentName([string]$name) {
     if (-not $name) { return $null }
     $n = $name.Trim().ToLowerInvariant()
@@ -139,18 +164,26 @@ function Get-AgentState {
 # finished list and hands back only a key.
 function Update-AgentList {
     $glyph = [char]::ConvertFromUtf32(0xF06A9)
+    # login: the usage panel offers "Sign in" (winarchy agent-login) for these.
     $agents = @(Get-AgentState | ForEach-Object {
-        [ordered]@{ key = $_.key; label = $_.label; icon = $glyph; installed = $_.installed; current = $_.current }
+        [ordered]@{ key = $_.key; label = $_.label; icon = $glyph; installed = $_.installed; current = $_.current; login = $AgentLogin.Contains($_.key) }
     })
     Write-Json (Join-Path $Pack 'defaults.json') ([ordered]@{ agents = $agents })
     $agents
 }
 
-# Omarchy picks no agent for you, and neither do we: with nothing set the menu leaves
-# every entry unchecked and the launch keybinding opens the chooser.
+# Omarchy picks no agent for you; Winarchy picks Claude Code once it is installed, so the
+# agent key, the Herdr layouts and the agents panel's tiles work from the start. Any agent
+# you pick replaces it. With nothing picked and no Claude Code, the menu leaves every
+# entry unchecked and the launch keybinding opens the chooser.
+$AutoAgent = 'claude'
+
 function Get-DefaultAgent {
     $name = (Get-Config).apps.agent
-    if ($name -eq 'auto') { $name = $null }
+    if (-not $name -or $name -eq 'auto') {
+        if (Test-AgentInstalled $AutoAgent) { return $AutoAgent }
+        return $null
+    }
     Resolve-AgentName $name
 }
 
@@ -180,9 +213,9 @@ function Get-AgentCommand([string]$name, [string]$Prompt) {
 }
 
 # Launch the default agent. -Inline runs it here (this is what a Herdr pane wants);
-# otherwise it gets its own terminal window. -Pick opens the chooser when no default is
-# set, because a keypress that opens nothing explains nothing.
-function Invoke-Agent([switch]$Inline, [switch]$Pick, [string]$Prompt) {
+# otherwise it gets its own terminal window, started in -Dir if given. -Pick opens the
+# chooser when no default is set, because a keypress that opens nothing explains nothing.
+function Invoke-Agent([switch]$Inline, [switch]$Pick, [string]$Prompt, [string]$Dir) {
     $key = Get-DefaultAgent
     if (-not $key) {
         if ($Pick) { Open-MenuRoute 'agent'; return }
@@ -194,12 +227,57 @@ function Invoke-Agent([switch]$Inline, [switch]$Pick, [string]$Prompt) {
     $cmd = @(Get-AgentCommand $key -Prompt $Prompt)
     if ($Inline) {
         $rest = @($cmd | Select-Object -Skip 1)
-        & $cmd[0] @rest
+        if ($Dir) { Push-Location -LiteralPath $Dir }
+        try { & $cmd[0] @rest } finally { if ($Dir) { Pop-Location } }
         return
     }
     # Omarchy gives agent windows one app-id so window rules can single them out; our
     # equivalent is the dedicated Windows Terminal profile that apply writes.
-    Start-AgentTerminal $cmd
+    Start-AgentTerminal $cmd -Dir $Dir
+}
+
+# A "Make something" tile: the default agent, asked to make a theme, plugin or app. With
+# no default yet the chooser opens instead, and the tile is remembered: the agent picked
+# there starts on it (winarchy default-agent, Pop-AgentMakePending).
+$AgentMakePending = Join-Path $Data 'agent-make-pending.json'
+
+function Invoke-AgentMake([string]$kind) {
+    $key = if ($kind) { $kind.ToLowerInvariant() }
+    if (-not $key -or -not $AgentMake.Contains($key)) { throw "usage: winarchy agent-make <$($AgentMake.Keys -join '|')>" }
+    $m = $AgentMake[$key]
+    New-Item -ItemType Directory -Force $m.dir | Out-Null
+    if (-not (Get-DefaultAgent)) { Write-Json $AgentMakePending ([ordered]@{ kind = $key; at = (Get-Date).ToUniversalTime().ToString('o') }) }
+    $guide = Join-Path $Code "agents\make\$key.md"
+    Invoke-Agent -Pick -Prompt ($m.prompt -f $guide) -Dir $m.dir
+}
+
+# The tile that opened the chooser, once: a recent one (15 minutes), else nothing.
+function Pop-AgentMakePending {
+    $p = Read-Json $AgentMakePending
+    Remove-Item -LiteralPath $AgentMakePending -Force -ErrorAction SilentlyContinue
+    if (-not $p -or -not $AgentMake.Contains([string]$p.kind)) { return $null }
+    $at = [DateTimeOffset]::MinValue
+    if (-not [DateTimeOffset]::TryParse([string]$p.at, $Invariant, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$at)) { return $null }
+    if (([DateTimeOffset]::UtcNow - $at).TotalMinutes -gt 15) { return $null }
+    [string]$p.kind
+}
+
+# The usage panel's "Sign in": the agent's own login, here in the terminal, then fresh
+# limits, so the panel (which polls agents.json) drops its sign-in warning.
+function Invoke-AgentLogin([string]$id) {
+    $key = if ($id) { $id.ToLowerInvariant() }
+    if (-not $key -or -not $AgentLogin.Contains($key)) { throw "usage: winarchy agent-login <$($AgentLogin.Keys -join '|')>" }
+    $cmd = @($AgentLogin[$key])
+    if (-not (Test-AgentInstalled $key)) {
+        throw "$($AgentTable[$key].label) is not installed. Install it with: $($AgentTable[$key].hint)"
+    }
+    $rest = @($cmd | Select-Object -Skip 1)
+    $global:LASTEXITCODE = 0
+    & $cmd[0] @rest
+    # A cancelled or failed sign-in leaves the old limits (and the warning) as they were.
+    if ($LASTEXITCODE) { throw "$($AgentTable[$key].label) sign-in did not finish (exit $LASTEXITCODE)" }
+    [void](Update-AgentUsage -Force -Only $key -NoRetry)
+    "$($AgentTable[$key].label): signed in, limits refreshed"
 }
 
 # The menu widget is opened through menu.ahk, which is what the bar and the keybindings
@@ -219,16 +297,30 @@ function Join-ProcessArgs([string[]]$items) {
     }) -join ' '
 }
 
-function Start-AgentTerminal([string[]]$cmd) {
+# The command as one line of PowerShell for pwsh -Command. Anything but a plain word goes
+# in single quotes, where PowerShell expands nothing ($, backticks and " are literal), so a
+# prompt arrives exactly as written; a quoted exe needs the call operator.
+function ConvertTo-PwshCommandLine([string[]]$cmd) {
+    $quoted = @($cmd | ForEach-Object {
+        if ($_ -match '^[\w\-.\\/:=+]+$') { $_ }
+        else { "'" + [Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($_) + "'" }
+    })
+    if ($quoted.Count -and $quoted[0] -ne $cmd[0]) { $quoted[0] = "& $($quoted[0])" }
+    $quoted -join ' '
+}
+
+function Start-AgentTerminal([string[]]$cmd, [string]$Dir) {
     $p = Get-Paths
-    $line = ($cmd | ForEach-Object { if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ } }) -join ' '
+    $line = ConvertTo-PwshCommandLine $cmd
     if ($p.wt) {
         # The profile supplies the look and the fixed "Omarchy Agent" title that window
         # rules can match, so no --title here: that would undo it. wt splits tabs on ;
         # even inside quotes, so those are escaped.
-        Start-Process $p.wt -ArgumentList (Join-ProcessArgs @('-w', 'new', '-p', 'Omarchy Agent', ($p.pwsh ?? 'pwsh'), '-NoExit', '-NoLogo', '-Command', ($line -replace ';', '\;')))
+        $where = if ($Dir) { @('-d', $Dir) } else { @() }
+        Start-Process $p.wt -ArgumentList (Join-ProcessArgs (@('-w', 'new', '-p', 'Omarchy Agent') + $where + @(($p.pwsh ?? 'pwsh'), '-NoExit', '-NoLogo', '-Command', ($line -replace ';', '\;'))))
     } else {
-        Start-Process ($p.pwsh ?? 'pwsh') -ArgumentList (Join-ProcessArgs @('-NoExit', '-NoProfile', '-Command', $line))
+        $where = if ($Dir) { @{ WorkingDirectory = $Dir } } else { @{} }
+        Start-Process ($p.pwsh ?? 'pwsh') -ArgumentList (Join-ProcessArgs @('-NoExit', '-NoProfile', '-Command', $line)) @where
     }
 }
 

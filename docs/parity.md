@@ -17,8 +17,10 @@ meaning. `default/upstream.json` records the upstream commit last reviewed.
 | xcompose (CapsLock emoji, em dash, name, email) | `ahk/lib/compose.ahk` ("compose"; on for new installs) |
 | Capture keys (Super + Print color picker, Super + Ctrl + Print text) | "captureKeys": "omarchy" for new installs; installs from before keep their own layout |
 | Reminders, share, transcode, agent, Herdr keys, fullscreen desktop, laptop display / mirror, media keys | the same keys (`ahk/winarchy.ahk`) |
-| Power profiles (Super + Ctrl + P) | _Setup > Power_: Windows' power modes |
+| Power panel and profiles (Super + Ctrl + P) | the bar's battery icon opens the Power panel (`zebar/omarchy/power.*`, `ahk/lib/power.ahk`): battery stats and Windows' power modes; _Setup > Power_ and a desktop's Super + Ctrl + P keep the menu |
 | Media module in the bar | the bar's media module (Zebar's media provider) |
+| No default coding agent until you pick one | Claude Code, once it is installed; picking another replaces it (`apps.agent`) |
+| Agents panel: every subscription's limits, tokens today, Use / sign in, _Make something_ (theme, plugin, app) | the bar's agent panel (`zebar/omarchy/usage.*`); _Plugin_ makes a Zebar widget pack, which follows the theme and font; the tiles' prompts point at `agents/make/*.md` instead of Omarchy's skill |
 
 Every one of these keys yields to a key your own AutoHotkey script in the Startup folder
 already binds (`lib/keys.ps1`, `BindUnlessUser`).
@@ -49,6 +51,13 @@ already binds (`lib/keys.ps1`, `BindUnlessUser`).
 | xcompose's locale sequences (`include "%L"`: ' e = é, ...) | Windows' own keyboard layouts (US-International) do that |
 | Keyboard backlight and touchpad keys | vendor tools own them on Windows |
 
+## Not yet
+
+- Several accounts for one agent (Omarchy's agent account switching: the panel's `+`,
+  Primary / Secondary, switching when one runs out) is on an Omarchy branch that isn't
+  released yet. The panel's `+` picks the default agent until it is.
+- Codex's free resets: nothing Winarchy reads reports them.
+
 ## Limits
 
 - Winarchy's AutoHotkey keys don't reach a window that runs as administrator (Windows'
@@ -61,7 +70,7 @@ already binds (`lib/keys.ps1`, `BindUnlessUser`).
 ## Not done yet
 
 - World clock: no globe or weather, and no drag to reorder.
-- Toggle > Battery Percentage and 1-Window Ratio.
+- Toggle > 1-Window Ratio.
 - Install > AI: Dictation, Grok Bot, Hermes Desktop and T3 Code have no winget or
   Store package. Agents whose install hint could not be confirmed (Antigravity, Ori, Pi,
   Oh My Pi, Crush, Cursor CLI, Muse, Hermes) stay under Setup > Defaults > Agent only.

@@ -32,6 +32,8 @@ Everything the Omarchy menu does is also a `winarchy` command, for scripts or wh
 | `winarchy agent [-Inline] [-Prompt <text>]` | Start your default coding agent; `winarchy agent list` shows them all |
 | `winarchy default-agent <name>` | Choose the default agent, and start it |
 | `winarchy agent-usage [-Force]` | Refresh the bar's agent usage |
+| `winarchy agent-make theme\|plugin\|app` | Start your default agent, asking it to make a theme, a bar plugin or an app (the usage panel's _Make something_ tiles) |
+| `winarchy agent-login claude\|codex` | Sign in to Claude Code or Codex again, then refresh its limits |
 | `winarchy herdr status` | Where Herdr is, its config and its theme |
 | `winarchy herdr layout\|square\|multi\|swarm` | The layouts behind `hdl`, `hds`, `hdlm` and `hsl` (see [shell functions](20-shell-functions.md)) |
 
@@ -40,6 +42,7 @@ Everything the Omarchy menu does is also a `winarchy` command, for scripts or wh
 | Command | What it does |
 |---|---|
 | `winarchy autotile on\|off\|toggle\|status` | Hyprland-style auto-tiling |
+| `winarchy taskbar on\|off\|toggle\|status` | Hide the Windows taskbar, or bring it back |
 | `winarchy animations on\|off\|toggle\|build\|status` | Experimental window animations |
 | `winarchy game-add <name>` | Treat a program as a game |
 | `winarchy game-setup [remove]` | The helper for games that run as administrator (see [gaming](26-gaming.md)) |

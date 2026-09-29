@@ -1,4 +1,4 @@
-// The bar's panels (audio, network, Bluetooth, display, Tailscale, agent usage, calendar,
+// The bar's panels (audio, network, Bluetooth, display, Tailscale, power, agent usage, calendar,
 // world clock) outlive a close, as the menu does: they fade and hide, and menu.ahk shows the
 // hidden window again for the next open on that monitor (lib\widgets.ahk). Starting a new
 // webview for every click was most of the wait between the click and the panel.

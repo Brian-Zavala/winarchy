@@ -81,7 +81,7 @@ UTILITIES
   Super + Ctrl + B              Bluetooth panel (devices, on/off; again: close)
   Super + Ctrl + W              Network settings
   Super + Ctrl + D              Display panel (brightness, scale, text size; again: close)
-  Super + Ctrl + P              Power settings
+  Super + Ctrl + P              Power panel (battery, power mode; again: close)
   Super + Ctrl + Alt + T / B / W  Show time / battery / weather
   Super + Ctrl + Alt + D        Calendar
   Super + Ctrl + Alt + E        World clock

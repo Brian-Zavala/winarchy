@@ -22,7 +22,7 @@ Set `"units": "C"` in your settings. By default it follows your region. The bar 
 
 ### Can I keep the Windows taskbar?
 
-Yes: `"hideTaskbar": false` in your settings. The installer asks too.
+Yes: _Trigger > Toggle > Taskbar_ in the Omarchy menu, or `"hideTaskbar": false` in your settings.
 
 ### Can I use my own AutoHotkey script for app keys?
 

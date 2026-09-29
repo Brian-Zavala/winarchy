@@ -81,10 +81,10 @@ Describe 'Bar height follows the text size' {
 }
 
 Describe 'Zebar pack' {
-    It 'has the Display and Tailscale panels, one preset per monitor position' {
+    It 'has the Display, Tailscale and Power panels, one preset per monitor position' {
         $cfg = @{ barHeight = 26 }
         $z = Get-ZpackJson @{ ahk = 'C:\ahk.exe' } | ConvertFrom-Json
-        foreach ($w in @(@{ name = 'display'; p = 'd' }, @{ name = 'tailscale'; p = 't' })) {
+        foreach ($w in @(@{ name = 'display'; p = 'd' }, @{ name = 'tailscale'; p = 't' }, @{ name = 'power'; p = 'p' })) {
             $widget = $z.widgets | Where-Object name -EQ $w.name
             $widget | Should -Not -BeNullOrEmpty
             $widget.htmlPath | Should -Be "./$($w.name).html"
@@ -98,7 +98,7 @@ Describe 'Zebar pack' {
     It 'keeps every panel loaded between opens (panel.js), with the files it reads' {
         $cfg = @{ barHeight = 26 }
         $z = Get-ZpackJson @{ ahk = 'C:\ahk.exe' } | ConvertFrom-Json
-        $panels = [ordered]@{ audio = 'a'; bluetooth = 'b'; network = 'n'; display = 'd'; tailscale = 't'; usage = 'u'; calendar = 'c'; worldclock = 'w' }
+        $panels = [ordered]@{ audio = 'a'; bluetooth = 'b'; network = 'n'; display = 'd'; tailscale = 't'; power = 'p'; usage = 'u'; calendar = 'c'; worldclock = 'w' }
         foreach ($name in $panels.Keys) {
             $widget = $z.widgets | Where-Object name -EQ $name
             @($widget.presets).Count | Should -Be 8 -Because $name
@@ -127,13 +127,15 @@ Describe 'Bar icons' {
         $bar | Should -Match "classList\.toggle\('hidden', !ts\?\.installed\)"
     }
     It 'sends the icons to menu.ahk verbs that exist and do not wait for the menu' {
-        foreach ($verb in 'display-panel', 'brightness-step', 'tailscale-panel', 'tailscale') {
+        foreach ($verb in 'display-panel', 'brightness-step', 'tailscale-panel', 'tailscale', 'power-panel', 'battery-percentage') {
             $bar | Should -Match "act\('$verb'"
             $menuAhk | Should -Match "(?m)^\s+case `"$verb`":"
         }
-        foreach ($verb in 'display-panel', 'display-state', 'brightness', 'scale', 'monitor', 'text-size', 'tailscale', 'copy') {
+        foreach ($verb in 'display-panel', 'display-state', 'brightness', 'scale', 'monitor', 'text-size', 'tailscale', 'power-panel', 'power-state', 'battery-percentage', 'copy') {
             $menuAhk | Should -Match "\|$verb[|)]"
         }
+        # The Power panel sets the power mode quietly; the Power menu's rows still show the OSD.
+        $menuAhk | Should -Match 'case "power-mode": SetPowerMode\(arg, [^\n]*"panel"\)'
         # The menu's own Trigger > Hardware "display" verb (laptop / mirror) is unchanged.
         $menuAhk | Should -Match '(?m)^\s+case "display": ToggleDisplay\(arg\)'
     }

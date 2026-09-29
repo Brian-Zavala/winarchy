@@ -17,14 +17,14 @@ From left to right:
 | Weather | The weather details | |
 | Updates, when there are any | Update everything | |
 | The chevron | Running windows and the tray | |
-| The AI agent icon | The agent usage panel (see [AI](17-ai.md)) | Start your coding agent |
+| The AI agent icon | The agents panel: limits, tokens today, and tiles that have your agent make a theme, plugin or app (see [AI](17-ai.md)) | Start your coding agent |
 | Bluetooth | The Bluetooth panel (`Super + Ctrl + B`): the radio switch and your paired devices | |
 | Tailscale, once installed | The Tailscale panel | Turn it on or off; middle-click refreshes |
 | Network | The network panel (`Super + Ctrl + W`): speed test, DNS provider, Wi-Fi networks | Windows' network settings |
 | Audio | The audio panel (`Super + Ctrl + A`): master volume, output, microphone and a slider per app | Mute; scroll for the volume |
 | Display | The Display panel | Scroll for the brightness |
 | CPU | btop (`Super + Ctrl + T`) | Task Manager |
-| Battery, on a laptop | | |
+| Battery, on a laptop | The Power panel (`Super + Ctrl + P`) | Show or hide the percentage |
 
 ### Indicators
 
@@ -40,6 +40,16 @@ The monitor icon opens Quattro's Display panel for the monitor you clicked on:
 - **Displays**, with more than one monitor: click one to turn it off or back on. The last monitor that is on stays on.
 
 `j` / `k` move between the sections, `h` / `l` adjust, `Enter` picks, and `Esc` closes it. See [monitors](33-monitors.md).
+
+### Power
+
+On a laptop, the battery icon opens Quattro's Power panel:
+
+- **Battery**: the charge, as a number and a bar that breathes while it charges, and what the battery is up to.
+- **Battery size** and **charge cycles**, where the battery reports them, then the **time left** on battery or the **time to full** while charging, and how fast it's draining or charging in watts. Plugged in and holding below full (a battery-care charge limit from your laptop's maker), it says so instead.
+- **Power profile**: Power-saver, Balanced or Performance, which are Windows' power modes (_Settings > System > Power_).
+
+Arrow keys or `h` / `l` move between the profiles, `Enter` picks, and `Esc` closes. Right-click the icon, or _Trigger > Toggle > Battery Percentage_, to show the percentage next to it. On a desktop, `Super + Ctrl + P` opens the Power menu instead.
 
 ### Tailscale
 

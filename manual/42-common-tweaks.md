@@ -18,6 +18,8 @@ Winarchy's default design is one of square corners, like Omarchy's. To soften th
 
 ### Keep the Windows taskbar
 
+_Trigger > Toggle > Taskbar_ in the Omarchy menu, or `winarchy taskbar off`. Both set this in your settings:
+
 ```json
 { "hideTaskbar": false }
 ```

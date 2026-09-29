@@ -19,11 +19,14 @@ Installed separately (not bundled), each under its own license:
 - GlazeWM and Zebar (https://github.com/glzr-io), GPL-3.0 - installed with winget. The Zebar
   client library (zebar.mjs) is downloaded at install time from the npm package (esm.sh's
   bundle, or jsDelivr's build and its dependencies when esm.sh is unreachable).
-  The optional window-animation build (`winarchy animations build`) is compiled on the user's
-  PC from the GPL-3.0 source of glzr-io/glazewm pull request #1392 (florensm/glazewm, pinned
-  commit); no binaries are distributed.
+  The optional window-animation build is the GPL-3.0 source of glzr-io/glazewm pull request
+  #1392 (florensm/glazewm, pinned commit in default/prebuilt.json), built by
+  .github/workflows/prebuilt.yml and published as a release of this repository together with
+  its complete corresponding source (a source archive attached to the same release) and its
+  license; `winarchy animations build` compiles the same source on the user's PC instead.
 - Flow Launcher (MIT), AutoHotkey (GPL-2.0), PowerShell (MIT), fastfetch (MIT), btop4win (Apache-2.0).
-- ttfx (https://github.com/omacom/ttfx), MIT - built or downloaded at install time.
+- ttfx (https://github.com/omacom/ttfx), MIT - downloaded at install time from this repository's
+  releases (built by .github/workflows/prebuilt.yml, with its license), or built with Rust.
 - Herdr (https://herdr.dev) - optional; installed at the user's choice from herdr.dev's own
   installer, not bundled.
 - Python (https://www.python.org), PSF License - installed with winget for the agent usage
