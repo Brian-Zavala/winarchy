@@ -23,7 +23,8 @@ BeforeAll {
     function Get-Paths { @{} }
     function Get-Process {}
     function Stop-Process {}
-    function winget { $script:WingetCalls.Add(($args -join ' ')) }
+    function winget { $script:WingetCalls.Add(($args -join ' ')); $global:LASTEXITCODE = [int]$script:WingetExit }
+    function Invoke-Elevated([string]$Script) { $script:ElevatedCalls.Add($Script); if ($script:ElevatedFails) { throw 'the elevated step failed (exit 1603)' } }
     function Restore-JournalEntry($e, $dir) { $script:Restored.Add("$($e.kind)|$($e.id)$($e.dir)") }
     # Real reminders on this PC are the person's: the tests see only these.
     function Get-ScheduledTask { @($script:FakeTasks) }
@@ -61,6 +62,9 @@ BeforeAll {
 Describe 'Uninstall keeps what the person chooses' {
 BeforeEach {
     $script:WingetCalls = [Collections.Generic.List[string]]::new()
+    $script:ElevatedCalls = [Collections.Generic.List[string]]::new()
+    $script:WingetExit = 0
+    $script:ElevatedFails = $false
     $script:Restored = [Collections.Generic.List[string]]::new()
     $script:Unregistered = [Collections.Generic.List[string]]::new()
     $script:FakeTasks = @()
@@ -130,6 +134,28 @@ Describe 'Uninstall' {
         function Start-Process {}
         Invoke-Uninstall -Yes -Purge 6>$null
         (Get-ChildItem $Data -Force).Name | Sort-Object | Should -Be @('backup', 'branding', 'config.json', 'glazewm.yaml.tpl', 'restore.json', 'state.json')
+    }
+    It 'removes every version of a package (GlazeWM and Zebar share one id)' {
+        New-TestData; New-TestJournal $journal
+        Invoke-Uninstall -Yes 6>$null
+        @($script:WingetCalls | Where-Object { $_ -match 'glzr-io\.glazewm' }) | Should -Match '--all-versions'
+        $script:ElevatedCalls.Count | Should -Be 0
+    }
+    It 'retries a failed winget removal elevated, once, and finishes clean if that works' {
+        New-TestData; New-TestJournal $journal
+        $script:WingetExit = 1603
+        $out = Invoke-Uninstall -Yes 6>&1 | Out-String
+        $script:ElevatedCalls.Count | Should -BeGreaterThan 0
+        $script:ElevatedCalls[0] | Should -Match 'winget uninstall .*--all-versions'
+        $out | Should -Not -Match 'step\(s\) failed'
+    }
+    It 'says so, instead of "Done.", when the elevated retry fails too' {
+        New-TestData; New-TestJournal $journal
+        $script:WingetExit = 1603; $script:ElevatedFails = $true
+        $out = Invoke-Uninstall -Yes 3>$null 6>&1 | Out-String
+        $out | Should -Match 'step\(s\) failed'
+        $out | Should -Match 'glzr-io\.glazewm'
+        $out | Should -Not -Match 'Done\.'
     }
     It '-DryRun changes nothing' {
         New-TestData; New-TestJournal $journal

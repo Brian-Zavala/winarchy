@@ -17,7 +17,9 @@ $repo = if ($env:WINARCHY_REPO) { $env:WINARCHY_REPO } else { 'Brian-Zavala/wina
 $ref = if ($env:WINARCHY_REF) { $env:WINARCHY_REF } else { 'main' }
 $dest = Join-Path $env:LOCALAPPDATA 'winarchy'
 # Piped into iex this script gets no arguments, so -Yes can only arrive this way.
-$yes = if ($env:WINARCHY_YES) { @('-Yes') } else { @() }
+# @(...) around the if: a one-item array would otherwise unroll to the string '-Yes', and
+# splatting a string passes it one character at a time.
+$yes = @(if ($env:WINARCHY_YES) { '-Yes' })
 # Public repo over HTTPS: a git credential prompt would only ever be a hang.
 $env:GIT_TERMINAL_PROMPT = '0'
 $env:GCM_INTERACTIVE = 'never'
@@ -64,7 +66,8 @@ function Remove-StaleFiles([string[]]$keep) {
     }
 }
 $hasGit = [bool](Get-Command git -ErrorAction SilentlyContinue)
-$hasFiles = (Test-Path $dest) -and @(Get-ChildItem -Force $dest -ErrorAction SilentlyContinue).Count -gt 0
+# Files, not folders: an empty leftover folder (an uninstall that a program held open) is not a copy.
+$hasFiles = (Test-Path $dest) -and @(Get-ChildItem -Force -Recurse -File $dest -ErrorAction SilentlyContinue).Count -gt 0
 if (Test-Path (Join-Path $dest '.git')) {
     Write-Host "==> Updating $dest"
     git -C $dest pull --ff-only | Out-Host

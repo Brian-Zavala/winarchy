@@ -33,6 +33,20 @@ function Read-KeepApps($apps) {
     @($apps | Where-Object { Read-YesNo "Keep $($_.label)?" $true })
 }
 
+# One winget package out. --all-versions because packages can share an id (GlazeWM and Zebar
+# are both glzr-io.glazewm), which plain `winget uninstall` refuses as "multiple versions".
+# Machine-wide MSI installs need admin: when the normal try fails, one UAC prompt retries it
+# elevated, and if that fails too this throws so the run says so instead of ending "Done.".
+function Remove-WingetApp([string]$Id) {
+    $args1 = '-e', '--id', $Id, '--all-versions', '--silent', '--accept-source-agreements', '--disable-interactivity'
+    $global:LASTEXITCODE = 0
+    winget uninstall @args1 | Out-Host
+    if (-not $LASTEXITCODE) { return }
+    Write-Host "  winget could not remove $Id without admin rights; asking Windows for permission (UAC)"
+    $global:LASTEXITCODE = 0
+    Invoke-Elevated "winget uninstall $($args1 -join ' ')"
+}
+
 function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [switch]$Yes) {
     $script:AssumeYes = $Yes -or [bool]$env:WINARCHY_YES
     $dir = Get-JournalDir
@@ -50,11 +64,12 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
     $keepSettings = Read-YesNo 'Keep your settings (theme, background, font, config.json, your own templates) so reinstalling winarchy puts them back?' $true
     Write-Host ''
 
+    $script:UninstallFailures = [Collections.Generic.List[string]]::new()
     $step = {
         param([string]$msg, [scriptblock]$action)
         if ($DryRun) { Write-Host "[dry-run] $msg" -ForegroundColor Yellow; return }
         Write-Host "==> $msg" -ForegroundColor Cyan
-        try { & $action } catch { Write-Warning "  failed: $($_.Exception.Message)" }
+        try { & $action } catch { $script:UninstallFailures.Add("$msg ($($_.Exception.Message))"); Write-Warning "  failed: $($_.Exception.Message)" }
     }
     $p = Get-Paths
 
@@ -120,7 +135,7 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
         if ($e.kind -eq 'webapp') { & $step "Remove web app $($e.label)" { Restore-JournalEntry $e $dir }; continue }
         if ($e.kind -eq 'port') { & $step "Remove $($e.label)" { Restore-JournalEntry $e $dir }; continue }
         if ($e.preinstalled) { Write-Host "  keeping $($e.id) (it was installed before winarchy)"; continue }
-        & $step "winget uninstall $($e.id)" { winget uninstall -e --id $e.id --silent --accept-source-agreements | Out-Host }
+        & $step "winget uninstall $($e.id)" { Remove-WingetApp $e.id }
     }
     if ($KeepApps) { Write-Host '  -KeepApps: GlazeWM, Flow Launcher and the rest stay installed (just not started).' }
 
@@ -155,15 +170,26 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
     if ($Purge) {
         $spare = @('backup') + $(if ($keepSettings) { $SettingsItems })
         & $step "Delete downloaded themes/backgrounds$(if (-not $keepSettings) { ' and settings' }) ($Data, keeping $($spare -join ', '))" {
-            Get-ChildItem $Data -Force | Where-Object Name -notin $spare | Remove-Item -Recurse -Force
+            Get-ChildItem $Data -Force | Where-Object Name -notin $spare | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+            # A terminal that loaded winarchy's compiled helpers keeps those files open. They are
+            # only a cache the next install rebuilds, so say so rather than fail the run.
+            $left = @(Get-ChildItem $Data -Force | Where-Object Name -notin $spare | ForEach-Object { if ($_.PSIsContainer) { Get-ChildItem $_.FullName -Recurse -File -Force } else { $_ } })
+            if ($left) { Write-Host "  $($left.Count) file(s) under $Data are in use by a program (close your other PowerShell windows, then delete the folder); a reinstall rebuilds them." }
         }
         & $step "Delete the winarchy code ($Code)" {
-            Start-Process cmd.exe -ArgumentList "/c timeout /t 3 >nul & rmdir /s /q `"$Code`"" -WindowStyle Hidden
+            # This shell must not sit inside the folder it deletes. The helper retries for a
+            # while: an editor or terminal that had the folder open lets go when it closes.
+            Set-Location $env:USERPROFILE
+            $rm = "for /l %i in (1,1,15) do @(rmdir /s /q `"$Code`" 2>nul & if not exist `"$Code`" exit /b 0 & timeout /t 2 /nobreak >nul)"
+            Start-Process cmd.exe -ArgumentList "/c $rm" -WindowStyle Hidden
         }
     } else {
         Write-Host "`nKept: $Data (themes, backgrounds, backups) and $Code. 'winarchy uninstall -Purge' removes them."
     }
     if ($keptApps) { Write-Host "Kept your apps: $(@($keptApps.label) -join ', ')." }
     if ($keepSettings) { Write-Host "Kept your settings in $Data. Reinstall any time: they are applied again automatically." }
-    Write-Host 'Done.' -ForegroundColor Green
+    if ($script:UninstallFailures.Count) {
+        Write-Host "Finished, but $($script:UninstallFailures.Count) step(s) failed:" -ForegroundColor Yellow
+        $script:UninstallFailures | ForEach-Object { Write-Host "  - $_" -ForegroundColor Yellow }
+    } else { Write-Host 'Done.' -ForegroundColor Green }
 }
