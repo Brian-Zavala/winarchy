@@ -72,7 +72,7 @@ function close(delay = 0, fade = 120) {
   skipSwap();
   setTimeout(() => {
     document.body.classList.add('closing');
-    setTimeout(hide, calm.matches ? 0 : fade);
+    setTimeout(hide, calm.matches || !document.body.matches('.walls, .landing') ? 0 : fade);
   }, delay);
 }
 async function hide() {
@@ -282,7 +282,9 @@ async function go(name, push = true) {
     if (name === 'background') setupGroups();
     render(true);
   };
-  if (first) enter(); else swap(enter, push ? 'forward' : 'back');
+  // Omarchy's menu doesn't animate between lists: only pickers slide in and out.
+  const picker = r => r === 'background' || r === 'theme';
+  if (first || !(picker(route) || picker(name))) enter(); else swap(enter, push ? 'forward' : 'back');
 }
 
 function back() {
@@ -501,7 +503,7 @@ function renderList(entry) {
   rowOf = rows.map(r => (r.classList.contains('row') ? r : null));   // sections aren't selectable
   list.replaceChildren(el('div', 'glider'), ...rows);
   highlight(entry);
-  if (entry) stagger(rows.slice(0, 14), [{ opacity: 0, translate: '-8px 0' }, { opacity: 1, translate: '0 0' }], 16);
+  if (entry && isPicker()) stagger(rows.slice(0, 14), [{ opacity: 0, translate: '-8px 0' }, { opacity: 1, translate: '0 0' }], 16);
 }
 
 // ---- background picker: tabs + grid, and the wallpaper behind it all
@@ -509,6 +511,10 @@ function renderTabs() {
   const accent = id => (index?.themes ?? []).find(t => t.name === id)?.palette?.accent;
   const ink = el('div', 'glider');
   ink.dataset.axis = 'x';
+  // Underline, tile border and active tab take the highlighted theme's accent.
+  const cur = accent(groups[tab]?.id);
+  if (cur) $('card').style.setProperty('--tab-accent', cur);
+  else $('card').style.removeProperty('--tab-accent');
   $('tabs').replaceChildren(ink, ...groups.map((g, i) => {
     const t = el('span', i === tab ? 'tab active' : 'tab');
     const dot = span('dot');

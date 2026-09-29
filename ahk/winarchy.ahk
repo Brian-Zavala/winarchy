@@ -1012,6 +1012,17 @@ OnWindowShown(hWinEventHook, event, hwnd, idObject, idChild, *) {
         return
     if DllCall("GetAncestor", "ptr", hwnd, "uint", 2, "ptr") != hwnd    ; GA_ROOT: top-level only
         return
+    ; Explorer re-shows the taskbar when windows come and go (opening and closing the menu
+    ; quickly); the 1 s poll alone left it up for a moment, so hide it again right away.
+    try {
+        if WinGetClass(hwnd) ~= "^(Shell_TrayWnd|Shell_SecondaryTrayWnd)$" {
+            SetTimer(HideTaskbars, -1)
+            return
+        }
+    }
+    ; No Windows open/close fade or zoom on this window (DWMWA_TRANSITIONS_FORCEDISABLED):
+    ; it lives on the window, so nothing needs undoing when this script exits.
+    DllCall("dwmapi\DwmSetWindowAttribute", "ptr", hwnd, "uint", 3, "int*", 1, "uint", 4)
     SetTimer(StripMinimizeBox.Bind(hwnd), -1)
 }
 

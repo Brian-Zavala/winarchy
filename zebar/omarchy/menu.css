@@ -41,7 +41,8 @@ html, body {
 /* ------------------------------------------------------------ open / close */
 /* 50% scrim over the whole monitor, card centered (Omarchy menu). Both stay hidden until
    the window has focus: menu.ahk activates it after it loads. */
-#scrim { position: fixed; inset: 0; background: rgb(0 0 0 / .5); opacity: 0; transition: opacity 200ms var(--ease); }
+#scrim { position: fixed; inset: 0; background: rgb(0 0 0 / .5); opacity: 0; }
+.walls #scrim, .landing #scrim { transition: opacity 200ms var(--ease); }
 
 #card {
   position: absolute;
@@ -57,18 +58,22 @@ html, body {
   box-shadow: none;
   view-transition-name: card;
   opacity: 0;
-  scale: .96;
-  translate: 0 10px;
-  transition: opacity 180ms var(--ease), scale 320ms var(--spring), translate 320ms var(--spring), border-color 200ms;
+  transition: border-color 200ms;
 }
+/* Omarchy's launcher pops: its layer has no compositor animation and Menu.qml animates
+   nothing, so open and close are instant. Only the wallpaper picker and the landing keep
+   their fades and spring. */
+.walls #card, .landing #card { transition: opacity 180ms var(--ease), scale 320ms var(--spring), translate 320ms var(--spring), border-color 200ms; }
+.walls #card { scale: .96; translate: 0 10px; }
 #card.wide { width: 640px; }
 #card.grid, #card.flow { width: min(1180px, 92vw); height: min(760px, 86vh); max-height: none; }
 
 .shown #scrim, .shown #card { opacity: 1; }
-.shown #card { scale: 1; translate: 0 0; }
+.shown.walls #card { scale: 1; translate: 0 0; }
 /* body.* so closing wins over every other state (walls, landing). */
-body.closing #scrim, body.closing #card, body.closing #backdrop { opacity: 0; transition-duration: 110ms; }
-body.closing #card { scale: .98; }
+body.closing #scrim, body.closing #card, body.closing #backdrop { opacity: 0; }
+body.walls.closing #scrim, body.walls.closing #card, body.walls.closing #backdrop { transition-duration: 110ms; }
+body.walls.closing #card { scale: .98; }
 
 #search {
   flex: none;
@@ -120,6 +125,7 @@ html:active-view-transition-type(back) { --vt-dx: -28px; }
   transition: translate 260ms var(--spring), width 260ms var(--spring), height 260ms var(--spring), opacity 150ms;
 }
 #list .glider {
+  transition: none;   /* Omarchy's highlight doesn't glide: it just changes row */
   z-index: -1;
   background: color-mix(in srgb, var(--fg) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--fg) 25%, transparent);
@@ -134,9 +140,9 @@ html:active-view-transition-type(back) { --vt-dx: -28px; }
   border: 1px solid transparent;
   white-space: nowrap;
   overflow: hidden;
-  transition: color 160ms;
+  transition: color 60ms;   /* Omarchy's CursorSurface: 60 ms colour fade */
 }
-.row .icon { width: 18px; flex: none; text-align: center; transition: translate 200ms var(--spring); }
+.row .icon { width: 18px; flex: none; text-align: center; }
 .row .label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 .row .hint { flex: none; color: var(--fg-dim); font-size: 12px; transition: translate 200ms var(--spring), color 160ms; }
 .row.selected { color: var(--accent); }
@@ -147,7 +153,6 @@ html:active-view-transition-type(back) { --vt-dx: -28px; }
 /* Scrolling on a held key (menu.js `fast`): the 160ms colour fade and the icon nudge never
    finish between repeats, so the row you are on reads as half-lit. Snap them instead. */
 body.fast .row, body.fast .row .icon, body.fast .row .hint, body.fast .glider { transition: none; }
-.row.selected .icon { translate: 2px 0; }
 .row.selected .hint { color: var(--fg); translate: 3px 0; }
 .section {
   padding: 10px 10px 4px;
@@ -190,10 +195,10 @@ body.fast .row, body.fast .row .icon, body.fast .row .hint, body.fast .glider { 
 }
 .tab .dot { width: 7px; height: 7px; flex: none; transition: scale 200ms var(--spring); }
 .tab .count { opacity: .6; }
-.tab.active { color: var(--accent); }
+.tab.active { color: var(--tab-accent, var(--accent)); }
 .tab.active .dot { scale: 1.35; }
 .tab:hover { color: var(--fg); }
-#tabs .glider { top: auto; bottom: 0; height: 2px !important; background: var(--accent); }
+#tabs .glider { top: auto; bottom: 0; height: 2px !important; background: var(--tab-accent, var(--accent)); }
 
 #grid {
   flex: 1;
@@ -209,7 +214,7 @@ body.fast .row, body.fast .row .icon, body.fast .row .hint, body.fast .glider { 
 }
 #grid .glider {
   z-index: 2;
-  border: 2px solid var(--accent);
+  border: 2px solid var(--tab-accent, var(--accent));
   box-shadow: none;
 }
 .tile { position: relative; padding: 2px; cursor: pointer; }
@@ -247,7 +252,7 @@ body.fast .row, body.fast .row .icon, body.fast .row .hint, body.fast .glider { 
   transition: color 160ms;
 }
 .tile .group { color: var(--fg-dim); }
-.tile.selected .name { color: var(--accent); }
+.tile.selected .name { color: var(--tab-accent, var(--accent)); }
 .tile .badge {
   position: absolute;
   top: 8px;

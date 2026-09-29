@@ -35,7 +35,7 @@ button { background: none; border: 0; color: inherit; font: inherit; cursor: poi
   border: 2px solid var(--fg);
   box-shadow: none;
   opacity: 0;
-  transition: opacity 140ms var(--ease), translate 180ms var(--ease);
+  transition: opacity 140ms var(--ease);   /* Omarchy panels: a 140 ms fade, no slide */
 }
 .shown #panel { opacity: 1; translate: -50% 0; }
 @media (prefers-reduced-motion: reduce) { #panel { transition: none; } }
