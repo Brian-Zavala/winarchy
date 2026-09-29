@@ -394,3 +394,32 @@ function Get-GlazeWmProcess {
         $path -notlike '*\cli\*'
     })
 }
+
+# GlazeWM starts glazewm-watcher as a child, and the child inherits GlazeWM's IPC socket.
+# If the WM dies and the watcher stays, the watcher keeps 127.0.0.1:6123 held. The next
+# GlazeWM then fails with "Fatal error ... (os error 10048)". So stop any leftover watcher
+# before starting GlazeWM, but only when no WM is running (a live WM's watcher is doing its job).
+# A watcher stuck while exiting can't be killed, and only a reboot frees the port. In that
+# case say so instead of starting a GlazeWM that can only fail.
+function Start-GlazeWM([string]$exe) {
+    if (-not $exe) { return }
+    if (-not (Get-GlazeWmProcess)) {
+        Get-Process glazewm-watcher -ErrorAction SilentlyContinue | ForEach-Object {
+            Log "GlazeWM: stopping leftover glazewm-watcher $($_.Id) (it holds the IPC port)"
+            Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+        }
+        $held = $null
+        for ($i = 0; $i -lt 10; $i++) {
+            $held = Get-NetTCPConnection -LocalPort 6123 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (-not $held) { break }
+            Start-Sleep -Milliseconds 300
+        }
+        if ($held) {
+            $msg = "GlazeWM not started: port 6123 is still held by process $($held.OwningProcess), a GlazeWM that did not exit cleanly. Restart Windows, then run: winarchy doctor -Fix"
+            Log $msg
+            Write-Warning $msg
+            return
+        }
+    }
+    Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe)
+}

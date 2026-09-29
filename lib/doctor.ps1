@@ -170,7 +170,7 @@ function Invoke-Doctor([switch]$Fix) {
         # problems above point at; each step only installs what is not there.
         Install-Dependencies
         Use-Lock { Invoke-Apply }
-        if ($p.glazewm -and -not (Get-GlazeWmProcess)) { Start-Process $p.glazewm }
+        if ($p.glazewm -and -not (Get-GlazeWmProcess)) { Start-GlazeWM $p.glazewm }
         if ($p.flow -and -not (Get-Process Flow.Launcher -ErrorAction SilentlyContinue)) { Start-Process $p.flow }
     }
     Write-Host ''

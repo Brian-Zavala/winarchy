@@ -234,7 +234,7 @@ function Switch-GlazeWM($p) {
         if (-not $r.WaitForExit(10000)) { Stop-Process -Id $r.Id -Force -ErrorAction SilentlyContinue }
     }
     Start-Sleep -Milliseconds 500
-    Start-Process -FilePath $want -WorkingDirectory (Split-Path $want)
+    Start-GlazeWM $want
     Log "GlazeWM switched to $want"
 }
 
