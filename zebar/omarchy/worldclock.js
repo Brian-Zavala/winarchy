@@ -1,9 +1,8 @@
 // The world clock (Omarchy's omarchy.elsewhen, without the globe): a row per city with its
 // time, the offset from here and a strip of the day. Cities are IANA zones kept in
 // localStorage. menu.ahk opens it (bar clock middle click, Super+Ctrl+Alt+E).
-import * as zebar from './zebar.mjs';
 import * as env from './env.js';
-import { calm } from './motion.js';
+import { panel } from './panel.js';
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls, textContent: text ?? '' });
@@ -12,16 +11,27 @@ const HERE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 // Here, and four well-spread places to start from.
 const DEFAULTS = [HERE, 'America/New_York', 'Europe/London', 'Asia/Kolkata', 'Asia/Tokyo'];
 
-let zones = DEFAULTS.filter((z, i, all) => all.indexOf(z) === i);
-try {
-  const saved = JSON.parse(localStorage.getItem('worldclock') ?? 'null');
-  if (Array.isArray(saved) && saved.length) zones = saved;
-} catch {}
+let zones = [];
+// (Read again on every open: another monitor's world clock may have changed them.)
+function loadZones() {
+  zones = DEFAULTS.filter((z, i, all) => all.indexOf(z) === i);
+  try {
+    const saved = JSON.parse(localStorage.getItem('worldclock') ?? 'null');
+    if (Array.isArray(saved) && saved.length) zones = saved;
+  } catch {}
+}
 const save = () => { try { localStorage.setItem('worldclock', JSON.stringify(zones)); } catch {} };
 
 const validZone = z => { try { new Intl.DateTimeFormat('en', { timeZone: z }); return true; } catch { return false; } };
 const city = z => z.split('/').pop().replaceAll('_', ' ');
-const fmt = (z, opts) => new Intl.DateTimeFormat(env.CLOCK_24H ? 'en-GB' : 'en-US', { timeZone: z, ...opts });
+// Formatters are costly to build and a render asks for about six per city: kept.
+const formats = new Map();
+function fmt(z, opts) {
+  const k = `${z}|${JSON.stringify(opts)}`;
+  let f = formats.get(k);
+  if (!f) formats.set(k, f = new Intl.DateTimeFormat(env.CLOCK_24H ? 'en-GB' : 'en-US', { timeZone: z, ...opts }));
+  return f;
+}
 
 // Minutes east of UTC for a zone right now (the difference of the same instant read in
 // both zones, which handles DST without a timezone database of our own).
@@ -66,14 +76,8 @@ function addZone(text) {
   return true;
 }
 
-// ---- lifecycle
-let closing = false;
-function close() {
-  if (closing) return;
-  closing = true;
-  document.body.classList.remove('shown');
-  setTimeout(() => Promise.resolve(zebar.currentWidget().window.tauri.close()).catch(() => {}), calm.matches ? 0 : 110);
-}
+// ---- lifecycle (panel.js: the window hides on close and is shown again next time)
+const close = () => p.close();
 
 document.querySelector('.head .glyph').textContent = '\u{F01E7}';     // earth
 for (const z of Intl.supportedValuesOf('timeZone')) $('zones').append(Object.assign(document.createElement('option'), { value: z }));
@@ -83,14 +87,18 @@ $('city').addEventListener('keydown', e => {
   else e.target.style.borderColor = 'var(--alert, #f7768e)';
 });
 $('city').addEventListener('input', e => { e.target.style.borderColor = ''; });
-document.addEventListener('mousedown', e => { if (!$('panel').contains(e.target)) close(); });
 window.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
 
-setInterval(render, 5000);
-document.documentElement.style.setProperty('--top', `${(env.BAR_HEIGHT ?? 26) + (env.GAP ?? 10)}px`);
-render();
-// menu.ahk activates the window once it exists: open then (the webview paints on focus).
-const shown = () => requestAnimationFrame(() => document.body.classList.add('shown'));
-if (document.hasFocus()) shown();
-else { window.addEventListener('focus', shown, { once: true }); setTimeout(shown, 300); }
-setTimeout(() => window.addEventListener('blur', () => { if (document.activeElement !== $('city')) close(); }), 400);
+const p = panel({
+  name: 'worldclock',
+  anchor: false,
+  // Typing a city: the zone list pops up outside the page, which takes the focus.
+  stayOnBlur: () => document.activeElement === $('city'),
+  open() {
+    loadZones();
+    $('city').value = '';
+    $('city').style.borderColor = '';
+    render();
+  },
+});
+p.every(5000, render);

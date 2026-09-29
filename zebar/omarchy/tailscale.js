@@ -8,13 +8,12 @@
 //   s: send files (Taildrop) · t: on/off · r: refresh · Esc: close
 import * as zebar from './zebar.mjs';
 import * as env from './env.js';
-import { calm } from './motion.js';
+import { panel } from './panel.js';
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls ?? '', textContent: text ?? '' });
 const act = (...args) => zebar.shellExec(env.AHK, [env.MENU, ...args.map(String)]).catch(e => console.error(e));
 const getText = f => fetch(`./${f}?t=${Date.now()}`, { cache: 'no-store' }).then(r => (r.ok ? r.text() : '')).catch(() => '');
-const getJson = f => fetch(`./${f}?t=${Date.now()}`, { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).catch(() => null);
 
 // ---- Quattro's Model.js
 const filterIPv4 = ips => (ips ?? []).map(String).filter(ip => /^100\./.test(ip));
@@ -155,14 +154,20 @@ function row(glyph, name, detail, side, on, handlers) {
   return r;
 }
 
-function render() {
+// The line under the name (its phrase rotates on its own, without redrawing every list).
+function renderMeta() {
   const on = !!st.running, login = !!st.needsLogin;
-  mark($('heroMark'), !on && !login, login);
-  $('title').textContent = st.selfName || 'Tailscale';
   $('meta').textContent = st.unavailable ? st.message
     : login ? 'Needs login: press t or the switch to sign in'
     : on ? `${PHRASES[phrase % PHRASES.length]}${st.selfIp ? ` · ${st.selfIp}` : ''}`
     : 'Tailscale is disconnected';
+}
+
+function render() {
+  const on = !!st.running, login = !!st.needsLogin;
+  mark($('heroMark'), !on && !login, login);
+  $('title').textContent = st.selfName || 'Tailscale';
+  renderMeta();
   const power = $('power');
   power.classList.toggle('on', on);
   power.classList.toggle('busy', busy);
@@ -206,14 +211,19 @@ function render() {
     return row(osIcon(p.os), p.name, p.dns, side, false, { onclick: () => copy(p.ips[0]), title: 'Click: copy its IP', _peer: p });
   }) : [el('div', 'empty', 'No machines online on this tailnet.')]));
 
+  nodeList = null;
   paintCursor();
   place();
 }
 
 // ---- keyboard cursor: one list, top to bottom (switch, connections, exit nodes, machines)
+// Worked out once per render: offsetParent lays the panel out, and the pointer moving over
+// the rows asks for the list at every step.
+let nodeList = null;
 function nodes() {
-  return [$('power'), ...$('accounts').children, ...(st.running ? [...$('exits').children, ...$('peers').querySelectorAll('.row')] : [])]
+  nodeList ??= [$('power'), ...$('accounts').children, ...(st.running ? [...$('exits').children, ...$('peers').querySelectorAll('.row')] : [])]
     .filter(n => n.offsetParent !== null);
+  return nodeList;
 }
 function paintCursor() {
   document.body.classList.toggle('cursor-on', cursorOn);
@@ -236,11 +246,17 @@ function place() {
 }
 
 // ---- data
+// true when a file changed since the last look (the 3 s poll redrew every list each time).
+let seen = null;
 async function load() {
   const [status, exits, accts] = await Promise.all([getText('tailscale-status.json'), getText('tailscale-exits.txt'), getText('tailscale-accounts.json')]);
+  const now = `${status}\u0000${exits}\u0000${accts}`;
+  if (now === seen) return false;
+  seen = now;
   st = parseStatus(status);
   mullvad = st.running ? parseExitList(exits) : [];
   accounts = parseAccounts(accts);
+  return true;
 }
 async function refresh() {
   await act('tailscale', 'refresh');
@@ -248,19 +264,11 @@ async function refresh() {
   render();
 }
 
-// ---- lifecycle
-let closing = false;
-function close() {
-  if (closing) return;
-  closing = true;
-  document.body.classList.remove('shown');
-  setTimeout(() => Promise.resolve(zebar.currentWidget().window.tauri.close()).catch(() => {}), calm.matches ? 0 : 110);
-}
-
-document.addEventListener('mousedown', e => { if (!$('panel').contains(e.target)) close(); });
+// ---- lifecycle (panel.js: the window hides on close and is shown again next time)
+const close = () => p.close();
 document.addEventListener('mouseover', e => {
   const i = nodes().findIndex(n => n.contains(e.target));
-  if (i >= 0) { cursorOn = true; cursor = i; paintCursor(); }
+  if (i >= 0 && (!cursorOn || i !== cursor)) { cursorOn = true; cursor = i; paintCursor(); }
 });
 window.addEventListener('keydown', e => {
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
@@ -283,16 +291,17 @@ window.addEventListener('keydown', e => {
   e.preventDefault();
 });
 
-document.documentElement.style.setProperty('--top', `${(env.BAR_HEIGHT ?? 26) + (env.GAP ?? 10)}px`);
-const anchor = await getJson('tailscale-anchor.json');
-anchorX = Number.isFinite(anchor?.x) ? anchor.x : null;
-await load();
-render();
+const p = panel({
+  name: 'tailscale',
+  async open({ anchor }) {
+    anchorX = Number.isFinite(anchor.x) ? anchor.x : null;
+    cursorOn = false; cursor = 0; busy = false;
+    seen = null;
+    await load();                // what winarchy.ahk last wrote (every 30 s), at once
+    render();
+    refresh();                   // and the tailnet now, behind it
+  },
+});
 // Quattro refreshes every 30 s; the files change under us when winarchy.ahk refreshes.
-setInterval(async () => { if (!busy) { await load(); render(); } }, 3000);
-setInterval(() => { if (st.running) { phrase++; render(); } }, 2800);
-
-const shown = () => requestAnimationFrame(() => document.body.classList.add('shown'));
-if (document.hasFocus()) shown();
-else { window.addEventListener('focus', shown, { once: true }); setTimeout(shown, 300); }
-setTimeout(() => window.addEventListener('blur', close), 400);
+p.every(3000, async () => { if (!busy && await load()) render(); });
+p.every(2800, () => { if (st.running) { phrase++; renderMeta(); } });

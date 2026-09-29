@@ -95,6 +95,23 @@ Describe 'Zebar pack' {
             Test-Path "$root\zebar\omarchy\$($w.name).js" | Should -BeTrue
         }
     }
+    It 'keeps every panel loaded between opens (panel.js), with the files it reads' {
+        $cfg = @{ barHeight = 26 }
+        $z = Get-ZpackJson @{ ahk = 'C:\ahk.exe' } | ConvertFrom-Json
+        $panels = [ordered]@{ audio = 'a'; bluetooth = 'b'; network = 'n'; display = 'd'; tailscale = 't'; usage = 'u'; calendar = 'c'; worldclock = 'w' }
+        foreach ($name in $panels.Keys) {
+            $widget = $z.widgets | Where-Object name -EQ $name
+            @($widget.presets).Count | Should -Be 8 -Because $name
+            $widget.presets[2].name | Should -Be "$($panels[$name])2"
+            # panel.js and style.js; style.js reads status.json for a theme change while hidden.
+            $widget.includeFiles | Should -Contain '*.js' -Because $name
+            $widget.includeFiles | Should -Contain '*.json' -Because $name
+            $js = Get-Content -Raw "$root\zebar\omarchy\$name.js"
+            $js | Should -Match "from '\./panel\.js'" -Because "$name hides instead of closing"
+            $js | Should -Not -Match 'tauri\.close\(' -Because "$name hides instead of closing"
+            $menuAhk | Should -Match "OpenPanel\(`"$name`", `"$($panels[$name])`"" -Because "menu.ahk shows a hidden $name"
+        }
+    }
 }
 
 Describe 'Bar icons' {

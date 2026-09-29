@@ -5,7 +5,7 @@
 //   h / l, arrows: switch subscription    r, Enter: refresh    Esc: close
 import * as zebar from './zebar.mjs';
 import * as env from './env.js';
-import { calm } from './motion.js';
+import { panel } from './panel.js';
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls ?? '', textContent: text ?? '' });
@@ -244,16 +244,8 @@ function refresh() {
   refreshTimer = setTimeout(() => { if (refreshing) { refreshing = false; render(); } }, 90000);
 }
 
-// ---- lifecycle (as the calendar)
-let closing = false;
-function close() {
-  if (closing) return;
-  closing = true;
-  document.body.classList.remove('shown');
-  setTimeout(() => Promise.resolve(zebar.currentWidget().window.tauri.close()).catch(() => {}), calm.matches ? 0 : 110);
-}
-
-document.addEventListener('mousedown', e => { if (!$('panel').contains(e.target)) close(); });
+// ---- lifecycle (panel.js: the window hides on close and is shown again next time)
+const close = () => p.close();
 window.addEventListener('keydown', e => {
   const k = e.key;
   if (k === 'Escape') close();
@@ -264,17 +256,17 @@ window.addEventListener('keydown', e => {
   e.preventDefault();
 });
 
-document.documentElement.style.setProperty('--top', `${(env.BAR_HEIGHT ?? 26) + (env.GAP ?? 10)}px`);
-const [first, anchor] = await Promise.all([get('agents.json'), get('usage-anchor.json')]);
-anchorX = Number.isFinite(anchor?.x) ? anchor.x : null;
-data = first;
-stamp = first?.updatedAt ?? null;
-render();
-setInterval(poll, 2000);
+const p = panel({
+  name: 'usage',
+  async open({ anchor }) {
+    anchorX = Number.isFinite(anchor.x) ? anchor.x : null;
+    try { picked = localStorage.getItem('agent'); } catch {}   // another monitor's panel may have moved on
+    const first = await get('agents.json');
+    if (first) { data = first; stamp = first.updatedAt ?? null; }
+    render();
+  },
+  onHidden: hideTip,
+});
+p.every(2000, poll);
 // Reset times count down while the panel is open.
-setInterval(() => { if (!refreshing) render(); }, 30000);
-
-const shown = () => requestAnimationFrame(() => document.body.classList.add('shown'));
-if (document.hasFocus()) shown();
-else { window.addEventListener('focus', shown, { once: true }); setTimeout(shown, 300); }
-setTimeout(() => window.addEventListener('blur', close), 400);
+p.every(30000, () => { if (!refreshing) render(); });

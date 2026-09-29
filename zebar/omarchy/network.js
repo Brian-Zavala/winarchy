@@ -6,12 +6,12 @@
 //   s: speed test · r: refresh · Esc: close
 import * as zebar from './zebar.mjs';
 import * as env from './env.js';
-import { calm } from './motion.js';
+import { panel } from './panel.js';
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls ?? '', textContent: text ?? '' });
 const act = (...args) => zebar.shellExec(env.AHK, [env.MENU, ...args.map(String)]).catch(e => console.error(e));
-const getJson = f => fetch(`./${f}?t=${Date.now()}`, { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).catch(() => null);
+const getText = f => fetch(`./${f}?t=${Date.now()}`, { cache: 'no-store' }).then(r => (r.ok ? r.text() : null)).catch(() => null);
 
 const GLYPH = { wifi: '\u{F05A9}', ethernet: '\u{F0200}', none: '\u{F05AA}', lock: '\u{F033E}', check: '\u{F012C}' };
 const DNS = [['dhcp', 'DHCP'], ['cloudflare', 'Cloudflare'], ['google', 'Google'], ['custom', 'Custom']];
@@ -136,22 +136,31 @@ function place() {
 }
 
 // ---- data
+// true when either file changed: the panel is drawn again only then (it redrew both lists
+// every 400 ms, and a click can land between a row and its replacement).
+let seenNet = null, seenSpeed = null;
 async function load() {
-  const [n, s] = await Promise.all([getJson('netpanel.json'), getJson('speedtest.json')]);
-  if (n) net = n;
-  // A finished run from an earlier session is not this panel's to show.
-  if (s && (speed?.phase === 'down' || speed?.phase === 'up' || speed?.phase === 'error' || speed?.phase === 'done' || s.phase === 'down' || s.phase === 'up')) speed = s;
+  const [nt, st] = await Promise.all([getText('netpanel.json'), getText('speedtest.json')]);
+  let changed = false;
+  if (nt && nt !== seenNet) {
+    try { net = JSON.parse(nt); seenNet = nt; changed = true; } catch {}   // half written: next time
+  }
+  if (st && st !== seenSpeed) {
+    try {
+      const s = JSON.parse(st);
+      seenSpeed = st;
+      // A finished run from an earlier session is not this panel's to show.
+      if (speed?.phase === 'down' || speed?.phase === 'up' || speed?.phase === 'error' || speed?.phase === 'done' || s.phase === 'down' || s.phase === 'up') {
+        speed = s;
+        changed = true;
+      }
+    } catch {}
+  }
+  return changed;
 }
 
-// ---- lifecycle
-let closing = false;
-function close() {
-  if (closing) return;
-  closing = true;
-  document.body.classList.remove('shown');
-  setTimeout(() => Promise.resolve(zebar.currentWidget().window.tauri.close()).catch(() => {}), calm.matches ? 0 : 110);
-}
-document.addEventListener('mousedown', e => { if (!$('panel').contains(e.target)) close(); });
+// ---- lifecycle (panel.js: the window hides on close and is shown again next time)
+const close = () => p.close();
 window.addEventListener('keydown', e => {
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (k === 'Escape') return close();
@@ -161,17 +170,24 @@ window.addEventListener('keydown', e => {
   e.preventDefault();
 });
 
-document.documentElement.style.setProperty('--top', `${(env.BAR_HEIGHT ?? 26) + (env.GAP ?? 10)}px`);
-const anchor = await getJson('network-anchor.json');
-anchorX = Number.isFinite(anchor?.x) ? anchor.x : null;
-act('network-state');          // menu.ahk also asked for it: the file lands a few seconds in
-await load();
-render();
-// The speed test moves fast; the connection details only when something changes.
-setInterval(async () => { await load(); render(); }, 400);
-setInterval(() => { if (!busy) act('network-state'); }, 8000);
-
-const shown = () => requestAnimationFrame(() => document.body.classList.add('shown'));
-if (document.hasFocus()) shown();
-else { window.addEventListener('focus', shown, { once: true }); setTimeout(shown, 300); }
-setTimeout(() => window.addEventListener('blur', close), 400);
+const refresh = async () => { await act('network-state'); if (await load()) render(); };
+const p = panel({
+  name: 'network',
+  async open({ anchor }) {
+    anchorX = Number.isFinite(anchor.x) ? anchor.x : null;
+    busy = '';
+    if (speed?.phase !== 'down' && speed?.phase !== 'up') { speed = null; seenSpeed = null; scale = 100; }
+    await load();
+    render();
+    refresh();                   // the connection now (a few seconds), behind what was there
+  },
+});
+// The speed test moves fast; otherwise only the connection details, when they change.
+let lastLoad = 0;
+p.every(400, async () => {
+  const running = speed?.phase === 'down' || speed?.phase === 'up';
+  if (!running && Date.now() - lastLoad < 2000) return;
+  lastLoad = Date.now();
+  if (await load()) render();
+});
+p.every(8000, async () => { if (!busy) await refresh(); });

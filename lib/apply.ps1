@@ -321,14 +321,15 @@ function Get-ZpackJson($p) {
     }
     $menu = & $widget 'menu' './menu.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf', '*.txt', 'thumbs/**/*') @($menuPrivilege) @($menuPresets)
     # The clock's calendar: the same per-monitor presets (c0..c7), transparent, and a click
-    # outside the panel closes it.
+    # outside the panel closes it. Every panel reads status.json (zebar/omarchy/style.js: a
+    # theme change while it was hidden), so *.json is in each one's files.
     $calPresets = foreach ($i in 0..7) {
         [ordered]@{
             name = "c$i"; anchor = 'top_left'; offsetX = '0px'; offsetY = '0px'; width = '100%'; height = '100%'
             monitorSelection = [ordered]@{ type = 'index'; match = $i }
         }
     }
-    $calendar = & $widget 'calendar' './calendar.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.ttf') @($menuPrivilege) @($calPresets)
+    $calendar = & $widget 'calendar' './calendar.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @($calPresets)
     # The bar's agent usage panel: the calendar's per-monitor presets (u0..u7). Unlike the
     # calendar it reads data files (agents.json, usage-anchor.json), so *.json is included.
     $usagePresets = foreach ($i in 0..7) {
@@ -350,7 +351,7 @@ function Get-ZpackJson($p) {
     $display = & $widget 'display' './display.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'd')
     $tailscale = & $widget 'tailscale' './tailscale.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.txt', '*.ttf') @($menuPrivilege) @(& $panelPresets 't')
     # The world clock (Omarchy's omarchy.elsewhen): w0..w7. It keeps its cities in localStorage.
-    $worldclock = & $widget 'worldclock' './worldclock.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.ttf') @($menuPrivilege) @(& $panelPresets 'w')
+    $worldclock = & $widget 'worldclock' './worldclock.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'w')
     # The bar's Network, Audio and Bluetooth panels (Quattro's omarchy.network / audio /
     # bluetooth): n0..n7, a0..a7, b0..b7. They read state files that winarchy writes.
     $network = & $widget 'network' './network.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'n')
