@@ -235,14 +235,30 @@ function Invoke-Agent([switch]$Inline, [switch]$Pick, [string]$Prompt, [string]$
     Start-AgentTerminal $cmd -Dir $Dir
 }
 
-# A "Make something" tile: the default agent, asked to make a theme, plugin or app.
+# A "Make something" tile: the default agent, asked to make a theme, plugin or app. With
+# no default yet the chooser opens instead, and the tile is remembered: the agent picked
+# there starts on it (winarchy default-agent, Pop-AgentMakePending).
+$AgentMakePending = Join-Path $Data 'agent-make-pending.json'
+
 function Invoke-AgentMake([string]$kind) {
     $key = if ($kind) { $kind.ToLowerInvariant() }
     if (-not $key -or -not $AgentMake.Contains($key)) { throw "usage: winarchy agent-make <$($AgentMake.Keys -join '|')>" }
     $m = $AgentMake[$key]
     New-Item -ItemType Directory -Force $m.dir | Out-Null
+    if (-not (Get-DefaultAgent)) { Write-Json $AgentMakePending ([ordered]@{ kind = $key; at = (Get-Date).ToUniversalTime().ToString('o') }) }
     $guide = Join-Path $Code "agents\make\$key.md"
     Invoke-Agent -Pick -Prompt ($m.prompt -f $guide) -Dir $m.dir
+}
+
+# The tile that opened the chooser, once: a recent one (15 minutes), else nothing.
+function Pop-AgentMakePending {
+    $p = Read-Json $AgentMakePending
+    Remove-Item -LiteralPath $AgentMakePending -Force -ErrorAction SilentlyContinue
+    if (-not $p -or -not $AgentMake.Contains([string]$p.kind)) { return $null }
+    $at = [DateTimeOffset]::MinValue
+    if (-not [DateTimeOffset]::TryParse([string]$p.at, $Invariant, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$at)) { return $null }
+    if (([DateTimeOffset]::UtcNow - $at).TotalMinutes -gt 15) { return $null }
+    [string]$p.kind
 }
 
 # The usage panel's "Sign in": the agent's own login, here in the terminal, then fresh
@@ -255,9 +271,12 @@ function Invoke-AgentLogin([string]$id) {
         throw "$($AgentTable[$key].label) is not installed. Install it with: $($AgentTable[$key].hint)"
     }
     $rest = @($cmd | Select-Object -Skip 1)
+    $global:LASTEXITCODE = 0
     & $cmd[0] @rest
+    # A cancelled or failed sign-in leaves the old limits (and the warning) as they were.
+    if ($LASTEXITCODE) { throw "$($AgentTable[$key].label) sign-in did not finish (exit $LASTEXITCODE)" }
     [void](Update-AgentUsage -Force -Only $key -NoRetry)
-    "$($AgentTable[$key].label): limits refreshed"
+    "$($AgentTable[$key].label): signed in, limits refreshed"
 }
 
 # The menu widget is opened through menu.ahk, which is what the bar and the keybindings

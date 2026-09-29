@@ -100,6 +100,26 @@ Describe 'Invoke-AgentMake (the usage panel''s Make something tiles)' {
         { Invoke-AgentMake 'spaceship' } | Should -Throw '*usage: winarchy agent-make <theme|plugin|app>*'
         { Invoke-AgentMake '' } | Should -Throw '*usage*'
     }
+    It 'remembers the tile when there is no default agent yet, for the one picked next' {
+        $AgentMakePending = Join-Path $TestDrive 'pending.json'
+        $AgentMake.theme.dir = Join-Path $TestDrive 'make-theme'
+        Mock Get-DefaultAgent { $null }
+        Invoke-AgentMake 'theme'
+        Pop-AgentMakePending | Should -Be 'theme'
+        Pop-AgentMakePending | Should -BeNullOrEmpty   # once
+    }
+    It 'remembers nothing when a default agent starts on it right away' {
+        $AgentMakePending = Join-Path $TestDrive 'pending2.json'
+        $AgentMake.app.dir = Join-Path $TestDrive 'make-app'
+        Mock Get-DefaultAgent { 'claude' }
+        Invoke-AgentMake 'app'
+        Test-Path $AgentMakePending | Should -BeFalse
+    }
+    It 'forgets a tile from long ago' {
+        $AgentMakePending = Join-Path $TestDrive 'pending3.json'
+        Write-Json $AgentMakePending @{ kind = 'plugin'; at = (Get-Date).ToUniversalTime().AddHours(-1).ToString('o') }
+        Pop-AgentMakePending | Should -BeNullOrEmpty
+    }
 }
 
 Describe 'Invoke-AgentLogin (the usage panel''s Sign in)' {
@@ -115,6 +135,16 @@ Describe 'Invoke-AgentLogin (the usage panel''s Sign in)' {
         try { Invoke-AgentLogin 'fake' } finally { $AgentLogin.Remove('fake'); Remove-Item function:global:fake-login }
         $global:gotLogin | Should -Be @('now')
         Should -Invoke Update-AgentUsage -Times 1 -ParameterFilter { $Force -and $Only -eq 'fake' }
+    }
+    It 'stops without refreshing when the sign-in fails or is cancelled' {
+        Mock Test-AgentInstalled { $true }
+        Mock Update-AgentUsage {}
+        function global:fake-login { $global:LASTEXITCODE = 1 }
+        $AgentLogin['fake'] = @('fake-login')
+        $AgentTable['fake'] = @{ label = 'Fake' }
+        try { { Invoke-AgentLogin 'fake' } | Should -Throw '*Fake sign-in did not finish*' }
+        finally { $AgentLogin.Remove('fake'); $AgentTable.Remove('fake'); Remove-Item function:global:fake-login }
+        Should -Invoke Update-AgentUsage -Times 0
     }
     It 'says how to install an agent that is missing' {
         Mock Test-AgentInstalled { $false }

@@ -230,9 +230,12 @@ switch ($Verb) {
         else {
             $key = Set-DefaultAgent $Arg
             Use-Lock { Invoke-Apply -NoRestart }
-            # Omarchy's omarchy-default-agent starts the agent it just chose.
+            # Omarchy's omarchy-default-agent starts the agent it just chose; picked from a
+            # Make something tile, it starts on what the tile asked for.
             # (Set-DefaultAgent already said how to install one that is missing.)
-            if (Test-AgentInstalled $key) { Invoke-Agent }
+            if (Test-AgentInstalled $key) {
+                if ($make = Pop-AgentMakePending) { Invoke-AgentMake $make } else { Invoke-Agent }
+            }
         }
     }
     'config' {
