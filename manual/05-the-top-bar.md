@@ -17,7 +17,7 @@ From left to right:
 | Weather | The weather details | |
 | Updates, when there are any | Update everything | |
 | The chevron | Running windows and the tray | |
-| The AI agent icon | The agent usage panel (see [AI](17-ai.md)) | Start your coding agent |
+| The AI agent icon | The agents panel: limits, tokens today, and tiles that have your agent make a theme, plugin or app (see [AI](17-ai.md)) | Start your coding agent |
 | Bluetooth | The Bluetooth panel (`Super + Ctrl + B`): the radio switch and your paired devices | |
 | Tailscale, once installed | The Tailscale panel | Turn it on or off; middle-click refreshes |
 | Network | The network panel (`Super + Ctrl + W`): speed test, DNS provider, Wi-Fi networks | Windows' network settings |

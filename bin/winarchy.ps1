@@ -40,6 +40,9 @@
   winarchy agent [-Inline] [-Pick] [-Prompt <text>] | agent list
                                           start the default coding agent, unattended
   winarchy default-agent <name>        pick it (claude, codex, copilot, opencode, ...)
+  winarchy agent-make <theme|plugin|app>
+                                          start it asking what to make (the usage panel's tiles)
+  winarchy agent-login <claude|codex>  sign in again, then refresh its limits
   winarchy agent-usage [-Force] [<agent>]
                                           refresh the bar's agent usage (limits, tokens by
                                           day and model); runs by itself every 15 minutes
@@ -216,6 +219,9 @@ switch ($Verb) {
             }
         } else { Invoke-Agent -Inline:$Inline -Pick:$Pick -Prompt $Prompt }
     }
+    # The usage panel's "Make something" tiles and its "Sign in" (lib/agents.ps1).
+    'agent-make' { Invoke-AgentMake $Arg }
+    'agent-login' { Invoke-AgentLogin $Arg }
     # The bar's agent indicator: run every usage collector and rebuild agents.json.
     # winarchy.ahk runs this on a timer; -Force rescans and re-asks for limits now.
     'agent-usage' {
@@ -231,9 +237,12 @@ switch ($Verb) {
         else {
             $key = Set-DefaultAgent $Arg
             Use-Lock { Invoke-Apply -NoRestart }
-            # Omarchy's omarchy-default-agent starts the agent it just chose.
+            # Omarchy's omarchy-default-agent starts the agent it just chose; picked from a
+            # Make something tile, it starts on what the tile asked for.
             # (Set-DefaultAgent already said how to install one that is missing.)
-            if (Test-AgentInstalled $key) { Invoke-Agent }
+            if (Test-AgentInstalled $key) {
+                if ($make = Pop-AgentMakePending) { Invoke-AgentMake $make } else { Invoke-Agent }
+            }
         }
     }
     'config' {

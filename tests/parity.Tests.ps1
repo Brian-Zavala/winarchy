@@ -87,7 +87,7 @@ Describe 'the bar panels' {
         }
     }
     It 'has menu.ahk verbs for everything the panels send' {
-        foreach ($f in 'network', 'audio', 'bluetooth') {
+        foreach ($f in 'network', 'audio', 'bluetooth', 'usage') {
             $js = Get-Content -Raw (Join-Path $root "zebar\omarchy\$f.js")
             foreach ($m in [regex]::Matches($js, "act\('([a-z-]+)'")) { $ahk | Should -Match "case\s[^`n]*`"$($m.Groups[1].Value)`"" -Because "$f.js sends $($m.Groups[1].Value)" }
         }
