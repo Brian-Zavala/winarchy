@@ -11,7 +11,16 @@ $script:UiPretty = $false
 $script:UiClock = $null
 
 # Windows Terminal and VS Code draw these; the old console host's fonts may not.
-function Test-UiUnicode { [bool]($env:WT_SESSION -or $env:TERM_PROGRAM -eq 'vscode' -or $env:WINARCHY_UNICODE) }
+# The console's output code page must be UTF-8 too: a child pwsh started from Windows
+# PowerShell inherits the OEM page (437/850) and would print █ and ◆ as mojibake.
+function Test-UiUnicode {
+    if (-not ($env:WT_SESSION -or $env:TERM_PROGRAM -eq 'vscode' -or $env:WINARCHY_UNICODE)) { return $false }
+    if ([Console]::IsOutputRedirected) { return $true }
+    try {
+        if ([Console]::OutputEncoding.CodePage -ne 65001) { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) }
+        [Console]::OutputEncoding.CodePage -eq 65001
+    } catch { $false }
+}
 
 function Get-UiGlyphs {
     if (Test-UiUnicode) { @{ step = '◆'; ok = '✓'; info = '·'; log = '›'; warn = '!'; fail = '✗'; ask = '?'; full = '█'; empty = '░' } }
