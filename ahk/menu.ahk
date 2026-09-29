@@ -15,7 +15,8 @@ OnError ScriptLogError
 ;   menu.ahk install-app <key> | remove-app <key> | catalog-refresh   (Install/Remove routes)
 ;   menu.ahk tui-add | tui-remove <name>                              (Install/Remove > TUI: your own)
 ;   menu.ahk herdr | agent | default-agent <name>                     (Herdr + coding agents)
-;   menu.ahk usage | usage-refresh                                    (bar agent icon: usage panel)
+;   menu.ahk usage | usage-refresh | agent-make <theme|plugin|app> | agent-login <claude|codex>
+;                                                                     (bar agent icon: usage panel)
 ;   menu.ahk display-panel | display-state | brightness <n> <pct> | brightness-step <delta> | scale <n> <pct>
 ;            monitor <key> <on|off> | text-size <px>                  (bar display icon: Display panel)
 ;   menu.ahk tailscale-panel | tailscale <toggle|up|down|login|refresh|exit-node <ip|none>|switch <id>|send <peer>>
@@ -56,9 +57,15 @@ switch verb {
     case "calendar": OpenCalendar()
     ; The world clock (Omarchy's omarchy.elsewhen): bar clock middle click, Super+Ctrl+Alt+E.
     case "worldclock": OpenPanel("worldclock", "w", (*) => 0)
-    ; The bar's agent icon: the usage panel, and its refresh key (r / Enter).
+    ; The bar's agent icon: the usage panel, and its refresh key (r).
     case "usage": OpenUsage()
     case "usage-refresh": OmarchyCmd("agent-usage", "-Force")
+    ; Its Make something tiles start the default agent with a starter prompt, in its own
+    ; window; Sign in runs the agent's login in a terminal, where it can ask for a code.
+    case "agent-make":
+        if OmarchyCmdWait("agent-make", arg)
+            Notify("Your agent didn't start (winarchy agent list shows whether it's installed)")
+    case "agent-login": RunInTerminal("Sign in", CliInTerminal("agent-login", arg))
     ; The bar's display icon (Quattro's omarchy.monitor): the Display panel and its controls.
     ; Monitor numbers are AHK's; the panel got them from display.json.
     case "display-panel": OpenPanel("display", "d", WriteDisplayState)

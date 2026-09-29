@@ -8,37 +8,37 @@
     <link rel="stylesheet" type="text/css" href="./user.css" />
   </head>
   <body>
-    <!-- The bar's agent usage panel (Omarchy Quattro's agents widget), dropped under the
-         bar icon. Strictly a display of agents.json; clicking outside it closes it. -->
-    <div id="panel" role="dialog" aria-label="AI coding agent usage">
+    <!-- The bar's agents panel (Omarchy's agents panel), dropped under the bar icon: every
+         subscription's limits, and tiles that start the default agent making something.
+         Clicking outside it closes it. -->
+    <div id="panel" role="dialog" aria-label="AI coding agents">
       <header id="hero">
         <span class="glyph" aria-hidden="true"></span>
         <div class="who">
-          <span id="name"></span>
-          <span id="plan"></span>
+          <span id="title">Agents</span>
+          <span id="today"></span>
         </div>
+        <button id="add" class="add" title="Choose your default agent" aria-label="Choose your default agent"></button>
       </header>
-      <div id="status" class="hidden" role="status"></div>
-      <nav id="chips" class="hidden" aria-label="Subscription"></nav>
 
-      <section id="limitsBox" class="hidden">
-        <h2>Limits</h2>
-        <div id="limits"></div>
-      </section>
+      <div id="empty" class="hidden">
+        <strong>No agent usage yet</strong>
+        <span>It appears after a coding agent has run on this PC.</span>
+      </div>
+      <div id="agents"></div>
 
-      <section id="daysBox" class="hidden">
-        <h2>Tokens by day</h2>
-        <div id="days" class="rows"></div>
-      </section>
-
-      <section id="modelsBox" class="hidden">
-        <h2>Tokens by model</h2>
-        <div id="models" class="rows"></div>
+      <section id="make" aria-labelledby="makeTitle">
+        <h2 id="makeTitle">Make something</h2>
+        <div class="tiles">
+          <button class="tile" data-kind="theme"><span class="icon" aria-hidden="true"></span><span>Theme</span></button>
+          <button class="tile" data-kind="plugin"><span class="icon" aria-hidden="true"></span><span>Plugin</span></button>
+          <button class="tile" data-kind="app"><span class="icon" aria-hidden="true"></span><span>App</span></button>
+        </div>
       </section>
 
       <footer>
-        <span id="totals"></span>
         <span id="updated"></span>
+        <button id="refresh" title="Refresh (r)" aria-label="Refresh"></button>
       </footer>
       <div id="tip" class="hidden" role="tooltip"></div>
     </div>

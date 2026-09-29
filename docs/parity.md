@@ -19,6 +19,7 @@ meaning. `default/upstream.json` records the upstream commit last reviewed.
 | Reminders, share, transcode, agent, Herdr keys, fullscreen desktop, laptop display / mirror, media keys | the same keys (`ahk/winarchy.ahk`) |
 | Power profiles (Super + Ctrl + P) | _Setup > Power_: Windows' power modes |
 | Media module in the bar | the bar's media module (Zebar's media provider) |
+| Agents panel: every subscription's limits, tokens today, Use / sign in, _Make something_ (theme, plugin, app) | the bar's agent panel (`zebar/omarchy/usage.*`); _Plugin_ makes a Zebar widget pack, which follows the theme and font; the tiles' prompts point at `agents/make/*.md` instead of Omarchy's skill |
 
 Every one of these keys yields to a key your own AutoHotkey script in the Startup folder
 already binds (`lib/keys.ps1`, `BindUnlessUser`).
@@ -48,6 +49,13 @@ already binds (`lib/keys.ps1`, `BindUnlessUser`).
 | Google Maps on `Super + Shift + S` | Windows' region screenshot keeps that key |
 | xcompose's locale sequences (`include "%L"`: ' e = é, ...) | Windows' own keyboard layouts (US-International) do that |
 | Keyboard backlight and touchpad keys | vendor tools own them on Windows |
+
+## Not yet
+
+- Several accounts for one agent (Omarchy's agent account switching: the panel's `+`,
+  Primary / Secondary, switching when one runs out) is on an Omarchy branch that isn't
+  released yet. The panel's `+` picks the default agent until it is.
+- Codex's free resets: nothing Winarchy reads reports them.
 
 ## Limits
 

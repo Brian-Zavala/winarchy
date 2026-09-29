@@ -230,7 +230,7 @@ Describe 'Bar and panel wiring' {
     }
     It 'has the menu.ahk verbs the bar and panel send' {
         $ahk = Get-Content -Raw (Join-Path $Code 'ahk\menu.ahk')
-        foreach ($verb in 'usage', 'usage-refresh') { $ahk | Should -Match "case `"$verb`":" }
+        foreach ($verb in 'usage', 'usage-refresh', 'agent-make', 'agent-login') { $ahk | Should -Match "case `"$verb`":" }
     }
     It 'refreshes on a timer only when the indicator is on' {
         Get-Content -Raw (Join-Path $Code 'ahk\winarchy.ahk') | Should -Match '(?s)if Env\("agentUsage", "1"\) = "1" \{.*OmarchyCmd\("agent-usage"\)'

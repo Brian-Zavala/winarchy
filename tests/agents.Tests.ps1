@@ -36,12 +36,100 @@ Describe 'Start-AgentTerminal' {
         Start-AgentTerminal @('claude', '--model', 'a b')
         Should -Invoke Start-Process -Times 1 -ParameterFilter {
             $a = @(Split-CommandLine $ArgumentList)
-            $a[3] -eq 'Omarchy Agent' -and $a[4] -eq 'C:\Program Files\PowerShell\7\pwsh.exe' -and $a[-1] -eq 'claude --model "a b"'
+            $a[3] -eq 'Omarchy Agent' -and $a[4] -eq 'C:\Program Files\PowerShell\7\pwsh.exe' -and $a[-1] -eq "claude --model 'a b'"
         }
     }
     It 'escapes ; so Windows Terminal does not split it into a second tab' {
         Start-AgentTerminal @('x;y')
-        Should -Invoke Start-Process -ParameterFilter { @(Split-CommandLine $ArgumentList)[-1] -eq 'x\;y' }
+        Should -Invoke Start-Process -ParameterFilter { @(Split-CommandLine $ArgumentList)[-1] -eq "'x\;y'" }
+    }
+    It 'starts it in the folder it is given' {
+        Start-AgentTerminal @('claude') -Dir 'C:\Users\me\.winarchy\themes'
+        Should -Invoke Start-Process -ParameterFilter {
+            $a = @(Split-CommandLine $ArgumentList)
+            $i = [array]::IndexOf($a, '-d')
+            $i -gt 0 -and $a[$i + 1] -eq 'C:\Users\me\.winarchy\themes' -and $i -lt [array]::IndexOf($a, 'C:\Program Files\PowerShell\7\pwsh.exe')
+        }
+    }
+    It 'starts it in that folder without Windows Terminal too' {
+        Mock Get-Paths { @{ pwsh = 'pwsh.exe' } }
+        Start-AgentTerminal @('claude') -Dir 'C:\work'
+        Should -Invoke Start-Process -ParameterFilter { $WorkingDirectory -eq 'C:\work' }
+    }
+}
+
+Describe 'ConvertTo-PwshCommandLine (a prompt reaches the agent as written)' {
+    It 'leaves plain words alone and single-quotes the rest' {
+        ConvertTo-PwshCommandLine @('claude', '--permission-mode', 'auto', '--', 'fix it') | Should -Be "claude --permission-mode auto -- 'fix it'"
+    }
+    It 'keeps $, backticks, double quotes and apostrophes literal' {
+        $prompt = "Ask what I'd like: `"`$HOME`" and ``n stay as they are; C:\it's here"
+        $line = ConvertTo-PwshCommandLine @('claude', $prompt)
+        # What PowerShell itself parses out of that line: the same prompt, as one argument.
+        $ast = [Management.Automation.Language.Parser]::ParseInput($line, [ref]$null, [ref]$null)
+        $words = $ast.EndBlock.Statements[0].PipelineElements[0].CommandElements
+        $words.Count | Should -Be 2
+        $words[1].Value | Should -BeExactly $prompt
+    }
+    It 'quotes a typographic apostrophe, which PowerShell also reads as a quote' {
+        $prompt = "it" + [char]0x2019 + "s"
+        $ast = [Management.Automation.Language.Parser]::ParseInput((ConvertTo-PwshCommandLine @('x', $prompt)), [ref]$null, [ref]$null)
+        $ast.EndBlock.Statements[0].PipelineElements[0].CommandElements[1].Value | Should -BeExactly $prompt
+    }
+    It 'calls an exe path with spaces through &' {
+        ConvertTo-PwshCommandLine @('C:\Program Files\x\agent.exe', 'go') | Should -Be "& 'C:\Program Files\x\agent.exe' go"
+    }
+}
+
+Describe 'Invoke-AgentMake (the usage panel''s Make something tiles)' {
+    BeforeEach { Mock Invoke-Agent {} }
+    It 'starts the default agent for a <kind> in its folder, with a prompt pointing at its guide' -ForEach @(
+        @{ kind = 'theme' }, @{ kind = 'plugin' }, @{ kind = 'app' }
+    ) {
+        $AgentMake[$kind].dir = Join-Path $TestDrive "make-$kind"
+        Invoke-AgentMake $kind
+        Test-Path (Join-Path $TestDrive "make-$kind") | Should -BeTrue
+        Should -Invoke Invoke-Agent -Times 1 -ParameterFilter {
+            $Pick -and $Dir -eq (Join-Path $TestDrive "make-$kind") -and $Prompt -like "*$(Join-Path $Code "agents\make\$kind.md")*"
+        }
+    }
+    It 'has a guide for every tile' {
+        foreach ($k in $AgentMake.Keys) { Test-Path (Join-Path $Code "agents\make\$k.md") | Should -BeTrue }
+    }
+    It 'refuses anything else' {
+        { Invoke-AgentMake 'spaceship' } | Should -Throw '*usage: winarchy agent-make <theme|plugin|app>*'
+        { Invoke-AgentMake '' } | Should -Throw '*usage*'
+    }
+}
+
+Describe 'Invoke-AgentLogin (the usage panel''s Sign in)' {
+    It 'knows how Claude Code and Codex sign in' {
+        @($AgentLogin['claude']) | Should -Be @('claude', 'auth', 'login')
+        @($AgentLogin['codex']) | Should -Be @('codex', 'login')
+    }
+    It 'runs the login, then refreshes that agent''s limits' {
+        Mock Test-AgentInstalled { $true }
+        Mock Update-AgentUsage {}
+        function global:fake-login { $global:gotLogin = $args }
+        $AgentLogin['fake'] = @('fake-login', 'now')
+        try { Invoke-AgentLogin 'fake' } finally { $AgentLogin.Remove('fake'); Remove-Item function:global:fake-login }
+        $global:gotLogin | Should -Be @('now')
+        Should -Invoke Update-AgentUsage -Times 1 -ParameterFilter { $Force -and $Only -eq 'fake' }
+    }
+    It 'says how to install an agent that is missing' {
+        Mock Test-AgentInstalled { $false }
+        { Invoke-AgentLogin 'codex' } | Should -Throw '*npm install -g @openai/codex*'
+    }
+    It 'refuses an agent it cannot sign in' {
+        { Invoke-AgentLogin 'crush' } | Should -Throw '*usage: winarchy agent-login <claude|codex>*'
+    }
+    It 'tells the panel which agents can sign in (defaults.json)' {
+        $Pack = Join-Path $TestDrive 'pack'
+        Mock Get-DefaultAgent { 'claude' }
+        Mock Test-AgentInstalled { $true }
+        $list = @(Update-AgentList)
+        ($list | Where-Object { $_.key -eq 'claude' }).login | Should -BeTrue
+        ($list | Where-Object { $_.key -eq 'crush' }).login | Should -BeFalse
     }
 }
 
