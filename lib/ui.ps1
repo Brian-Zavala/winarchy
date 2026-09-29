@@ -85,6 +85,8 @@ function Write-UiBanner([string]$version) {
         Write-Host ('  ' + (Format-Ui 'winarchy' 'magenta' -Bold))
     }
     Write-Host ('  ' + (Format-Ui "Omarchy's look, keys and themes for Windows 11" 'fg') + (Format-Ui "  ·  v$version  ·  unofficial" 'dim'))
+    # Measured on a fresh machine: 4:25. The download share depends on the connection.
+    Write-Host ('  ' + (Format-Ui 'About 5 minutes, depending on your connection.' 'dim'))
 }
 
 function Write-Step([string]$msg) {
