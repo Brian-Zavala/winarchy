@@ -2,7 +2,7 @@
 BeforeAll {
     $Verb = 'test'
     $root = Split-Path -Parent $PSScriptRoot
-    foreach ($f in 'common', 'detect', 'render', 'catalog', 'herdr', 'agents', 'system', 'netpanel', 'audio') { . "$root\lib\$f.ps1" }
+    foreach ($f in 'common', 'detect', 'render', 'catalog', 'herdr', 'agents', 'accounts', 'system', 'netpanel', 'audio') { . "$root\lib\$f.ps1" }
     $Code = $root
     $LogFile = Join-Path $TestDrive 'winarchy.log'
     # Invoke-AudioAction compiles its interop into generated\native (Add-NativeType): not the

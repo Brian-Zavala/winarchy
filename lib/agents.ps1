@@ -143,8 +143,21 @@ function Resolve-AgentName([string]$name) {
 function Test-AgentInstalled([string]$name) {
     $a = $AgentTable[$name]
     if (-not $a) { return $false }
+    [bool](Find-AgentExe $a.cmd)
+}
+
+# The agent's exe: from PATH, or where npm and Claude's native installer put it. AHK and
+# the bar keep the PATH they started with, so an agent installed since is not on it yet.
+function Find-AgentExe([string]$cmd) {
     # Programs and .ps1 shims (npm's): an untyped lookup that misses searches every module.
-    [bool](Get-Command $a.cmd -CommandType Application, ExternalScript -ErrorAction SilentlyContinue)
+    $c = Get-Command $cmd -CommandType Application, ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($c) { return $c.Source }
+    foreach ($f in @(
+            (Join-Path ([Environment]::GetFolderPath('ApplicationData')) "npm\$cmd.cmd"),
+            (Join-Path $HOME ".local\bin\$cmd.exe"))) {
+        if (Test-Path -LiteralPath $f) { return $f }
+    }
+    $null
 }
 
 # Every agent, with whether it is here and whether it is the default: the menu's
@@ -209,7 +222,9 @@ function Get-AgentCommand([string]$name, [string]$Prompt) {
         $extra = @(& $a.prompt $Prompt)
         $flags = if ($a.promptReplacesArgs) { $extra } else { $flags + $extra }
     }
-    @($a.cmd) + $flags
+    # By name when PATH has it (what a person reads in the window), else by full path.
+    $exe = if (Get-Command $a.cmd -CommandType Application, ExternalScript -ErrorAction SilentlyContinue) { $a.cmd } else { (Find-AgentExe $a.cmd) ?? $a.cmd }
+    @($exe) + $flags
 }
 
 # Launch the default agent. -Inline runs it here (this is what a Herdr pane wants);
@@ -225,15 +240,22 @@ function Invoke-Agent([switch]$Inline, [switch]$Pick, [string]$Prompt, [string]$
         throw "$($AgentTable[$key].label) is not installed. Install it with: $($AgentTable[$key].hint)"
     }
     $cmd = @(Get-AgentCommand $key -Prompt $Prompt)
+    # The active account's home, for a provider with several (lib/accounts.ps1).
+    $envs = Get-AgentLaunchEnv $key
     if ($Inline) {
         $rest = @($cmd | Select-Object -Skip 1)
+        $saved = @{}
+        foreach ($k in $envs.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, $envs[$k]) }
         if ($Dir) { Push-Location -LiteralPath $Dir }
-        try { & $cmd[0] @rest } finally { if ($Dir) { Pop-Location } }
+        try { & $cmd[0] @rest } finally {
+            if ($Dir) { Pop-Location }
+            foreach ($k in $saved.Keys) { [Environment]::SetEnvironmentVariable($k, $saved[$k]) }
+        }
         return
     }
     # Omarchy gives agent windows one app-id so window rules can single them out; our
     # equivalent is the dedicated Windows Terminal profile that apply writes.
-    Start-AgentTerminal $cmd -Dir $Dir
+    Start-AgentTerminal $cmd -Dir $Dir -Env $envs
 }
 
 # A "Make something" tile: the default agent, asked to make a theme, plugin or app. With
@@ -265,6 +287,13 @@ function Pop-AgentMakePending {
 # The usage panel's "Sign in": the agent's own login, here in the terminal, then fresh
 # limits, so the panel (which polls agents.json) drops its sign-in warning.
 function Invoke-AgentLogin([string]$id) {
+    # claude/work: one account of several, signed in again in its own home.
+    if ($id -match '/') {
+        $ref = Resolve-AccountRef $id
+        Invoke-AccountReauth $ref.provider $ref.id
+        [void](Update-AgentUsage -Force -Only $ref.provider -NoRetry)
+        return "$($AgentTable[$ref.provider].label) ($($ref.id)): signed in, limits refreshed"
+    }
     $key = if ($id) { $id.ToLowerInvariant() }
     if (-not $key -or -not $AgentLogin.Contains($key)) { throw "usage: winarchy agent-login <$($AgentLogin.Keys -join '|')>" }
     $cmd = @($AgentLogin[$key])
@@ -300,18 +329,20 @@ function Join-ProcessArgs([string[]]$items) {
 # The command as one line of PowerShell for pwsh -Command. Anything but a plain word goes
 # in single quotes, where PowerShell expands nothing ($, backticks and " are literal), so a
 # prompt arrives exactly as written; a quoted exe needs the call operator.
-function ConvertTo-PwshCommandLine([string[]]$cmd) {
+# -Env: variables set first, as $env:NAME='value'; (the agent's account home).
+function ConvertTo-PwshCommandLine([string[]]$cmd, [hashtable]$Env) {
     $quoted = @($cmd | ForEach-Object {
         if ($_ -match '^[\w\-.\\/:=+]+$') { $_ }
         else { "'" + [Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($_) + "'" }
     })
     if ($quoted.Count -and $quoted[0] -ne $cmd[0]) { $quoted[0] = "& $($quoted[0])" }
-    $quoted -join ' '
+    $pre = if ($Env) { ($Env.Keys | Sort-Object | ForEach-Object { "`$env:$_='" + [Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($Env[$_]) + "'; " }) -join '' } else { '' }
+    $pre + ($quoted -join ' ')
 }
 
-function Start-AgentTerminal([string[]]$cmd, [string]$Dir) {
+function Start-AgentTerminal([string[]]$cmd, [string]$Dir, [hashtable]$Env) {
     $p = Get-Paths
-    $line = ConvertTo-PwshCommandLine $cmd
+    $line = ConvertTo-PwshCommandLine $cmd -Env $Env
     if ($p.wt) {
         # The profile supplies the look and the fixed "Omarchy Agent" title that window
         # rules can match, so no --title here: that would undo it. wt splits tabs on ;
@@ -354,7 +385,11 @@ function Test-AgentUsageEnabled($cfg, [string]$id) {
 # scan finds usage.
 function Test-AgentRecordShown($record) {
     if (-not $record -or -not $record.ready) { return $false }
-    ([long]$record.totalPrompts -gt 0) -or (@($record.limits).Count -gt 0)
+    # An installed agent shows too, signed in or not, so a fresh install can reach the
+    # panel's Sign in and + (add a subscription) before it has any usage.
+    # (.Where: a record without accounts has $null there, and @($null) counts as one.)
+    ([long]$record.totalPrompts -gt 0) -or (@($record.limits).Count -gt 0) -or (@($record.accounts).Where({ $_ }).Count -gt 0) -or
+        ($record.id -and $AgentTable.Contains([string]$record.id) -and (Test-AgentInstalled $record.id))
 }
 
 function Update-AgentUsage([switch]$Force, [switch]$LimitsOnly, [string]$Only, [switch]$NoRetry) {
@@ -384,6 +419,15 @@ function Update-AgentUsage([switch]$Force, [switch]$LimitsOnly, [string]$Only, [
         $psi.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
         # The collectors' own scan caches, under winarchy's data folder instead of ~/.cache.
         $psi.Environment['XDG_CACHE_HOME'] = Join-Path $Data 'cache'
+        # The account registries (lib/accounts.ps1) where upstream's collectors look.
+        $psi.Environment['XDG_STATE_HOME'] = $AccountStateHome
+        # Stats and the primary's limits come from the primary home, never a home this
+        # process inherited from an agent window.
+        foreach ($prov in $AccountProviders.Keys) {
+            $var = $AccountProviders[$prov].var
+            [void]$psi.Environment.Remove($var)
+            if (Test-AccountPrimaryCustom $prov) { $psi.Environment[$var] = Get-AccountPrimaryHome $prov }
+        }
         $psi.Environment['PYTHONIOENCODING'] = 'utf-8'
         $psi.Environment['PYTHONDONTWRITEBYTECODE'] = '1'
         try {
@@ -417,6 +461,16 @@ function Update-AgentUsage([switch]$Force, [switch]$LimitsOnly, [string]$Only, [
         [void](Write-AgentUsageFile $cfg)
         Start-Sleep -Seconds 60
         return Update-AgentUsage -LimitsOnly -NoRetry
+    }
+    # Several accounts: switch (or say so) when the active one runs low, then collect
+    # the new active account's limits so the panel shows them straight away.
+    $switched = @(foreach ($r in @($running)) {
+        if ($r -and (Test-AccountProvider $r.id)) {
+            try { if (Invoke-AgentAutoswitch $r.id) { $r.id } } catch { Log "agent accounts: autoswitch $($r.id): $($_.Exception.Message)" }
+        }
+    })
+    if ($switched.Count -and -not $NoRetry) {
+        foreach ($id in $switched) { [void](Update-AgentUsage -LimitsOnly -Only $id -NoRetry) }
     }
     Write-AgentUsageFile $cfg
 }

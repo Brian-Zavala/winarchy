@@ -21,6 +21,7 @@ meaning. `default/upstream.json` records the upstream commit last reviewed.
 | Media module in the bar | the bar's media module (Zebar's media provider) |
 | No default coding agent until you pick one | Claude Code, once it is installed; picking another replaces it (`apps.agent`) |
 | Agents panel: every subscription's limits, tokens today, Use / sign in, _Make something_ (theme, plugin, app) | the bar's agent panel (`zebar/omarchy/usage.*`); _Plugin_ makes a Zebar widget pack, which follows the theme and font; the tiles' prompts point at `agents/make/*.md` instead of Omarchy's skill |
+| Agent account switching (Omarchy's `agent-account-switching` branch): several accounts per agent, `+`, Use, autoswitch, free resets | `lib/accounts.ps1` and `winarchy agent-account`; junctions instead of symlinks, copied settings; the active account reaches new sessions through Winarchy's launches and `claude`/`codex` functions in the PowerShell profile, not a session-wide variable; Codex adds accounts by device code, since it ignores `BROWSER` on Windows |
 
 Every one of these keys yields to a key your own AutoHotkey script in the Startup folder
 already binds (`lib/keys.ps1`, `BindUnlessUser`).
@@ -50,13 +51,6 @@ already binds (`lib/keys.ps1`, `BindUnlessUser`).
 | Google Maps on `Super + Shift + S` | Windows' region screenshot keeps that key |
 | xcompose's locale sequences (`include "%L"`: ' e = é, ...) | Windows' own keyboard layouts (US-International) do that |
 | Keyboard backlight and touchpad keys | vendor tools own them on Windows |
-
-## Not yet
-
-- Several accounts for one agent (Omarchy's agent account switching: the panel's `+`,
-  Primary / Secondary, switching when one runs out) is on an Omarchy branch that isn't
-  released yet. The panel's `+` picks the default agent until it is.
-- Codex's free resets: nothing Winarchy reads reports them.
 
 ## Limits
 

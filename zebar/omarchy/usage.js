@@ -1,11 +1,13 @@
 // The bar's agents panel: a port of Omarchy's shell/plugins/agents panel. Every
 // subscription in agents.json, which `winarchy agent-usage` writes from the usage
 // collectors (lib/agents), with its limits; opening one shows its tokens by day and by
-// model. Its buttons are menu.ahk verbs: + picks the default agent, Use switches to one,
-// Sign in runs its login, and the Make something tiles start the default agent with a
-// starter prompt. menu.ahk opens it from the bar's agent icon, after writing the click's x
-// to usage-anchor.json so the card drops under the icon.
-//   j / k, arrows: move    Enter, Space: press    r: refresh    Esc: close
+// model. Its buttons are menu.ahk verbs: + adds a subscription (another account),
+// Use switches account, Make default picks the default agent, Sign in runs a login,
+// Autoswitch lets an agent move to its next account when one runs low, and the Make
+// something tiles start the default agent with a starter prompt. menu.ahk opens it from
+// the bar's agent icon, after writing the click's x to usage-anchor.json so the card
+// drops under the icon.
+//   j / k, arrows: move    Enter, Space: press    a: add    r: refresh    Esc: close
 import * as zebar from './zebar.mjs';
 import * as env from './env.js';
 import { panel } from './panel.js';
@@ -86,6 +88,7 @@ try { opened = new Set(JSON.parse(localStorage.getItem('agents-open') ?? '[]'));
 let refreshing = false;
 let cursorOn = false;
 let cursor = 0;           // index into nodes()
+let switching = {};       // provider -> account id a Use click is waiting to see active
 
 const agents = () => data?.agents ?? [];
 const agentKey = id => known.find(k => k.key === id);
@@ -99,6 +102,11 @@ function toggle(id) {
 // ---- render
 function render() {
   hideTip();   // its row is about to be replaced
+  // Buttons are rebuilt: keep keyboard focus on the same one (by data-key).
+  const focused = document.activeElement?.dataset?.key;
+  for (const a of agents()) {
+    if (switching[a.id] && (a.accounts ?? []).some(x => x.active && x.id === switching[a.id])) delete switching[a.id];
+  }
   document.querySelector('#hero .glyph').textContent = GLYPH.agent;
   const list = agents();
   const today = list.reduce((sum, a) => sum + int(a.todayTotalTokens), 0);
@@ -107,8 +115,11 @@ function render() {
   $('agents').replaceChildren(...list.map(renderAgent));
   $('updated').textContent = refreshing ? 'refreshing…' : (data?.updatedAt ? agoText(data.updatedAt) : '');
   place();
+  if (focused) document.querySelector(`[data-key="${CSS.escape(focused)}"]`)?.focus();
   paintCursor();
 }
+
+const keyed = (node, key) => { node.dataset.key = key; return node; };
 
 function renderAgent(a) {
   const box = el('section', 'agent');
@@ -122,33 +133,44 @@ function renderAgent(a) {
   name.setAttribute('aria-expanded', String(isOpen));
   name.title = isOpen ? 'Hide tokens by day and model' : 'Tokens by day and model';
   name.append(el('span', 'chev', isOpen ? GLYPH.open : GLYPH.closed), el('span', 'name', a.name));
-  if (a.tierLabel) name.append(el('span', 'plan', `· ${planText(a.tierLabel)}`));
+  // With several accounts each shows its own plan below.
+  if (a.tierLabel && !((a.accounts ?? []).length > 1)) name.append(el('span', 'plan', `· ${planText(a.tierLabel)}`));
   name.onclick = () => toggle(a.id);
-  head.append(name);
+  head.append(keyed(name, `open:${a.id}`));
+  const accounts = a.accounts ?? [];
+  const multi = accounts.length > 1;
+  if (multi) {
+    // Autoswitch: move to the next account by itself when this one runs low.
+    const on = a.accountSwitch?.mode === 'auto';
+    const auto = keyed(el('button', 'auto', 'Autoswitch'), `auto:${a.id}`);
+    auto.setAttribute('aria-pressed', String(on));
+    auto.title = on ? `Switches account by itself at ${a.accountSwitch?.threshold ?? 95}%. Click to switch by hand.`
+      : `Switch account by itself when one reaches ${a.accountSwitch?.threshold ?? 95}%`;
+    auto.onclick = () => {
+      a.accountSwitch = { ...(a.accountSwitch ?? {}), mode: on ? 'manual' : 'auto' };
+      act('agent-account-mode', a.id, on ? 'manual' : 'auto');
+      render();
+    };
+    head.append(auto);
+  }
   const k = agentKey(a.id);
-  if (a.id === data?.default) head.append(el('span', 'state active', 'Active'));
+  if (a.id === data?.default) head.append(el('span', 'state default', 'Default'));
   else if (k?.installed) {
-    const use = el('button', 'use', 'Use');
+    const use = keyed(el('button', 'use', 'Make default'), `default:${a.id}`);
     use.title = `Make ${k.label} the default agent, and start it`;
     use.onclick = () => { act('default-agent', a.id); close(); };
     head.append(use);
   }
   box.append(head);
 
-  // Auth and endpoint problems replace nothing: the limits and stats still show below.
-  if (a.usageStatusText) {
-    const status = el('div', 'status');
-    status.setAttribute('role', 'status');
-    const text = el('div', 'text');
-    text.append(el('strong', '', a.usageStatusText), el('span', 'help', a.authHelpText ?? ''));
-    status.append(el('span', 'icon', GLYPH.alert), text);
-    if (k?.login && /auth|sign.?in|log.?in/i.test(a.usageStatusText)) {
-      const login = el('button', 'login', 'Sign in');
-      login.onclick = () => { act('agent-login', a.id); close(); };
-      status.append(login);
-    }
-    box.append(status);
+  if (multi) {
+    box.append(...accounts.map(x => renderAccount(a, x, k)));
+    if (isOpen) box.append(renderDetail(a));
+    return box;
   }
+  box.append(...statusBlock(a, a, k, a.id));
+  const credits = creditsLine(a.resetCredits);
+  if (credits) box.append(credits);
 
   const limits = a.limits ?? [];
   if (limits.length) {
@@ -158,6 +180,68 @@ function renderAgent(a) {
   }
   if (isOpen) box.append(renderDetail(a));
   return box;
+}
+
+// One account of several: label · plan, then ACTIVE or Use, its problems and its limits.
+function renderAccount(a, x, k) {
+  const ref = `${a.id}/${x.id}`;
+  const box = el('div', `account${x.stale && x.limits?.length ? ' stale' : ''}`);
+  box.setAttribute('aria-label', `${a.name}: ${x.label}`);
+  const head = el('div', 'acct-head');
+  const name = el('span', 'acct-name', x.label);
+  if (x.plan) name.append(el('span', 'plan', ` · ${planText(x.plan)}`));
+  if (x.email) name.title = x.email;
+  head.append(name);
+  if (x.active) head.append(el('span', 'state active', 'Active'));
+  else if (switching[a.id] === x.id) head.append(el('span', 'state', 'Switching…'));
+  else {
+    const use = keyed(el('button', 'use', 'Use'), `use:${ref}`);
+    use.title = `New ${a.name} sessions use ${x.label}${x.email ? ` (${x.email})` : ''}. Running sessions stay as they are.`;
+    use.onclick = () => { switching[a.id] = x.id; act('agent-account-use', ref); render(); };
+    head.append(use);
+  }
+  box.append(head);
+  const credits = creditsLine(x.resetCredits);
+  if (credits) box.append(credits);
+  // A parked account whose sign-in expired still shows what it last knew, dimmed: only
+  // the account in use, or one that was never signed in, asks for a sign-in.
+  const expiredParked = !x.active && x.limits?.length && /expired/i.test(x.usageStatusText ?? '');
+  if (expiredParked) box.append(el('span', 'note', 'Last known limits. Use it to refresh its sign-in.'));
+  else box.append(...statusBlock(a, x, k, ref));
+  if (x.limits?.length) {
+    const rows = el('div', 'limits');
+    rows.append(...x.limits.map(limitRow));
+    box.append(rows);
+  }
+  return box;
+}
+
+function creditsLine(c) {
+  const n = int(c?.available);
+  if (!n) return null;
+  const line = el('span', 'credits', `${n} free reset${n === 1 ? '' : 's'}`);
+  if (c.nextExpiresAt) {
+    line.dataset.expires = c.nextExpiresAt;
+    line.dataset.count = String(n);
+    line.textContent += ` · next expires in ${leftText(c.nextExpiresAt)}`;
+  }
+  return line;
+}
+
+// Auth and endpoint problems replace nothing: the limits and stats still show below.
+function statusBlock(a, x, k, ref) {
+  if (!x.usageStatusText) return [];
+  const status = el('div', 'status');
+  status.setAttribute('role', 'status');
+  const text = el('div', 'text');
+  text.append(el('strong', '', x.usageStatusText), el('span', 'help', x.authHelpText ?? ''));
+  status.append(el('span', 'icon', GLYPH.alert), text);
+  if (k?.login && /auth|sign.?in|log.?in|expired/i.test(x.usageStatusText)) {
+    const login = keyed(el('button', 'login', 'Sign in'), `login:${ref}`);
+    login.onclick = () => { act('agent-login', ref); close(); };
+    status.append(login);
+  }
+  return [status];
 }
 
 // Label | meter | time to reset. Session and Weekly are what the collectors call
@@ -179,11 +263,18 @@ function limitRow(l) {
   meter.append(fill);
   const left = el('span', 'left');
   if (level) left.append(el('span', 'flag', GLYPH.alert));
-  left.append(leftText(l.resetsAt));
+  const when = el('span', 'when', leftText(l.resetsAt));
+  left.append(when);
   row.append(el('span', 'label', label), meter, left);
-  const tip = [`${title}: ${Math.round(p * 100)}% used`, resetText(l.resetsAt)].filter(Boolean).join('\n');
-  row.setAttribute('aria-label', tip.split('\n').join(', '));
-  hoverTip(row, tip);
+  // Its countdown and tip are text that tick() rewrites; the row itself stays put.
+  row.tickText = () => {
+    when.textContent = leftText(l.resetsAt);
+    const tip = [`${title}: ${Math.round(p * 100)}% used`, resetText(l.resetsAt)].filter(Boolean).join('\n');
+    row.setAttribute('aria-label', tip.split('\n').join(', '));
+    return tip;
+  };
+  row.tickText();
+  hoverTip(row, () => row.tickText());
   return row;
 }
 
@@ -258,7 +349,7 @@ function barRow(label, n, max, tip, bold = false) {
 
 // ---- hover / focus detail
 function hoverTip(row, tip) {
-  const show = () => showTip(row, tip);
+  const show = () => showTip(row, typeof tip === 'function' ? tip() : tip);
   row.addEventListener('mouseenter', show);
   row.addEventListener('focus', show);
   row.addEventListener('mouseleave', hideTip);
@@ -268,14 +359,41 @@ function showTip(row, text) {
   const tip = $('tip');
   tip.textContent = text;
   tip.classList.remove('hidden');
-  // Right-aligned to the row, under it; above it if it would run off the card.
+  tipRow = row;
+  // Right-aligned to the row, under it; above it if it would run off the visible card,
+  // and never past either edge of the card (which would scroll it sideways).
   const panel = $('panel');
-  let top = row.offsetTop + row.offsetHeight + 4;
-  if (top + tip.offsetHeight > panel.scrollTop + panel.clientHeight) top = row.offsetTop - tip.offsetHeight - 4;
+  const r = offsetIn(row, panel);
+  const view = { top: panel.scrollTop + 4, bottom: panel.scrollTop + panel.clientHeight - 4 };
+  let top = r.top + row.offsetHeight + 4;
+  if (top + tip.offsetHeight > view.bottom) top = r.top - tip.offsetHeight - 4;
+  top = Math.max(view.top, Math.min(view.bottom - tip.offsetHeight, top));
   tip.style.top = `${top}px`;
-  tip.style.left = `${Math.max(8, row.offsetLeft + row.offsetWidth - tip.offsetWidth)}px`;
+  const maxLeft = panel.clientWidth - tip.offsetWidth - 8;
+  tip.style.left = `${Math.max(8, Math.min(maxLeft, r.left + row.offsetWidth - tip.offsetWidth))}px`;
 }
-function hideTip() { $('tip').classList.add('hidden'); }
+let tipRow = null;
+// A row's position inside the card, whatever its offsetParent.
+function offsetIn(node, panel) {
+  let top = 0, left = 0;
+  for (let n = node; n && n !== panel; n = n.offsetParent) { top += n.offsetTop; left += n.offsetLeft; }
+  return { top, left };
+}
+function hideTip() { $('tip').classList.add('hidden'); tipRow = null; }
+
+// Every 30 s: countdowns, tips and free-reset expiries, with no rebuild, so focus, the
+// cursor and a showing tip all stay where they are.
+function tick() {
+  for (const row of document.querySelectorAll('.limit')) {
+    const tip = row.tickText?.();
+    if (row === tipRow && tip) $('tip').textContent = tip;
+  }
+  for (const c of document.querySelectorAll('.credits[data-expires]')) {
+    const n = int(c.dataset.count);
+    c.textContent = `${n} free reset${n === 1 ? '' : 's'} · next expires in ${leftText(c.dataset.expires)}`;
+  }
+  if (!refreshing && data?.updatedAt) $('updated').textContent = agoText(data.updatedAt);
+}
 
 // ---- keyboard cursor (as the Tailscale panel): every button, top to bottom
 function nodes() {
@@ -294,8 +412,7 @@ function paintCursor() {
 // ---- position: under the bar, centered on the icon, kept on the monitor
 let anchorX = null;
 function place() {
-  const panel = $('panel');
-  const w = panel.offsetWidth;
+  const w = $('wrap').getBoundingClientRect().width;
   const x = anchorX ?? window.innerWidth / 2;
   const left = Math.max(12, Math.min(window.innerWidth - w - 12, x - w / 2));
   document.documentElement.style.setProperty('--left', `${left}px`);
@@ -313,6 +430,7 @@ async function poll() {
 
 let refreshTimer = null;
 function refresh() {
+  if (refreshing) return;   // one collector run at a time
   refreshing = true;
   $('updated').textContent = 'refreshing…';
   act('usage-refresh');
@@ -326,7 +444,8 @@ function refresh() {
 const close = () => p.close();
 
 $('add').textContent = GLYPH.add;
-$('add').onclick = () => { act('open', 'agent'); close(); };
+const addAccount = () => { act('agent-account-add'); close(); };
+$('add').onclick = addAccount;
 $('refresh').textContent = GLYPH.refresh;
 $('refresh').onclick = refresh;
 for (const t of document.querySelectorAll('.tile')) {
@@ -335,6 +454,8 @@ for (const t of document.querySelectorAll('.tile')) {
   t.onclick = () => { act('agent-make', t.dataset.kind); close(); };
 }
 
+// A text size or monitor change re-measures the zoomed card.
+window.addEventListener('resize', place);
 document.addEventListener('mouseover', e => {
   const i = nodes().findIndex(n => n.contains(e.target));
   if (i >= 0 && i !== cursor) { cursor = i; if (cursorOn) paintCursor(); }
@@ -359,6 +480,7 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (k === 'r') refresh();
+  else if (k === 'a') addAccount();
   else return;
   e.preventDefault();
 });
@@ -367,10 +489,12 @@ const p = panel({
   name: 'usage',
   async open({ anchor }) {
     anchorX = Number.isFinite(anchor.x) ? anchor.x : null;
-    // Read again on every open: the default agent, or another monitor's panel, may have moved on.
+    // Read again on every open: the default agent, the accounts, or another monitor's
+    // panel may have moved on while this one was hidden.
     try { opened = new Set(JSON.parse(localStorage.getItem('agents-open') ?? '[]')); } catch {}
     cursorOn = false;
     cursor = 0;
+    switching = {};
     const [first, defaults] = await Promise.all([get('agents.json'), get('defaults.json')]);
     known = defaults?.agents ?? known;
     if (first) { data = first; stamp = first.updatedAt ?? null; }
@@ -380,4 +504,4 @@ const p = panel({
 });
 p.every(2000, poll);
 // Reset times count down while the panel is open.
-p.every(30000, () => { if (!refreshing) render(); });
+p.every(30000, tick);

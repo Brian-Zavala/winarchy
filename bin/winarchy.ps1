@@ -42,7 +42,11 @@
   winarchy default-agent <name>        pick it (claude, codex, copilot, opencode, ...)
   winarchy agent-make <theme|plugin|app>
                                           start it asking what to make (the usage panel's tiles)
-  winarchy agent-login <claude|codex>  sign in again, then refresh its limits
+  winarchy agent-login <claude|codex>[/<account>]  sign in again, then refresh its limits
+  winarchy agent-account [list [-Json] | add [claude|codex] [name] | use <provider>/<id|next>
+                          | rename <provider>/<id> <name> | remove <provider>/<id> [-Yes]
+                          | mode <provider> <manual|auto> [threshold]]
+                                     several subscriptions per agent (the usage panel's +)
   winarchy agent-usage [-Force] [<agent>]
                                           refresh the bar's agent usage (limits, tokens by
                                           day and model); runs by itself every 15 minutes
@@ -75,6 +79,10 @@ param(
     [Parameter(Position = 2)][string]$Arg2,
     # herdr layout <agent> <second agent> / herdr swarm <count> <command>
     [Parameter(Position = 3)][string]$Arg3,
+    # agent-account mode <provider> <manual|auto> <threshold>
+    [Parameter(Position = 4)][string]$Arg4,
+    # agent-account list -Json
+    [switch]$Json,
     [switch]$Yes, [switch]$Adopt, [switch]$KeepApps, [switch]$DryRun, [switch]$Purge,
     [switch]$Offline, [switch]$MonitorsOnly, [switch]$Resplit, [switch]$Fix, [switch]$NoRestart,
     # Wait for a key at the end (verbs the menu runs in a terminal window).
@@ -93,8 +101,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $AllLibs = 'common', 'detect', 'keys', 'render', 'themes', 'targets', 'journal', 'apply', 'setup',
-    'uninstall', 'doctor', 'extras', 'apps', 'webapps', 'ports', 'catalog', 'agents', 'herdr', 'shell',
-    'tailscale', 'winicons', 'animations', 'autotile', 'transition', 'system', 'netpanel', 'audio'
+    'uninstall', 'doctor', 'extras', 'apps', 'webapps', 'ports', 'catalog', 'agents', 'accounts', 'herdr',
+    'shell', 'tailscale', 'winicons', 'animations', 'autotile', 'transition', 'system', 'netpanel', 'audio'
 # The verbs the bar, its panels and winarchy.ahk run all day (the Audio panel every few
 # seconds) load only the libraries they use: parsing all of them is a good part of a
 # second's start. tests\lazyload.Tests.ps1 walks each one. Every other verb loads the lot.
@@ -212,6 +220,7 @@ switch ($Verb) {
     # The usage panel's "Make something" tiles and its "Sign in" (lib/agents.ps1).
     'agent-make' { Invoke-AgentMake $Arg }
     'agent-login' { Invoke-AgentLogin $Arg }
+    'agent-account' { Invoke-AgentAccountCommand $Arg $Arg2 $Arg3 $Arg4 -Json:$Json -Yes:$Yes }
     # The bar's agent indicator: run every usage collector and rebuild agents.json.
     # winarchy.ahk runs this on a timer; -Force rescans and re-asks for limits now.
     'agent-usage' {

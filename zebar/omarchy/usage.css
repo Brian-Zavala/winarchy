@@ -33,12 +33,15 @@ button:focus-visible, .cursor-on .has-cursor {
 }
 .hidden { display: none !important; }
 
+/* The wrapper sits under the bar at the icon; the card inside zooms with the text size,
+   as the Display panel does. */
+#wrap { position: absolute; top: var(--top, 36px); left: var(--left, 50%); }
 #panel {
-  position: absolute;
-  top: var(--top, 36px);
-  left: var(--left, 50%);
+  position: relative;
+  zoom: var(--text-scale, 1);
   width: 360px;
-  max-height: calc(100vh - var(--top, 36px) - 12px);
+  max-height: calc((100vh - var(--top, 36px) - 12px) / var(--text-scale, 1));
+  overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;
   display: flex;
@@ -77,10 +80,11 @@ button:focus-visible, .cursor-on .has-cursor {
 
 .head { display: flex; align-items: center; gap: 10px; }
 .toggle { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; padding: 2px 0; border-radius: 3px; }
-.toggle .name { font-weight: 700; white-space: nowrap; }
+.toggle .name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .toggle .plan { color: var(--ink-3); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .toggle .chev { flex: none; width: 10px; margin-right: -2px; color: var(--ink-3); font-size: 11px; }
 .toggle:hover .chev { color: var(--fg); }
+.state, .use, .auto { flex: none; }
 .state { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
 .state.active { color: var(--accent); }
 .use { padding: 2px 9px; border-radius: 4px; background: var(--well); color: var(--ink-2); font-size: 11px; }
@@ -168,7 +172,19 @@ footer {
 /* ---- hover / focus detail (enhances: each row's aria-label carries the same figures) */
 #tip {
   position: absolute; z-index: 2; pointer-events: none;
-  padding: 7px 10px; line-height: 1.5; white-space: pre;
+  padding: 7px 10px; line-height: 1.5; white-space: pre-wrap; max-width: calc(100% - 16px);
   background: var(--bg); border: 1px solid color-mix(in srgb, var(--fg) 30%, transparent);
   font-size: 11px; color: var(--fg);
 }
+
+/* ---- several accounts of one agent: a sub-section each, like Omarchy's panel */
+.account { display: flex; flex-direction: column; gap: 6px; padding: 8px 0 0 12px; border-left: 1px solid var(--hair); }
+.account.stale .limits { opacity: .6; }
+.acct-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.acct-name { flex: 1; min-width: 0; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acct-name .plan { color: var(--ink-3); font-size: 11px; font-weight: 400; }
+.credits, .note { color: var(--ink-3); font-size: 11px; }
+.auto { padding: 2px 8px; border-radius: 4px; background: var(--well); color: var(--ink-3); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.auto[aria-pressed="true"] { color: var(--accent); }
+.auto:hover { background: var(--hover); color: var(--fg); }
+.state.default { color: var(--ink-3); }

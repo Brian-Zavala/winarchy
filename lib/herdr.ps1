@@ -334,7 +334,10 @@ function Get-HerdrAgentCommand([string]$agent) {
     # Something that isn't one of ours is run as typed: Omarchy takes any command here.
     if (-not $key) { return $agent }
     $cmd = Get-AgentCommand $key
-    ($cmd | ForEach-Object { if ($_ -match '[\s"]') { "'" + ($_ -replace "'", "''") + "'" } else { $_ } }) -join ' '
+    $line = ($cmd | ForEach-Object { if ($_ -match '[\s"]') { "'" + ($_ -replace "'", "''") + "'" } else { $_ } }) -join ' '
+    # A full path in quotes (an agent not on PATH yet) needs the call operator.
+    if ($line.StartsWith("'")) { $line = "& $line" }
+    $line
 }
 
 # hdl: editor left, agent right (30%), a terminal along the bottom (15%).

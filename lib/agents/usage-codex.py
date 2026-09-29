@@ -1,4 +1,5 @@
-# winarchy port of Omarchy's bin/omarchy-agent-usage-codex (basecamp/omarchy, quattro).
+# winarchy port of Omarchy's bin/omarchy-agent-usage-codex (omacom/omarchy, quattro, with the
+# per-account limits of its agent-account-switching branch at 38db762).
 # Kept as close to upstream as possible so it can be re-synced; every change is marked
 # "winarchy:". Run by lib/agents.ps1 (Update-AgentUsage), which reads the record it prints.
 """Collect Codex usage into one display-ready JSON record.
@@ -525,8 +526,21 @@ def limit_window(window):
   }
 
 
-def fetch_codex_rpc():
+def reset_credits(result):
+  granted = (result.get("rateLimitResetCredits") or {}).get("credits") or []
+  available = [c for c in granted if isinstance(c, dict) and c.get("status") == "available"]
+  if not available:
+    return None
+  expiries = [number(c.get("expiresAt")) for c in available if number(c.get("expiresAt")) > 0]
+  return {
+    "available": len(available),
+    "nextExpiresAt": datetime.fromtimestamp(min(expiries), timezone.utc).isoformat() if expiries else "",
+  }
+
+
+def fetch_codex_rpc(home=None):
   result = {"limits": [], "tierLabel": "", "usageStatusText": "", "authHelpText": AUTH_HELP}
+  env = dict(ENV, CODEX_HOME=str(home)) if home else ENV
   codex = find_command("codex")
   if not codex:
     result["usageStatusText"] = "Codex unavailable"
@@ -540,7 +554,7 @@ def fetch_codex_rpc():
       stdout=subprocess.PIPE,
       stderr=subprocess.DEVNULL,
       text=True,
-      env=ENV,
+      env=env,
     )
   except Exception as exc:
     result["usageStatusText"] = "Codex unavailable"
@@ -555,6 +569,20 @@ def fetch_codex_rpc():
     proc.stdin.write(json.dumps({"method": "initialized", "params": {}}) + "\n")
     proc.stdin.flush()
     limits_msg = rpc_request(proc, 2, "account/rateLimits/read", timeout=8, reader=reader)
+
+    # A home nobody is signed in to answers with an error rather than limits.
+    # Say so the same way the Claude collector does, so the panel offers to
+    # sign that account in again.
+    error = limits_msg.get("error")
+    if isinstance(error, dict):
+      message = str(error.get("message") or "")
+      if "auth" in message.lower():
+        result["usageStatusText"] = "Waiting for auth"
+        result["authHelpText"] = AUTH_HELP
+      else:
+        result["usageStatusText"] = "Codex limits unavailable"
+        result["authHelpText"] = message
+      return result
     limits = (limits_msg.get("result") or {}).get("rateLimits") or {}
     plan = limits.get("planType") or ""
 
@@ -574,6 +602,12 @@ def fetch_codex_rpc():
       entry = limit_window(window)
       if entry:
         result["limits"].append(entry)
+
+    # OpenAI hands out free "full reset" credits that wipe the rate limits on
+    # demand and lapse after a month. Worth knowing about before a limit bites.
+    credits = reset_credits(limits_msg.get("result") or {})
+    if credits:
+      result["resetCredits"] = credits
   except Exception as exc:
     result["usageStatusText"] = "Codex limits unavailable"
     result["authHelpText"] = str(exc)
@@ -589,6 +623,53 @@ def fetch_codex_rpc():
   return result
 
 
+# The accounts `omarchy agent account` registered, read straight from its
+# registry. Only a registry holding a second account matters: with one, the
+# record is exactly what it always was.
+def registered_accounts():
+  state = Path(os.environ.get("XDG_STATE_HOME") or (Path.home() / ".local" / "state"))
+  try:
+    registry = json.loads((state / "omarchy" / "agents" / "accounts" / "codex.json").read_text(encoding="utf-8"))
+  except Exception:
+    return []
+  accounts = [a for a in registry.get("accounts") or [] if isinstance(a, dict) and a.get("id")]
+  if len(accounts) < 2:
+    return []
+  active_id = registry.get("active") or accounts[0]["id"]
+  if not any(a["id"] == active_id for a in accounts):
+    active_id = accounts[0]["id"]
+  for account in accounts:
+    account["active"] = account["id"] == active_id
+    account["switch"] = {
+      "mode": "auto" if registry.get("switch") == "auto" else "manual",
+      "threshold": registry.get("threshold") or 95,
+    }
+  return accounts
+
+
+# Each account's app-server runs in that account's home, so it answers for that
+# login and refreshes that login's tokens there.
+def account_limits(account):
+  # The primary is ~/.codex by definition, not whatever CODEX_HOME this run
+  # happened to inherit — that would report another account's limits as Main's.
+  # winarchy: winarchy passes the main login's own CODEX_HOME (a user-wide one, if
+  # set) and clears any other, so the one this run has is the primary's.
+  rpc = fetch_codex_rpc(account.get("home") or os.environ.get("CODEX_HOME") or (Path.home() / ".codex"))
+  return {
+    "id": account["id"],
+    "label": str(account.get("label") or account["id"]),
+    "email": str(account.get("email") or ""),
+    "plan": rpc["tierLabel"] or str(account.get("plan") or ""),
+    "active": account["active"],
+    "primary": bool(account.get("primary")),
+    "limits": rpc["limits"],
+    "stale": not rpc["limits"],
+    "usageStatusText": rpc["usageStatusText"],
+    "authHelpText": rpc["authHelpText"],
+    "resetCredits": rpc.get("resetCredits"),
+  }
+
+
 def main():
   parser = argparse.ArgumentParser()
   # --force rescans everything and rewrites the cache. --limits-only is kept
@@ -602,7 +683,21 @@ def main():
 
   max_age = 0 if args.force else (LIMITS_ONLY_REUSE_SECONDS if args.limits_only else SCAN_REUSE_SECONDS)
   stats = cached_local_stats(max_age)
-  rpc = fetch_codex_rpc()
+  registered = registered_accounts()
+  accounts = [account_limits(account) for account in registered]
+  current = next((a for a in accounts if a["active"]), None)
+  if current:
+    # The top-level fields keep describing the account new sessions use.
+    rpc = {
+      "limits": current["limits"],
+      "tierLabel": current["plan"],
+      "usageStatusText": current["usageStatusText"],
+      "authHelpText": current["authHelpText"],
+    }
+    if current.get("resetCredits"):
+      rpc["resetCredits"] = current["resetCredits"]
+  else:
+    rpc = fetch_codex_rpc()
 
   record = {
     "schemaVersion": 1,
@@ -614,6 +709,9 @@ def main():
   }
   record.update(stats)
   record.update(rpc)
+  if accounts:
+    record["accountSwitch"] = registered[0]["switch"]
+    record["accounts"] = accounts
   print(json.dumps(record, separators=(",", ":")))
 
 
