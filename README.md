@@ -1,16 +1,20 @@
-![Winarchy](images/winarchy-no-bg.png)
+<img src="images/winarchy-no-bg.png" width="100%" alt="Winarchy">
 
-Most people never choose their desktop. They take whatever Microsoft ships, pile a few tweaks on top, and call it a setup. That's a shame, because the computer you stare at all day should be a joy to use, not a compromise you've learned to tolerate.
+Most people never choose their desktop. They accept whatever Microsoft ships, bolt on a few tweaks, and settle. Don't settle! The computer you stare at all day deserves more than tolerance. It deserves flavor and taste.
 
-[Omarchy](https://omarchy.org) showed what happens when somebody makes all the choices for you and makes them well. It's beautiful and fast, and it's opinionated in the best sense: tiling windows, keyboard first, themes that actually look good. But it's Linux, and plenty of us are stuck on Windows for work, for games, or for software that simply won't leave.
+[Omarchy](https://omarchy.org) proved it. DHH and a crew of contributors made a thousand opinionated choices, got nearly all of them right, and kept sharpening the rest. Hyprland tiling. The keyboard for everything. Themes so slick you'll switch them just to gawk at them. It's the Linux desktop as it should have been all along, built on the long tradition of tiling window managers and polished until it shines like heavenly silicon.
 
-So Winarchy brings the good parts over. It's Omarchy's look, its keys and its flow, on Windows 11. Windows tile themselves the way they do in Hyprland. The top bar and the menu are Omarchy's. All twenty-two themes come with it, and switching between them repaints the whole desktop, from the terminal to the editor to the wallpaper. Herdr and the AI coding-agent workflow come too, so you can hand work to an agent and keep your hands on the keyboard.
+But plenty of us are still on Windows. For work, for games, for that one piece of software that simply refuses to integrate into Linux. Fine. That's no excuse to live with a boring computer.
 
-This is omakase. You don't assemble it from forty plugins and a weekend of YAML. One command installs the lot. If it isn't for you, one command takes it all back out and puts your machine back the way it was.
+Winarchy brings the good parts over. Omarchy's look, Omarchy's keys, Omarchy's flow, as close as Windows 11 will let us get. Windows tile Hyprland-style. The top bar and the menu are Omarchy's. All twenty-two themes come along, and switching one repaints everything: terminal, editor, wallpaper, the lot. Herdr comes too, with workspaces, tabs, and panes in a persistent session you can walk away from and pick right back up. Park your AI coding agents there, let them work, and never take your hands off the keyboard.
 
-It won't make Windows into Linux, and it doesn't pretend to. It just makes the time you spend on Windows a lot more pleasant.
+This is omakase. No forty-plugin shopping list. No weekend lost to YAML. One command installs it all. Don't like it? One command takes it back out and puts your machine back the way it was.
+
+Winarchy won't turn Windows into Linux, and it isn't pretending to. It just makes the hours you spend there a whole lot nicer. Enjoy!
 
 *Unofficial, and not affiliated with Omarchy or 37signals. Tracks Omarchy v4.0.4.*
+
+## Install
 
 Open PowerShell (not as administrator) and run:
 
@@ -18,25 +22,27 @@ Open PowerShell (not as administrator) and run:
 irm https://raw.githubusercontent.com/Brian-Zavala/winarchy/main/install.ps1 | iex
 ```
 
+Rather read it before you run it? Good instinct. Here's [install.ps1](install.ps1).
+
 ## The Winarchy Manual
 
-Like Omarchy it lives in [`manual/`](manual/), but if there's a missing chapter it's because Windows isn't cool enough and has nothing to say about.
+Like Omarchy's, it lives in [`manual/`](manual/). If a chapter is missing, it's because Windows had nothing worth saying about it.
 
 - [Welcome to Winarchy!](manual/01-welcome-to-winarchy.md)
 
 **The Basics**
 
 - [Getting Started](manual/02-getting-started.md)
-- [Coming From Mac or Windows](manual/03-coming-from-mac-or-windows.md)
+- [Coming From Mac or Stock Windows](manual/03-coming-from-mac-or-windows.md)
 - [Navigation](manual/04-navigation.md)
-- [The top bar](manual/05-the-top-bar.md)
+- [The Top Bar](manual/05-the-top-bar.md)
 - [Themes](manual/06-themes.md)
 - [Hotkeys](manual/07-hotkeys.md)
 - [Unified Clipboard & History](manual/08-unified-clipboard-history.md)
 - [Notices](manual/10-notices.md)
 - [Text Extraction & Dictation](manual/11-text-extraction-dictation.md)
 - [Screenshots & Recording](manual/12-screenshots-recording.md)
-- [Toggles, idle & screensaver](manual/13-toggles-idle-screensaver.md)
+- [Toggles, Idle & Screensaver](manual/13-toggles-idle-screensaver.md)
 - [Winarchy CLI](manual/14-winarchy-cli.md)
 
 **The Applications**
@@ -48,7 +54,7 @@ Like Omarchy it lives in [`manual/`](manual/), but if there's a missing chapter 
 - [Shell Functions](manual/20-shell-functions.md)
 - [TUIs](manual/21-tuis.md)
 - [Browsers](manual/23-browsers.md)
-- [Commercial apps/services](manual/24-commercial-apps-services.md)
+- [Commercial Apps & Services](manual/24-commercial-apps-services.md)
 - [Gaming](manual/26-gaming.md)
 - [Other Packages](manual/29-other-packages.md)
 
@@ -57,21 +63,21 @@ Like Omarchy it lives in [`manual/`](manual/), but if there's a missing chapter 
 - [Updates](manual/30-updates.md)
 - [Dotfiles](manual/31-dotfiles.md)
 - [Monitors](manual/33-monitors.md)
-- [Keyboard, Mouse, Trackpad](manual/34-keyboard-mouse-trackpad.md)
+- [Keyboard, Mouse & Trackpad](manual/34-keyboard-mouse-trackpad.md)
 - [Fonts](manual/38-fonts.md)
 - [Backgrounds](manual/39-backgrounds.md)
 - [Branding](manual/41-branding.md)
-- [Common tweaks](manual/42-common-tweaks.md)
-- [Making your own theme](manual/43-making-your-own-theme.md)
+- [Common Tweaks](manual/42-common-tweaks.md)
+- [Making Your Own Theme](manual/43-making-your-own-theme.md)
 
 **The Rest**
 
 - [Troubleshooting](manual/45-troubleshooting.md)
 - [FAQ](manual/46-faq.md)
-- [System snapshots](manual/47-system-snapshots.md)
+- [System Snapshots](manual/47-system-snapshots.md)
 - [Security](manual/48-security.md)
 - [Unattended Installs](manual/51-unattended-installs.md)
 
 ## License
 
-Winarchy is released under the [MIT License](LICENSE). Omarchy's themes, backgrounds, logo and designs are by DHH and contributors; see [NOTICE](NOTICE) for every credit.
+Winarchy is released under the [MIT License](LICENSE). Omarchy's themes, backgrounds, logo, and designs are by DHH and contributors; see [NOTICE](NOTICE) for every credit.
