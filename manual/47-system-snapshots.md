@@ -16,11 +16,12 @@ Only the first recording of each thing counts, so running the install or `winarc
 
 It undoes only Winarchy's part of files you share with it. Your PowerShell profile loses just the Herdr shortcuts, VS Code's extension list just Winarchy's theme, and Flow Launcher's and btop's settings just the theme keys, so everything you changed in them since keeps. The same goes for startup programs: only those of the apps Winarchy set up are taken out.
 
-Before it changes anything, it asks two questions:
+Before it changes anything, it asks one question: **keep the apps you installed through Winarchy?** That's anything from the menu's _Install_ section (Cursor, Steam and so on) and Herdr: keep all, remove all, or choose each.
 
-- **Keep the apps you installed through Winarchy?** Anything from the menu's _Install_ section (Cursor, Steam and so on) and Herdr: keep all, remove all, or choose each.
-- **Keep your settings?** Your `config.json`, theme, background and font, your own templates, and your branding. Kept settings are applied again the next time you install Winarchy, and the questions you already answered aren't asked again.
+Your settings are kept without asking: your `config.json`, theme, background and font, your own templates, and your branding. They're applied again the next time you install Winarchy, and the questions you already answered aren't asked again.
 
-`-Yes` keeps both without asking, and `-KeepApps` keeps everything Winarchy runs on (GlazeWM, Flow Launcher, AutoHotkey and the rest). Downloaded themes and backgrounds are kept unless you add `-Purge`, which still keeps your settings if you said so.
+`-Yes` keeps your apps without asking, and `-KeepApps` keeps everything Winarchy runs on too (GlazeWM, Flow Launcher, AutoHotkey and the rest). Downloaded themes and backgrounds are kept unless you add `-Purge`, which deletes them along with your settings, for a clean slate.
+
+Windows Terminal's default profile goes back to what it was, unless you changed it yourself after installing.
 
 When it's done, the journal is archived, so a later install starts a fresh one.

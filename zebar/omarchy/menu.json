@@ -370,6 +370,14 @@
         "when": "laptop"
       },
       {
+        "label": "Taskbar",
+        "icon": "󰍹",
+        "action": [
+          "taskbar",
+          "toggle"
+        ]
+      },
+      {
         "label": "Window Gaps",
         "icon": "",
         "action": [

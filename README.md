@@ -34,7 +34,7 @@ winarchy uninstall
 
 Add `-DryRun` to see what it would undo first.
 
-Before it touches anything, it asks whether to keep the apps you installed through Winarchy, and whether to keep your settings: your `config.json`, theme, background, font, templates and branding. Keep them, and the install one-liner above puts them all back next time without asking the setup questions again. See [system snapshots](manual/47-system-snapshots.md).
+Before it touches anything, it asks whether to keep the apps you installed through Winarchy. Your settings are kept without asking: your `config.json`, theme, background, font, templates and branding. The install one-liner above puts them all back next time without asking the setup questions again. `-Purge` deletes them too. See [system snapshots](manual/47-system-snapshots.md).
 
 ## The Winarchy Manual
 
