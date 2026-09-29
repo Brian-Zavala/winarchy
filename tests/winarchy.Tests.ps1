@@ -512,6 +512,19 @@ Describe 'Omarchy apps'' theme file' {
     }
 }
 
+Describe 'OneDrive placeholders' {
+    It 'leaves out pictures that are only in the cloud, and counts them' {
+        $d = Join-Path $TestDrive ([guid]::NewGuid())
+        New-Item -ItemType Directory -Force $d | Out-Null
+        Set-Content (Join-Path $d 'here.jpg') 'x'; Set-Content (Join-Path $d 'cloud.jpg') 'x'; Set-Content (Join-Path $d 'notes.txt') 'x'
+        $cloud = Get-Item (Join-Path $d 'cloud.jpg')
+        $cloud.Attributes = $cloud.Attributes -bor [IO.FileAttributes]::Offline
+        $script:CloudSkipped = @{}
+        try { @(Get-LocalImages $d).Name | Should -Be @('here.jpg') } finally { $skipped = $script:CloudSkipped; $script:CloudSkipped = $null }
+        $skipped[$d] | Should -Be 1
+    }
+}
+
 Describe 'Bundled theme' {
     It 'ships a complete Omarchy colors.toml' {
         $c = Get-Content -Raw (Join-Path $root 'default\themes\tokyo-night\colors.toml')

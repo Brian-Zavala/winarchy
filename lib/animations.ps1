@@ -17,7 +17,12 @@ function Get-AnimationBuild {
 $VcOverride = '--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended'
 $BuildTools = @(
     @{ name = 'Git'; id = 'Git.Git'; test = { [bool](Get-Command git -ErrorAction SilentlyContinue) } }
-    @{ name = 'Rust'; id = 'Rustlang.Rustup'; test = { (Get-Command rustup -ErrorAction SilentlyContinue) -and (Get-Command cargo -ErrorAction SilentlyContinue) } }
+    # ~/.cargo/bin too: a terminal opened before Rust was installed lacks it on PATH, and
+    # winget's rustup-init on a PC that has Rust re-downloads the whole toolchain.
+    @{ name = 'Rust'; id = 'Rustlang.Rustup'; test = {
+            $bin = Join-Path $env:USERPROFILE '.cargo\bin'
+            ((Get-Command rustup -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $bin 'rustup.exe'))) -and
+                ((Get-Command cargo -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $bin 'cargo.exe'))) } }
     @{ name = 'Visual C++ build tools'; id = 'Microsoft.VisualStudio.2022.BuildTools'; override = $VcOverride; test = {
             $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
             (Test-Path $vswhere) -and [bool](& $vswhere -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath) } }

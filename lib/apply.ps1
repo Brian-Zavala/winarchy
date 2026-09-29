@@ -541,10 +541,13 @@ function Set-TerminalProfiles($p) {
     if (-not $wt.profiles.list) { $wt.profiles | Add-Member -Force -NotePropertyName list -NotePropertyValue @() }
     $font = Get-FontFamily
     $pwsh = $p.pwsh
+    # No ttfx yet (it may still be building in the background): screensaver.ps1 then looks
+    # in ~/.cargo/bin, where that build puts it.
+    $ttfxArg = if ($p.ttfx) { " -Ttfx `"$($p.ttfx)`"" } else { '' }
     $want = @(
         [ordered]@{
             guid = $ScreensaverProfile; name = 'Omarchy Screensaver'; hidden = $true
-            commandline = "`"$pwsh`" -NoProfile -ExecutionPolicy Bypass -File `"$Code\lib\screensaver.ps1`" -Text `"$Data\branding\screensaver.txt`" -Ttfx `"$($p.ttfx)`""
+            commandline = "`"$pwsh`" -NoProfile -ExecutionPolicy Bypass -File `"$Code\lib\screensaver.ps1`" -Text `"$Data\branding\screensaver.txt`"$ttfxArg"
             tabTitle = 'Omarchy Screensaver'; suppressApplicationTitle = $true
             background = '#000000'; opacity = 100; useAcrylic = $false; padding = '0'
             font = [ordered]@{ face = $font; size = 18 }; cursorColor = '#000000'; cursorShape = 'vintage'

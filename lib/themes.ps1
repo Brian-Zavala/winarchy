@@ -40,6 +40,21 @@ function New-Thumbs([object[]]$jobs) {
     } | ForEach-Object { $done++; if (Get-Command Write-UiProgress -ErrorAction SilentlyContinue) { Write-UiProgress 'thumbnails' $done $jobs.Count "$done/$($jobs.Count)" } }
 }
 
+# A OneDrive (Files On-Demand) placeholder: the picture is only in the cloud. Opening one
+# makes Windows download it through OneDrive, which fails outright ("The cloud file
+# provider is not running") when OneDrive is not running, and otherwise pulls the whole
+# folder down in the middle of an install. Such files are left out until kept on the PC.
+#   0x1000 OFFLINE   0x40000 RECALL_ON_OPEN   0x400000 RECALL_ON_DATA_ACCESS
+function Test-CloudOnly([IO.FileSystemInfo]$file) { ([int64]$file.Attributes -band 0x441000) -ne 0 }
+
+# Images in a folder that are on this PC, counting (in $script:CloudSkipped) those that aren't.
+function Get-LocalImages([string]$dir) {
+    foreach ($f in Get-ChildItem -LiteralPath $dir -File | Where-Object { $ImageExt -contains $_.Extension.ToLower() } | Sort-Object Name) {
+        if (Test-CloudOnly $f) { if ($null -ne $script:CloudSkipped) { $script:CloudSkipped[$dir] = 1 + $script:CloudSkipped[$dir] }; continue }
+        $f
+    }
+}
+
 function Get-BackgroundDirs {
     $cfg = Get-Config
     @($cfg.backgroundDirs | ForEach-Object { Expand-UserPath $_ } | Where-Object { $_ -and (Test-Path $_) })
@@ -131,7 +146,11 @@ function Update-Index {
     $script:ThumbQueue = [Collections.Generic.List[object]]::new()
     try { [void](Get-IndexData) } finally { $queue = $script:ThumbQueue; $script:ThumbQueue = $null }
     New-Thumbs @($queue)
-    $data = Get-IndexData
+    $script:CloudSkipped = @{}
+    try { $data = Get-IndexData } finally { $skipped = $script:CloudSkipped; $script:CloudSkipped = $null }
+    foreach ($d in $skipped.Keys) {
+        Log "$($skipped[$d]) picture(s) in $d are only in OneDrive, so they are left out; to show them: right-click > Always keep on this device, then winarchy sync -Offline"
+    }
     $themeList = $data.themes; $groups = $data.groups
 
     $index = [ordered]@{ generated = (Get-Date).ToString('s'); themes = @($themeList); groups = @($groups) }
@@ -158,7 +177,7 @@ function Get-IndexData {
     $groups = [Collections.Generic.List[object]]::new()
     if (Test-Path $Walls) {
         foreach ($dir in Get-ChildItem $Walls -Directory | Sort-Object Name) {
-            $items = foreach ($f in Get-ChildItem $dir.FullName -File | Where-Object { $ImageExt -contains $_.Extension.ToLower() } | Sort-Object Name) {
+            $items = foreach ($f in Get-LocalImages $dir.FullName) {
                 $rel = "thumbs/$($dir.Name)/$($f.BaseName).jpg"
                 if (Update-Thumb $f.FullName (Join-Path $Pack $rel)) {
                     [ordered]@{ label = Get-Label $f.Name; path = $f.FullName; thumb = $rel }
@@ -168,7 +187,7 @@ function Get-IndexData {
         }
     }
     $mine = foreach ($d in Get-BackgroundDirs) {
-        foreach ($f in Get-ChildItem $d -File | Where-Object { $ImageExt -contains $_.Extension.ToLower() } | Sort-Object Name) {
+        foreach ($f in Get-LocalImages $d) {
             $key = ($f.BaseName -replace '[^\w\-]', '_')
             $rel = "thumbs/_mine/$key.jpg"
             if (Update-Thumb $f.FullName (Join-Path $Pack $rel)) {

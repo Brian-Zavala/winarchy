@@ -160,10 +160,21 @@ function Install-NerdFont([string]$name) {
     $tmp = Join-Path $env:TEMP "omarchy-font-$name"
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force $tmp | Out-Null
-    $zip = Join-Path $tmp "$name.zip"
+    $base = "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/$name"
+    $x = Join-Path $tmp 'x'
+    New-Item -ItemType Directory -Force $x | Out-Null
     Log "downloading $name Nerd Font"
-    Invoke-WebRequest "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/$name.zip" -OutFile $zip -TimeoutSec 600
-    Expand-Archive $zip (Join-Path $tmp 'x') -Force
+    # The .tar.xz holds the same fonts at a fraction of the size (JetBrainsMono: 7 MB
+    # against 128 MB), and Windows' own tar reads xz. The zip stays as a fallback.
+    try {
+        Invoke-WebRequest "$base.tar.xz" -OutFile "$tmp\$name.tar.xz" -TimeoutSec 600
+        tar -xf "$tmp\$name.tar.xz" -C $x
+        if ($LASTEXITCODE) { throw "tar exit $LASTEXITCODE" }
+    } catch {
+        Log "$name.tar.xz failed ($($_.Exception.Message)): downloading the zip"
+        Invoke-WebRequest "$base.zip" -OutFile "$tmp\$name.zip" -TimeoutSec 600
+        Expand-Archive "$tmp\$name.zip" $x -Force
+    }
     $files = Get-ChildItem (Join-Path $tmp 'x') -Recurse -Include *.ttf, *.otf |
         Where-Object { $_.Name -match 'NerdFont-' -and $_.Name -notmatch 'NerdFont(Mono|Propo)-' }
     if (-not $files) { $files = Get-ChildItem (Join-Path $tmp 'x') -Recurse -Include *.ttf, *.otf }

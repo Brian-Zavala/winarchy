@@ -48,13 +48,38 @@ function Invoke-Unattended([string]$file, [string[]]$arguments, [int]$timeoutSec
         $start = @{ FilePath = $file; NoNewWindow = $true; PassThru = $true; RedirectStandardInput = $stdin.FullName }
         if ($arguments) { $start.ArgumentList = ConvertTo-ArgString $arguments }
         $proc = Start-Process @start
-        if (-not $proc.WaitForExit($timeoutSec * 1000)) {
-            try { $proc.Kill($true) } catch {}
-            return [pscustomobject]@{ Ok = $false; Code = $null; Reason = "stopped after $([math]::Round($timeoutSec / 60)) min without finishing" }
+        $deadline = [DateTime]::UtcNow.AddSeconds($timeoutSec)
+        $shown = @{}
+        while (-not $proc.WaitForExit(500)) {
+            if ([DateTime]::UtcNow -gt $deadline) {
+                try { $proc.Kill($true) } catch {}
+                return [pscustomobject]@{ Ok = $false; Code = $null; Reason = "stopped after $([math]::Round($timeoutSec / 60)) min without finishing" }
+            }
+            Show-ParkedUac $shown
         }
         $code = $proc.ExitCode
         [pscustomobject]@{ Ok = $code -eq 0; Code = $code; Reason = $(if ($code) { 'exit code 0x{0:X8}' -f $code }) }
     } finally { Remove-Item $stdin -Force -ErrorAction SilentlyContinue }
+}
+
+# An installer that elevates from behind the terminal (GlazeWM's bundle does) gets its
+# UAC prompt parked: Windows shows only a flashing taskbar button, which is easy to miss
+# and invisible once the taskbar is hidden, and the install waits minutes on it. The
+# placeholder is a visible consent.exe window of this class; SwitchToThisWindow opens the
+# prompt, as clicking the button would (winarchy.ahk ShowUacPrompt does the same).
+function Show-ParkedUac([hashtable]$shown) {
+    try {
+        Add-NativeType Uac @'
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string name);
+[DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+[DllImport("user32.dll")] public static extern void SwitchToThisWindow(IntPtr h, bool altTab);
+'@
+        $hwnd = [Winarchy.Uac]::FindWindow('$$$Secure UAP Dummy Window Class For Interim Dialog', $null)
+        if ($hwnd -eq [IntPtr]::Zero -or $shown.ContainsKey($hwnd) -or -not [Winarchy.Uac]::IsWindowVisible($hwnd)) { return }
+        $shown[$hwnd] = $true
+        Write-Ok 'Windows is asking for admin permission: answer the prompt to carry on.'
+        [Winarchy.Uac]::SwitchToThisWindow($hwnd, $true)
+    } catch {}
 }
 
 # Start-Process takes one command line: quote what would otherwise split.
@@ -73,9 +98,19 @@ $WingetRebootCodes = @(0x8A150109, 0x8A15010B, 3010, 1641)
 #   0x8A150102 INSTALL_IN_PROGRESS   1618 ERROR_INSTALL_ALREADY_RUNNING (Windows Installer)
 $WingetBusyCodes = @(0x8A150102, 1618)
 
+# Installer arguments that replace the manifest's, per package and verb.
+#   Rustlang.Rustup upgrade: winget runs rustup-init (-y -q), which on a PC that has Rust
+#   also updates the whole default toolchain - minutes of silent downloading in a window
+#   of its own. Updating rustup itself is what was asked for; toolchains stay as they are.
+$WingetOverrides = @{
+    'upgrade|Rustlang.Rustup' = '-y -q --no-update-default-toolchain'
+}
+
 function Get-WingetArgs([string]$verb, [string]$id, [string]$scope) {
     $a = @($verb, '-e', '--id', $id, '--silent', '--accept-source-agreements', '--accept-package-agreements', '--disable-interactivity')
     if ($scope) { $a += @('--scope', $scope) }
+    $override = $WingetOverrides["$verb|$id"]
+    if ($override) { $a += @('--override', $override) }
     $a
 }
 
@@ -313,10 +348,19 @@ function Install-Extras {
             Write-Ok "ttfx: downloaded to $dest"; return
         } catch { Write-Ok "ttfx download failed ($($_.Exception.Message))" }
     }
-    if (Get-Command cargo -ErrorAction SilentlyContinue) {
-        Write-Ok 'building ttfx with cargo (a few minutes)...'
+    $cargo = Get-Command cargo -ErrorAction SilentlyContinue
+    if ($cargo) {
+        # Compiling takes minutes and only the screensaver needs it: a hidden process builds
+        # it while the install carries on. It lands in ~/.cargo/bin, where the screensaver
+        # looks when no other ttfx was found (Set-TerminalProfiles), so no apply is needed.
+        if (Get-CimInstance Win32_Process -Filter "Name='cargo.exe'" -ErrorAction SilentlyContinue | Where-Object CommandLine -match 'omacom/ttfx') {
+            Write-Ok 'ttfx: already being built in the background'; return
+        }
         [void](Add-JournalEntry @{ kind = 'cargo'; key = 'cargo|ttfx'; crate = 'ttfx' })
-        cargo install --git https://github.com/omacom/ttfx --tag v0.3.3 --locked 2>&1 | Select-Object -Last 2 | Out-Host
+        $log = Join-Path $Data 'logs\ttfx-build.log'
+        $cmd = "& '$($cargo.Source -replace "'", "''")' install --git https://github.com/omacom/ttfx --tag v0.3.3 --locked *> '$($log -replace "'", "''")'"
+        Start-Hidden (Get-Paths).pwsh @('-NoProfile', '-EncodedCommand', (ConvertTo-EncodedCommand $cmd))
+        Write-Ok "ttfx: building in the background (a few minutes; log: $log). The screensaver shows the still logo until then."
     } else {
         Write-Ok 'ttfx not available: the screensaver shows the still logo (install Rust, then: winarchy extras)'
     }
@@ -633,9 +677,9 @@ function Invoke-Update {
             # batch: no failed first attempt, no scary error in the window.
             if ($id -in $knownAdmin -and -not (Test-Elevated)) { Write-Ok "$id needs administrator rights: updating it elevated below"; $needAdmin.Add($id); continue }
             Write-Ok "upgrading $id"
-            # rustup-init is a console program: winget gives it a window of its own, and in
-            # quiet mode it prints nothing while it downloads the toolchain.
-            if ($id -eq 'Rustlang.Rustup') { Write-Ok 'Rust updates in a separate window that closes itself when done.' }
+            # rustup-init is a console program: winget gives it a window of its own. Only
+            # rustup itself updates (see $WingetOverrides), so it closes within seconds.
+            if ($id -eq 'Rustlang.Rustup') { Write-Ok 'rustup updates in a separate window that closes itself in a few seconds.' }
             $r = Invoke-Winget upgrade $id $null
             if ($r.Ok) { if ($r.Reboot) { $reboots.Add($id) }; continue }
             if ($r.Code -in $WingetAdminCodes -and -not (Test-Elevated)) {

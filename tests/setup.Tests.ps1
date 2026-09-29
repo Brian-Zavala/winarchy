@@ -25,6 +25,12 @@ Describe 'winget arguments' {
         $a = Get-WingetArgs 'install' 'AutoHotkey.AutoHotkey' 'user'
         $a[-2..-1] | Should -Be @('--scope', 'user')
     }
+    It 'updates rustup without updating the toolchains it manages' {
+        $a = Get-WingetArgs 'upgrade' 'Rustlang.Rustup' $null
+        $a[-2..-1] | Should -Be @('--override', '-y -q --no-update-default-toolchain')
+        Get-WingetArgs 'install' 'Rustlang.Rustup' $null | Should -Not -Contain '--override'
+        Get-WingetArgs 'upgrade' 'Git.Git' $null | Should -Not -Contain '--override'
+    }
     It 'quotes what would otherwise split into two arguments' {
         ConvertTo-ArgString @('install', 'a b', '') | Should -Be 'install "a b" ""'
     }
