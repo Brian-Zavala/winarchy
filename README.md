@@ -24,6 +24,14 @@ irm https://raw.githubusercontent.com/Brian-Zavala/winarchy/main/install.ps1 | i
 
 Rather read it before you run it? Good instinct. Here's [install.ps1](install.ps1).
 
+Changed your mind? One line puts Windows back exactly as it was:
+
+```powershell
+winarchy uninstall
+```
+
+Add `-DryRun` to see what it would undo first. See [system snapshots](manual/47-system-snapshots.md).
+
 ## The Winarchy Manual
 
 Like Omarchy, it lives in [`manual/`](manual/). If a chapter is missing, it's because Windows had nothing worth saying about it.
