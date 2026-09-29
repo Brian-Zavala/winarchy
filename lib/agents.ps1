@@ -387,7 +387,8 @@ function Test-AgentRecordShown($record) {
     if (-not $record -or -not $record.ready) { return $false }
     # An installed agent shows too, signed in or not, so a fresh install can reach the
     # panel's Sign in and + (add a subscription) before it has any usage.
-    ([long]$record.totalPrompts -gt 0) -or (@($record.limits).Count -gt 0) -or (@($record.accounts).Count -gt 0) -or
+    # (.Where: a record without accounts has $null there, and @($null) counts as one.)
+    ([long]$record.totalPrompts -gt 0) -or (@($record.limits).Count -gt 0) -or (@($record.accounts).Where({ $_ }).Count -gt 0) -or
         ($record.id -and $AgentTable.Contains([string]$record.id) -and (Test-AgentInstalled $record.id))
 }
 

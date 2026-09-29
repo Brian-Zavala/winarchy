@@ -496,7 +496,7 @@ function Sync-AgentUsageActive([string]$p) {
     $rec = Read-Json $file -AsHashtable
     if (-not $rec) { return }
     $r = Read-AccountRegistry $p
-    if (@($rec.accounts).Count) {
+    if (@($rec.accounts).Where({ $_ }).Count) {
         $rec.accounts = @(@($rec.accounts) | Where-Object { Find-Account $r $_.id })
         foreach ($a in $rec.accounts) { $a.active = $a.id -eq $r.active }
         $cur = @($rec.accounts) | Where-Object active | Select-Object -First 1
