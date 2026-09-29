@@ -12,10 +12,12 @@ PowerModeIds() => Map("saver", "{961CC777-2547-4F9D-8174-7D86181B8A7A}"
     , "balanced", "{00000000-0000-0000-0000-000000000000}"
     , "performance", "{DED574B5-45A0-4F42-8737-46345C09C238}")
 
-; SYSTEM_POWER_STATUS: AC line, battery flag, percent, seconds left.
+; SYSTEM_POWER_STATUS: AC line, battery flag, percent, seconds left. A failed call reads as
+; no battery (flag 128, percent unknown), not as an empty one.
 PowerStatus() {
     ps := Buffer(12, 0)
-    DllCall("GetSystemPowerStatus", "ptr", ps)
+    if !DllCall("GetSystemPowerStatus", "ptr", ps)
+        return { ac: 255, flag: 128, pct: 255, secs: 0xFFFFFFFF }
     return { ac: NumGet(ps, 0, "uchar"), flag: NumGet(ps, 1, "uchar"), pct: NumGet(ps, 2, "uchar")
         , secs: NumGet(ps, 4, "uint") }
 }
