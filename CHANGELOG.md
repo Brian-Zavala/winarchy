@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.22 — 2026-09-29
+
 - The one-line unattended install (`WINARCHY_YES=1`) works again: the bootstrap passed `-Yes` to the installer one letter at a time, so it stopped with "A positional parameter cannot be found". An empty leftover `winarchy` folder no longer makes the bootstrap think a copy is already installed.
 - `winarchy uninstall` removes apps that share a winget id (GlazeWM and Zebar) with `--all-versions`, and when a machine-wide app needs admin rights it retries once with a UAC prompt instead of failing quietly. A step that still fails is listed at the end instead of "Done.", a folder in use by another program no longer aborts `-Purge`, and the code folder's removal keeps trying for half a minute.
 
