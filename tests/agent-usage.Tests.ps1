@@ -217,7 +217,7 @@ Describe 'Bar and panel wiring' {
     It 'puts the agent icon in #post and polls agents.json' {
         $bar = Get-Content -Raw (Join-Path $Code 'zebar\omarchy\bar.html')
         $bar | Should -Match '(?s)id="post".*id="agents".*</div>'
-        $bar | Should -Match "'agents\.json'\]\.map\(get\)"
+        $bar | Should -Match "'agents\.json': renderAgents"
         $bar | Should -Match "\`$\('agents'\)\.onclick = \(\) => act\('usage'\)"
     }
     It 'registers the usage panel with the data files it reads' {

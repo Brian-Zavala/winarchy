@@ -125,10 +125,17 @@
       $('elsewhen').onclick = () => act('worldclock');
       $('agents').textContent = ICONS.agents;
       $('winChevron').textContent = ICONS.chevron;
-      // Indicators toggle on click (Omarchy); weather/update open details.
-      $('awake').onclick = () => act('wm', 'awake');
-      $('nightlight').onclick = () => act('wm', 'nightlight');
-      $('dnd').onclick = () => act('wm', 'dnd');
+      // Indicators toggle on click (Omarchy); weather/update open details. The icon flips
+      // at once and holds for a moment; then indicators.json (winarchy.ahk) has the say again.
+      const pinned = {};
+      function flip(id) {
+        $(id).classList.toggle('off');
+        pinned[id] = Date.now() + 1500;
+        setTimeout(() => { if (lastInd !== undefined) renderIndicators(lastInd); }, 1600);
+      }
+      $('awake').onclick = () => { flip('awake'); act('wm', 'awake'); };
+      $('nightlight').onclick = () => { flip('nightlight'); act('wm', 'nightlight'); };
+      $('dnd').onclick = () => { flip('dnd'); act('wm', 'dnd'); };
       $('uac').onclick = () => act('wm', 'uac');
       // Voice typing (Win+H) needs a focused text field, so the bar opens its settings
       // instead (Omarchy opens the dictation config). Recording = Snipping Tool.
@@ -160,6 +167,9 @@
       $('tailscale').onauxclick = e => { if (e.button === 1) act('tailscale', 'refresh'); };
 
       const act = (...args) => zebar.shellExec(AHK, [MENU, ...args]).catch(e => console.error(e));
+      // Text only when it differs: the same text written again still replaces the node and
+      // lays the bar out again (the clock ticks every second but shows minutes).
+      const setText = (el, text) => { if (el.textContent !== text) el.textContent = text; };
 
       function wsOrder(ws) {
         const n = Number(ws.name);
@@ -288,22 +298,22 @@
       function renderNetwork(net) {
         const el = $('network');
         if (netLink) {
-          if (netLink.type === 'ethernet') { el.textContent = ICONS.ethernet; el.title = netLink.name || 'Ethernet'; }
+          if (netLink.type === 'ethernet') { setText(el, ICONS.ethernet); el.title = netLink.name || 'Ethernet'; }
           else if (netLink.type === 'wifi') {
             const s = netLink.signal ?? 0;
-            el.textContent = ICONS.wifi[Math.min(4, Math.floor(s / 20))];
+            setText(el, ICONS.wifi[Math.min(4, Math.floor(s / 20))]);
             el.title = `${netLink.ssid || 'Wi-Fi'} (${s}%)`;
-          } else { el.textContent = ICONS.offline; el.title = 'Disconnected'; }
+          } else { setText(el, ICONS.offline); el.title = 'Disconnected'; }
           return;
         }
         const iface = net?.defaultInterface;
-        if (!iface) { el.textContent = ICONS.offline; el.title = 'Disconnected'; return; }
+        if (!iface) { setText(el, ICONS.offline); el.title = 'Disconnected'; return; }
         if (iface.type === 'wifi') {
           const s = net.defaultGateway?.signalStrength ?? 0;
-          el.textContent = ICONS.wifi[Math.min(4, Math.floor(s / 20))];
+          setText(el, ICONS.wifi[Math.min(4, Math.floor(s / 20))]);
           el.title = `${net.defaultGateway?.ssid ?? 'Wi-Fi'} (${s}%)`;
         } else {
-          el.textContent = ICONS.ethernet;
+          setText(el, ICONS.ethernet);
           el.title = iface.friendlyName ?? iface.name;
         }
       }
@@ -311,8 +321,8 @@
       function renderAudio(audio) {
         const el = $('audio');
         const dev = audio?.defaultPlaybackDevice;
-        if (!dev) { el.textContent = ''; return; }
-        el.textContent = dev.isMuted ? ICONS.mute : ICONS.vol[dev.volume < 34 ? 0 : dev.volume < 67 ? 1 : 2];
+        if (!dev) { setText(el, ''); return; }
+        setText(el, dev.isMuted ? ICONS.mute : ICONS.vol[dev.volume < 34 ? 0 : dev.volume < 67 ? 1 : 2]);
         el.title = `${dev.name}: ${dev.isMuted ? 'muted' : Math.round(dev.volume) + '%'} (click: panel, right click: mute, scroll: volume)`;
       }
 
@@ -363,7 +373,7 @@
         el.classList.toggle('hidden', !s?.title);
         if (!s?.title) return;
         const text = s.artist ? `${s.artist} - ${s.title}` : s.title;
-        el.textContent = `${s.isPlaying ? ICONS.playing : ICONS.paused} ${text.length > 40 ? text.slice(0, 39) + '…' : text}`;
+        setText(el, `${s.isPlaying ? ICONS.playing : ICONS.paused} ${text.length > 40 ? text.slice(0, 39) + '…' : text}`);
         el.title = `${text}\nClick: ${s.isPlaying ? 'pause' : 'play'} · Right-click: next · Middle-click: previous`;
       }
       $('media').onclick = () => providers.outputMap.media?.togglePlayPause().catch(() => {});
@@ -379,7 +389,7 @@
         el.classList.toggle('hidden', !show);
         if (!show) return;
         const time = at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: !CLOCK_24H });
-        el.textContent = `${ICONS.reminder} ${time}`;
+        setText(el, `${ICONS.reminder} ${time}`);
         const more = (r.count ?? 1) > 1 ? `\n${r.count - 1} more after it` : '';
         el.title = `${r.next.message}${more}\nClick: all reminders · Super+Ctrl+R: set one`;
       }
@@ -421,12 +431,12 @@
 
       function renderDisplay(glaze) {
         const n = glaze?.allMonitors?.length ?? 1;
-        $('display').textContent = n > 1 ? ICONS.monitors : ICONS.monitor;
+        setText($('display'), n > 1 ? ICONS.monitors : ICONS.monitor);
         $('display').title = 'Display: brightness, text size, scale (click) · Scroll: brightness';
       }
 
       function renderCpu(cpu) {
-        $('cpu').textContent = ICONS.cpu;
+        setText($('cpu'), ICONS.cpu);
         $('cpu').title = cpu ? `CPU ${Math.round(cpu.usage)}%` : 'CPU';
       }
 
@@ -434,22 +444,28 @@
         const el = $('battery');
         if (!bat || bat.state === 'unknown') { el.classList.add('hidden'); return; }
         el.classList.remove('hidden');
-        el.textContent = bat.isCharging
+        setText(el, bat.isCharging
           ? ICONS.charging
-          : ICONS.battery[Math.min(5, Math.floor(bat.chargePercent / 20))];
+          : ICONS.battery[Math.min(5, Math.floor(bat.chargePercent / 20))]);
         el.title = `Battery ${Math.round(bat.chargePercent)}%`;
       }
 
+      // Each provider's output is a new object when it emits (the group's map too), so only
+      // the one that changed is drawn again: the cpu and network ticks every 5 s used to
+      // redraw every module, workspaces and tray included.
+      const RENDER = {
+        glazewm: g => { renderWorkspaces(g); renderDisplay(g); },
+        systray: renderTray, network: renderNetwork, audio: renderAudio,
+        cpu: renderCpu, battery: renderBattery, media: renderMedia,
+      };
+      const drawn = {};
       function render() {
         const o = providers.outputMap;
-        renderWorkspaces(o.glazewm);
-        renderDisplay(o.glazewm);
-        renderTray(o.systray);
-        renderNetwork(o.network);
-        renderAudio(o.audio);
-        renderCpu(o.cpu);
-        renderBattery(o.battery);
-        renderMedia(o.media);
+        for (const k in RENDER) {
+          if (k in drawn && drawn[k] === o[k]) continue;
+          drawn[k] = o[k];
+          RENDER[k](o[k]);
+        }
       }
 
       // Double-click on empty bar space toggles the transparent bar (as in Omarchy); a
@@ -475,7 +491,7 @@
       function startClock() {
         clock?.stop();
         clock = zebar.createProvider({ type: 'date', formatting: CLOCK_FORMATS[clockFormat] });
-        clock.onOutput(d => { $('clock').textContent = d.formatted; });
+        clock.onOutput(d => setText($('clock'), d.formatted));
       }
       startClock();
 
@@ -506,6 +522,7 @@
       // Quattro indicators: on = full color next to the clock; off = hidden until
       // the center is hovered, then dimmed further left (click turns it on).
       function setIndicator(id, on, tipOn, tipOff) {
+        if (pinned[id] > Date.now()) return;   // just clicked: flip() has it
         $(id).classList.toggle('off', !on);
         $(id).title = on ? tipOn : tipOff;
       }
@@ -571,27 +588,32 @@
 
       // status.json (theme version) and indicators.json (stay awake) are written by
       // winarchy.ps1 / winarchy.ahk. A new theme swaps theme.css without restarting Zebar.
+      // Each file is read as text and handled only when it changed; what you just did (a
+      // theme, an indicator, the transparent bar, a window) is looked at every half second,
+      // the rest every 3 s.
       let themeVersion = null;
-      async function poll() {
-        const get = f => fetch(`./${f}?t=${Date.now()}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
-        const [status, ind, bt, weather, updates, windows, usage] = await Promise.all(
-          ['status.json', 'indicators.json', 'bluetooth.json', 'weather.json', 'updates.json', 'windows.json', 'agents.json'].map(get));
-        // Double-click transparency (bar-state.json is written by `menu.ahk bar-clear`).
-        const barState = await get('bar-state.json');
-        document.documentElement.classList.toggle('clear', !!barState?.clear);
-        // Written by `winarchy reminder` (lib/system.ps1) into the pack, never shipped in it.
-        renderReminder(await get('reminders.json'));
-        const ts = await get('tailscale.json');
-        const link = await get('network.json');
-        if (JSON.stringify(link) !== JSON.stringify(netLink)) { netLink = link; renderNetwork(providers.outputMap.network); }
-        renderTailscale(ts, ts?.installed ? await get('tailscale-status.json') : null);
-        if (status?.themeVersion && status.themeVersion !== themeVersion) {
-          if (themeVersion !== null) {
-            $('theme').href = `./theme.css?v=${status.themeVersion}`;
-            $('font').href = `./font.css?v=${status.themeVersion}`;
+      const seen = new Map();
+      const text = f => fetch(`./${f}?t=${Date.now()}`, { cache: 'no-store' }).then(r => (r.ok ? r.text() : '')).catch(() => null);
+      // on[file](json): '' is a missing file (null, as it always was); a failed read is skipped.
+      async function sync(on, raw = []) {
+        const files = Object.keys(on);
+        const texts = await Promise.all(files.map(text));
+        files.forEach((f, i) => {
+          const t = texts[i];
+          if (t === null || t === seen.get(f)) return;
+          let v = t;
+          if (!raw.includes(f)) {
+            v = null;
+            if (t) { try { v = JSON.parse(t); } catch { return; } }   // half written: next time
           }
-          themeVersion = status.themeVersion;
-        }
+          seen.set(f, t);
+          on[f](v);
+        });
+      }
+      // A loop that waits for its last round, so a slow read never piles up behind itself.
+      const every = (ms, fn) => { const run = async () => { try { await fn(); } catch (e) { console.error(e); } setTimeout(run, ms); }; run(); };
+
+      function renderIndicators(ind) {
         setIndicator('nightlight', ind?.nightlight, 'Day Light (Super+Ctrl+N)', 'Night Light (Super+Ctrl+N)');
         setIndicator('dnd', ind?.dnd, 'Allow Notifications (Super+Ctrl+,)', 'Silence Notifications (Super+Ctrl+,)');
         setIndicator('awake', ind?.awake, 'Allow Idle Lock & Screensaver (Super+Ctrl+I)', 'Stay Awake (Super+Ctrl+I)');
@@ -603,28 +625,48 @@
         $('game').classList.toggle('hidden', !ind?.game);
         $('game').title = ind?.game
           ? `${ind.game}\nClick: switch to it\nRight-click or Super+W: close it (twice: force-quit)` : '';
-        renderBluetooth(bt);
-        renderWeather(weather);
-        renderWindows(windows);
-        renderAgents(usage);
+      }
+      function renderUpdates(updates) {
         const ups = updates?.items ?? [];
         $('update').classList.toggle('hidden', !ups.length);
         $('update').title = ups.length
           ? `Updates (click to update):\n${ups.map(u => `${u.name}: ${u.from} -> ${u.to}`).join('\n')}` : '';
       }
-      setInterval(poll, 2000);
-      poll();
 
-      // Style > Top Bar (your CSS): reload user.css when it is saved.
-      let userCss = null;
-      async function pollUserCss() {
-        const text = await fetch(`./user.css?t=${Date.now()}`, { cache: 'no-store' }).then(r => (r.ok ? r.text() : null)).catch(() => null);
-        if (text === null) return;
-        if (userCss !== null && text !== userCss) $('user').href = `./user.css?v=${Date.now()}`;
-        userCss = text;
-      }
-      setInterval(pollUserCss, 2000);
-      pollUserCss();
+      let lastInd, lastWindows = null, lastReminders = null, ts = null, tsStatus = null, userCss = null;
+      every(500, () => sync({
+        'status.json': status => {
+          if (!status?.themeVersion || status.themeVersion === themeVersion) return;
+          if (themeVersion !== null) {
+            $('theme').href = `./theme.css?v=${status.themeVersion}`;
+            $('font').href = `./font.css?v=${status.themeVersion}`;
+          }
+          themeVersion = status.themeVersion;
+        },
+        'indicators.json': ind => { lastInd = ind; renderIndicators(ind); },
+        // Double-click transparency (bar-state.json is written by `menu.ahk bar-clear`).
+        'bar-state.json': barState => document.documentElement.classList.toggle('clear', !!barState?.clear),
+        'windows.json': windows => { lastWindows = windows; renderWindows(windows); },
+      }));
+      every(3000, async () => {
+        await sync({
+          'bluetooth.json': renderBluetooth,
+          'weather.json': renderWeather,
+          'updates.json': renderUpdates,
+          'agents.json': renderAgents,
+          // Written by `winarchy reminder` (lib/system.ps1) into the pack, never shipped in it.
+          'reminders.json': r => { lastReminders = r; },
+          'network.json': link => { netLink = link; renderNetwork(providers.outputMap.network); },
+          'tailscale.json': t => { ts = t; renderTailscale(ts, ts?.installed ? tsStatus : null); },
+          'tailscale-status.json': st => { tsStatus = st; renderTailscale(ts, ts?.installed ? tsStatus : null); },
+          // Style > Top Bar (your CSS): reload user.css when it is saved.
+          'user.css': () => { if (userCss !== null) $('user').href = `./user.css?v=${Date.now()}`; userCss = true; },
+        }, ['user.css']);
+        // Time goes by without a file changing: the bell goes when its reminder is due, and a
+        // window's own icon replaces the placeholder once it has been extracted.
+        renderReminder(lastReminders);
+        if (lastWindows && $('winstrip').querySelector('.fallback')) renderWindows(lastWindows);
+      });
 
       providers.onOutput(render);
       render();
