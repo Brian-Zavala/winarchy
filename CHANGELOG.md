@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.21 — 2026-09-29
+
 - A new install hides the desktop icons (`hideDesktopIcons`, Explorer's "Show desktop icons" off). Existing installs keep theirs; setting it `false` or uninstalling puts back what the PC had.
 
 ## 0.1.19 — 2026-09-29
