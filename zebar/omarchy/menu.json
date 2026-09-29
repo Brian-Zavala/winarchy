@@ -198,6 +198,86 @@
           "wm",
           "weather"
         ]
+      },
+      {
+        "label": "World Clock",
+        "icon": "󰇧",
+        "action": [
+          "worldclock"
+        ]
+      },
+      {
+        "label": "Reminder",
+        "icon": "󰂚",
+        "route": "reminder"
+      },
+      {
+        "label": "Transcode",
+        "icon": "󰓦",
+        "action": [
+          "transcode"
+        ]
+      },
+      {
+        "label": "Share",
+        "icon": "󰒗",
+        "action": [
+          "share"
+        ]
+      },
+      {
+        "label": "Speed Test",
+        "icon": "󰓅",
+        "route": "speedtest"
+      }
+    ]
+  },
+  "reminder": {
+    "title": "Reminder",
+    "items": [
+      {
+        "label": "Set one",
+        "icon": "󰂚",
+        "action": [
+          "reminder"
+        ]
+      },
+      {
+        "label": "Show all",
+        "icon": "󰇧",
+        "action": [
+          "reminder",
+          "show"
+        ]
+      },
+      {
+        "label": "Clear all",
+        "icon": "󰂛",
+        "action": [
+          "reminder",
+          "clear"
+        ]
+      }
+    ]
+  },
+  "speedtest": {
+    "title": "Speed Test",
+    "items": [
+      {
+        "label": "Network Speed Test",
+        "icon": "󰓅",
+        "action": [
+          "speedtest",
+          "network"
+        ]
+      },
+      {
+        "label": "Disk Speed Test",
+        "icon": "󰓅",
+        "action": [
+          "speedtest",
+          "disk"
+        ]
       }
     ]
   },
@@ -312,6 +392,14 @@
           "wm",
           "restore-all"
         ]
+      },
+      {
+        "label": "Workspace Layout",
+        "icon": "󰁾",
+        "action": [
+          "glaze",
+          "toggle-tiling-direction"
+        ]
       }
     ]
   },
@@ -376,10 +464,7 @@
       {
         "label": "Menu Bar",
         "icon": "󰍜",
-        "action": [
-          "edit",
-          "bar-css"
-        ]
+        "route": "style-bar"
       },
       {
         "label": "GlazeWM",
@@ -411,6 +496,26 @@
         "icon": "",
         "action": [
           "browser-setup"
+        ]
+      }
+    ]
+  },
+  "style-bar": {
+    "title": "Menu Bar",
+    "items": [
+      {
+        "label": "Transparency",
+        "icon": "󰂵",
+        "action": [
+          "bar-clear"
+        ]
+      },
+      {
+        "label": "Edit CSS",
+        "icon": "󰄾",
+        "action": [
+          "edit",
+          "bar-css"
         ]
       }
     ]
@@ -563,10 +668,7 @@
       {
         "label": "Network",
         "icon": "󰛳",
-        "action": [
-          "settings",
-          "ms-settings:network"
-        ]
+        "route": "setup-network"
       },
       {
         "label": "Defaults",
@@ -620,6 +722,61 @@
         "icon": "󰊗",
         "action": [
           "game-setup"
+        ]
+      }
+    ]
+  },
+  "setup-network": {
+    "title": "Network",
+    "items": [
+      {
+        "label": "Settings",
+        "icon": "󰳳",
+        "action": [
+          "settings",
+          "ms-settings:network"
+        ]
+      },
+      {
+        "label": "DNS",
+        "icon": "󰇧",
+        "route": "setup-dns"
+      }
+    ]
+  },
+  "setup-dns": {
+    "title": "DNS",
+    "items": [
+      {
+        "label": "DHCP",
+        "icon": "󰳳",
+        "action": [
+          "dns-set",
+          "dhcp"
+        ]
+      },
+      {
+        "label": "Cloudflare",
+        "icon": "󰳳",
+        "action": [
+          "dns-set",
+          "cloudflare"
+        ]
+      },
+      {
+        "label": "Google",
+        "icon": "󰳳",
+        "action": [
+          "dns-set",
+          "google"
+        ]
+      },
+      {
+        "label": "Custom",
+        "icon": "󰳳",
+        "action": [
+          "dns-set",
+          "custom"
         ]
       }
     ]
@@ -747,9 +904,13 @@
       {
         "label": "Timezone",
         "icon": "",
+        "route": "timezone"
+      },
+      {
+        "label": "Time",
+        "icon": "󰅐",
         "action": [
-          "settings",
-          "ms-settings:dateandtime"
+          "time-sync"
         ]
       },
       {

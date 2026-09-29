@@ -90,6 +90,7 @@ No `Print` key on your laptop? `Super + Ctrl + C` opens the capture menu.
 | `Super + Ctrl + Alt + B` | Show the battery |
 | `Super + Ctrl + Alt + W` | Show the weather |
 | `Super + Ctrl + Alt + D` | Calendar |
+| `Super + Ctrl + Alt + E` | World clock |
 | `Super + Shift + Alt + ,` | Notification history |
 
 ### Toggles

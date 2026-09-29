@@ -33,7 +33,7 @@ button { background: none; border: 0; color: inherit; font: inherit; cursor: poi
   padding: 22px 26px 14px;
   background: var(--bg);
   border: 2px solid var(--fg);
-  box-shadow: 0 24px 70px -24px color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: none;
   opacity: 0;
   transition: opacity 140ms var(--ease), translate 180ms var(--ease);
 }

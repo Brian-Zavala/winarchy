@@ -78,8 +78,11 @@ function Invoke-UpdateCheck {
         $ids = @('glzr-io.glazewm', 'Flow-Launcher.Flow-Launcher', 'AutoHotkey.AutoHotkey')
         try { $ids += @(Get-CatalogState | Where-Object { $_.installed -and $_.winget } | ForEach-Object { $_.id }) } catch {}
         foreach ($id in ($ids | Select-Object -Unique)) {
-            $line = ($out -split "`r?`n") | Where-Object { $_ -match [regex]::Escape($id) } | Select-Object -First 1
-            if ($line -and $line -match [regex]::Escape($id) + '\s+(\S+)\s+(\S+)') {
+            # Whole id only: Microsoft.PowerShell must not match Microsoft.PowerShell.Preview.
+            $idRx = '(?<!\S)' + [regex]::Escape($id) + '(?=\s)'
+            $line = ($out -split "`r?`n") | Where-Object { $_ -match $idRx } | Select-Object -First 1
+            # A version column can read "< 1.2.3" (winget could not tell): skip the marker.
+            if ($line -and $line -match $idRx + '\s+(?:<\s+|>\s+)?(\S+)\s+(\S+)') {
                 $items.Add([ordered]@{ name = $id; from = $Matches[1]; to = $Matches[2] })
             }
         }

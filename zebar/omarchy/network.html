@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" type="text/css" href="./display.css" />
+    <link rel="stylesheet" type="text/css" href="./tailscale.css" />
+    <link rel="stylesheet" type="text/css" href="./network.css" />
+    <link rel="stylesheet" type="text/css" href="./theme.css" />
+    <link rel="stylesheet" type="text/css" href="./font.css" />
+    <link rel="stylesheet" type="text/css" href="./user.css" />
+  </head>
+  <body>
+    <!-- Omarchy Quattro's Network panel (shell/plugins/panels/network), dropped under the bar's
+         network icon: the connection, a speed test with download and upload dials, the DNS
+         provider and the Wi-Fi networks. s: speed test · d: DNS · r: refresh · Esc: close. -->
+    <div id="wrap">
+      <div id="panel" role="dialog" aria-label="Network">
+        <header id="hero">
+          <span class="glyph mark" id="heroMark" aria-hidden="true"></span>
+          <div class="who">
+            <span id="title">Network</span>
+            <span id="meta"></span>
+          </div>
+          <button class="switch hidden" id="radio" role="switch" aria-label="Wi-Fi on/off"><span class="knob"></span></button>
+        </header>
+        <div id="status" class="hidden" role="status"></div>
+
+        <section id="speedBox">
+          <div class="head"><h2>Speed test</h2><span class="value" id="speedValue"></span></div>
+          <div class="dials">
+            <div class="dial" id="dialDown"><svg viewBox="0 0 120 74"><path class="track" d="M10 64 A50 50 0 0 1 110 64" pathLength="100"/><path class="fill" d="M10 64 A50 50 0 0 1 110 64" pathLength="100"/></svg>
+              <span class="num" id="numDown">--</span><span class="cap">Download · Mbps</span></div>
+            <div class="dial" id="dialUp"><svg viewBox="0 0 120 74"><path class="track" d="M10 64 A50 50 0 0 1 110 64" pathLength="100"/><path class="fill" d="M10 64 A50 50 0 0 1 110 64" pathLength="100"/></svg>
+              <span class="num" id="numUp">--</span><span class="cap">Upload · Mbps</span></div>
+          </div>
+          <button class="run" id="run">Run speed test</button>
+        </section>
+
+        <section id="dnsBox">
+          <div class="head"><h2>DNS</h2><span class="value" id="dnsValue"></span></div>
+          <div class="pills" id="dns"></div>
+        </section>
+
+        <section id="wifiBox" class="hidden">
+          <div class="head"><h2>Wi-Fi networks</h2><span class="value" id="wifiCount"></span></div>
+          <div id="wifi" class="rows"></div>
+        </section>
+        <footer id="keys">s speed test · r refresh · Esc close</footer>
+      </div>
+    </div>
+    <script type="module" src="./network.js"></script>
+  </body>
+</html>

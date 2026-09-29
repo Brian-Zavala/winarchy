@@ -9,7 +9,7 @@ OnError ScriptLogError
 ; Action dispatcher for the Zebar bar + Omarchy menu widget (whitelisted in zpack.json),
 ; and for winarchy.ahk hotkeys that open the menu.
 ;   menu.ahk open <route>        open/toggle the Omarchy menu (root, system, keys, background, theme, ...)
-;   menu.ahk launcher | start | terminal | calendar
+;   menu.ahk launcher | start | terminal | calendar | worldclock
 ;   menu.ahk run-app <AppsFolder AppID> | apps-refresh    (Apps route; refresh -> winarchy CLI)
 ;   menu.ahk focus-window <hwnd>                          (bar chevron flyout: raise a running window)
 ;   menu.ahk install-app <key> | remove-app <key> | catalog-refresh   (Install/Remove routes)
@@ -24,6 +24,7 @@ OnError ScriptLogError
 ;   menu.ahk bg-set <path> [landing name] | bg-next | theme-set <name> | sync | apply | doctor   (-> winarchy CLI)
 ;   menu.ahk apply-glaze | update-check | animations <toggle> | glaze <glazewm command>
 ;   menu.ahk wm <bar|gaps|awake|transparency|colorpicker>        (-> running winarchy.ahk)
+;   menu.ahk bar-clear                                           (bar: transparent background on/off)
 ;   menu.ahk panel <audio|bluetooth>                             (toggle Windows' quick panel)
 ;   menu.ahk lock | sleep | hibernate | reboot | shutdown | logout | upgrade | uninstall
 ;   menu.ahk restart <bar|glazewm|herdr> | config-reset <glazewm|herdr> | display <laptop|mirror>
@@ -37,7 +38,7 @@ arg := A_Args.Length > 1 ? A_Args[2] : ""
 ; Keystrokes and window commands must land on the window the menu covered,
 ; so wait for the menu to finish closing first. The picker verbs send no keys: they start
 ; right away while the menu plays its apply animation (and waits for the new background).
-if !(verb ~= "^(open|log|bar-start|bg-set|theme-set|font-set|apps-refresh|display-panel|display-state|brightness|brightness-step|scale|monitor|text-size|tailscale|tailscale-panel|copy|catalog-refresh)$")
+if !(verb ~= "^(open|log|network-panel|audio-panel|bluetooth-panel|network-state|speedtest-run|wifi|dns-quick|audio|bluetooth|bar-clear|worldclock|bar-start|bg-set|theme-set|font-set|apps-refresh|display-panel|display-state|brightness|brightness-step|scale|monitor|text-size|tailscale|tailscale-panel|copy|catalog-refresh)$")
     WinWaitClose MenuTitle, , 1
 
 switch verb {
@@ -52,6 +53,8 @@ switch verb {
     case "start": Send "^{Esc}"
     case "terminal": Run Env("terminal", "wt.exe")
     case "calendar": OpenCalendar()
+    ; The world clock (Omarchy's omarchy.elsewhen): bar clock middle click, Super+Ctrl+Alt+E.
+    case "worldclock": OpenPanel("worldclock", "w", (*) => 0)
     ; The bar's agent icon: the usage panel, and its refresh key (r / Enter).
     case "usage": OpenUsage()
     case "usage-refresh": OmarchyCmd("agent-usage", "-Force")
@@ -82,6 +85,26 @@ switch verb {
     ; The bar's Tailscale icon (Quattro's omarchy.tailscale), only there once it is installed.
     case "tailscale-panel": OpenPanel("tailscale", "t", (*) => TailscaleRefresh(true))
     case "tailscale": TailscaleAction(arg, A_Args.Length > 2 ? A_Args[3] : "")
+    ; The bar's Network, Audio and Bluetooth icons (Quattro's panels). The panels read state
+    ; files that winarchy writes and call back here for changes, waiting on each so they can
+    ; show the result: network-state / wifi / audio / bluetooth answer when they are done.
+    case "network-panel": OpenPanel("network", "n", (*) => OmarchyCmd("network-state"))
+    case "audio-panel": OpenPanel("audio", "a", (*) => 0)
+    case "bluetooth-panel": OpenPanel("bluetooth", "b", (*) => 0)
+    case "network-state": OmarchyCmdWait("network-state")
+    case "speedtest-run": OmarchyCmd("speedtest-run")
+    case "wifi":
+        if OmarchyCmdWait("wifi", arg, A_Args.Length > 2 ? A_Args[3] : "")
+            Notify(arg = "radio" ? "Wi-Fi switch failed (Update > Doctor shows why)" : "Could not join that network (Update > Doctor shows why)")
+    ; DNS from the panel: custom asks for servers, so it gets a terminal; the rest apply now.
+    case "dns-quick":
+        if arg = "custom"
+            RunInTerminal("DNS", CliInTerminal("dns-set", "custom"))
+        else
+            Notify(OmarchyCmdWait("dns-set", arg) ? "DNS change failed (Update > Doctor shows why)" : "DNS: " arg)
+    case "audio": OmarchyCmdWait("audio", arg, A_Args.Length > 2 ? A_Args[3] : "", A_Args.Length > 3 ? A_Args[4] : "")
+    case "bluetooth":
+        try RunWait('"' Env("powershell", "powershell.exe") '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "' Env("code") '\ps51\bluetooth.ps1" -Devices' (arg = "on" || arg = "off" ? " -Action " arg : ""), , "Hide")
     case "copy":
         A_Clipboard := arg
         Osd("Copied " arg), Sleep(1300)
@@ -119,7 +142,21 @@ switch verb {
     case "default-agent": RunInTerminal("Default agent", CliInTerminal("default-agent", arg))
     case "install-app": RunInTerminal("Install " arg, CliInTerminal("install-app", arg))
     case "remove-app": RunInTerminal("Remove " arg, CliInTerminal("remove-app", arg))
+    ; Update > Timezone/Time, Setup > Network > DNS, Trigger > Reminder/Speed Test/Transcode/Share,
+    ; Install > Web App: winarchy verbs (lib/system.ps1) in a terminal, for their prompts and results.
+    case "timezone-set": RunInTerminal("Timezone", CliInTerminal("timezone-set", arg))
+    case "time-sync": RunInTerminal("Sync time", CliInTerminal("time-sync"))
+    case "dns-set": RunInTerminal("DNS", CliInTerminal("dns-set", arg))
+    case "reminder": RunInTerminal("Reminder", CliInTerminal("reminder", arg))
+    case "speedtest": RunInTerminal("Speed test", CliInTerminal("speedtest", arg))
+    case "transcode": RunInTerminal("Transcode", CliInTerminal("transcode", arg))
+    case "share": OmarchyCmd("share")
+    case "web-app": RunInTerminal("Web app", CliInTerminal("web-app", arg, A_Args.Length > 2 ? A_Args[3] : ""))
+    ; A reminder going off (the scheduled task runs this): stays up long enough to be read.
+    case "notify": Osd(arg, 12000), Sleep(12100)
     case "animations": ToggleAnimations()
+    ; Double-click on the bar (or Style > Menu Bar > Transparency): bar-state.json is what every bar polls.
+    case "bar-clear": ToggleBarClear()
     case "glaze": try Run('"' Env("glazewmCli") '" command ' arg, , "Hide")
     case "activity": SignalWm("activity")
     case "browser-setup": RunInTerminal("Browser toolbar color", CliInTerminal("browser-setup"))
@@ -342,6 +379,17 @@ ToggleAnimations() {
     global OW
     OW := LoadOmarchyEnv()
     Notify("Window animations " (Env("animations", "0") = "1" ? "on" : "off"))
+}
+
+; Omarchy's bar transparency: one flag in the pack, so every monitor's bar follows it and
+; it survives a restart of the bar.
+ToggleBarClear() {
+    file := Env("pack") "\bar-state.json"
+    on := false
+    try on := InStr(FileRead(file, "UTF-8"), '"clear":true') > 0
+    f := FileOpen(file, "w", "UTF-8-RAW")
+    f.Write('{"clear":' (on ? "false" : "true") '}')
+    f.Close()
 }
 
 ; Style > Screensaver/About > Restore default (Omarchy's logo.txt / icon.txt).

@@ -80,6 +80,14 @@ $AgentTable = [ordered]@{
         prompt = { param($p) @($p) }
         hint = 'npm install -g @pi-labs/pi'
     }
+    openclaw = @{
+        label = 'OpenClaw'; cmd = 'openclaw'; args = @('tui')
+        # Omarchy's launcher attaches the terminal UI to the running gateway and has no
+        # permission prompts to skip; --message seeds the session and keeps it interactive.
+        prompt = { param($p) @('tui', '--message', $p) }
+        promptReplacesArgs = $true
+        hint = 'npm install -g openclaw'
+    }
     hermes = @{
         label = 'Hermes'; cmd = 'hermes'; args = @('--yolo')
         prompt = { param($p) @('chat', '--yolo', '--tui', "--query=$p") }

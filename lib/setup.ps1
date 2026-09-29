@@ -62,8 +62,16 @@ function ConvertTo-ArgString([string[]]$list) {
     @($list | ForEach-Object { if ($_ -eq '' -or $_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ } }) -join ' '
 }
 
-# 0x8A15002B: "no applicable upgrade", i.e. it is already current - not a failure.
-$WingetExitOk = @(0, -1978335189)
+# Codes that mean the package is fine. Names and texts come from `winget error --input <code>`.
+#   0x8A15002B UPDATE_NOT_APPLICABLE: already current, not a failure.
+$WingetExitOk = @(0, 0x8A15002B)
+# Installed, but Windows must restart to finish: a success that the person still has to act on.
+#   0x8A150109 REBOOT_REQUIRED_TO_FINISH   0x8A15010B REBOOT_INITIATED
+#   3010 / 1641: the same, as an MSI installer reports it
+$WingetRebootCodes = @(0x8A150109, 0x8A15010B, 3010, 1641)
+# Another installer holds the machine's install lock: worth waiting for rather than failing.
+#   0x8A150102 INSTALL_IN_PROGRESS   1618 ERROR_INSTALL_ALREADY_RUNNING (Windows Installer)
+$WingetBusyCodes = @(0x8A150102, 1618)
 
 function Get-WingetArgs([string]$verb, [string]$id, [string]$scope) {
     $a = @($verb, '-e', '--id', $id, '--silent', '--accept-source-agreements', '--accept-package-agreements', '--disable-interactivity')
@@ -71,9 +79,32 @@ function Get-WingetArgs([string]$verb, [string]$id, [string]$scope) {
     $a
 }
 
+# A reason a person can act on, for the exit codes seen in practice; the raw code otherwise.
+function Get-WingetReason([int]$code, [string]$suffix = '') {
+    switch ($code) {
+        { $_ -in 0x80073D02, 0x8A150101, 0x8A150103 } { 'the app is running: close it (and terminals using it) and try again' }
+        0x8A150102 { 'another installation kept running: try again in a few minutes' }
+        1618 { 'another installation kept running: try again in a few minutes' }
+        0x8A15010A { 'Windows must restart first: restart your PC and try again' }
+        0x8A150104 { 'a dependency it needs is missing from this PC' }
+        0x8A150105 { 'the disk is full' }
+        0x8A150106 { 'not enough memory: close other programs and try again' }
+        0x8A150107 { 'no internet connection' }
+        0x8A150011 { 'the download did not match its checksum (a bad or changed installer): try again later' }
+        0xC000013A { 'the installer window was closed before it finished' }
+        default { 'exit code 0x{0:X8}{1}' -f $code, $suffix }
+    }
+}
+
 function Invoke-Winget([string]$verb, [string]$id, [string]$scope) {
-    $r = Invoke-Unattended 'winget' (Get-WingetArgs $verb $id $scope)
-    if ($r.Code -in $WingetExitOk) { $r.Ok = $true; $r.Reason = $null }
+    for ($try = 1; ; $try++) {
+        $r = Invoke-Unattended 'winget' (Get-WingetArgs $verb $id $scope)
+        if ($r.Code -in $WingetBusyCodes -and $try -lt 4) { Write-Ok "another installation is running: waiting a bit, then trying $id again"; Start-Sleep -Seconds 30; continue }
+        break
+    }
+    $r | Add-Member Reboot ($r.Code -in $WingetRebootCodes) -Force
+    if ($r.Code -in $WingetExitOk -or $r.Reboot) { $r.Ok = $true; $r.Reason = $null }
+    elseif ($null -ne $r.Code) { $r.Reason = Get-WingetReason $r.Code }
     $r
 }
 
@@ -83,6 +114,50 @@ function Invoke-Winget([string]$verb, [string]$id, [string]$scope) {
 #   0x80070005 access denied          0x800702E4 / 740 elevation required
 #   0x8A150019 winget: the command requires administrator privileges
 $WingetAdminCodes = @(-2147009240, -2147024891, -2147024156, 740, -1978335207)
+
+# Names of running programs that live in Git for Windows' own folder (bash.exe and friends).
+function Get-GitInUse {
+    $git = Get-Command git -ErrorAction SilentlyContinue
+    if (-not $git) { return }
+    $root = Split-Path (Split-Path $git.Source)
+    Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith("$root\", [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { $_.ProcessName + '.exe' }
+}
+
+# After a failed upgrade: which running programs live in that package's folder, so the
+# message can name what to close. The folder comes from the app's own uninstall entry or
+# its MSIX package, found through the name winget lists it under. Programs this window
+# runs inside of (the shell, the terminal hosting it) are left out: they can't be closed
+# from under it, and they are not what the person should hunt for.
+function Get-PackageInUse([string]$id) {
+    try {
+        $line = winget list -e --id $id --accept-source-agreements --disable-interactivity 2>$null | Out-String |
+            ForEach-Object { $_ -split "`r?`n" } | Where-Object { $_ -match ('(?<!\S)' + [regex]::Escape($id) + '(?=\s)') } | Select-Object -First 1
+        if (-not $line) { return }
+        $name = ($line -split [regex]::Escape($id))[0].Trim()
+        if (-not $name) { return }
+        $dirs = @(Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*', 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*', 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -eq $name -and $_.InstallLocation } | ForEach-Object { $_.InstallLocation.TrimEnd('\') })
+        $dirs += @(Get-AppxPackage -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$($name -replace '\s')*" -or $_.PackageFamilyName -like "*$($name -replace '\s')*" } | ForEach-Object InstallLocation)
+        $dirs = @($dirs | Where-Object { $_ -and $_.Length -gt 12 } | Select-Object -Unique)
+        if (-not $dirs) { return }
+        $skip = @{}; $cur = $PID
+        while ($cur -and -not $skip.ContainsKey($cur)) {
+            $skip[$cur] = $true
+            $cur = [int](Get-CimInstance Win32_Process -Filter "ProcessId=$cur" -ErrorAction SilentlyContinue).ParentProcessId
+        }
+        foreach ($proc in Get-Process -ErrorAction SilentlyContinue) {
+            if ($skip.ContainsKey($proc.Id) -or -not $proc.Path) { continue }
+            foreach ($d in $dirs) { if ($proc.Path.StartsWith("$d\", [StringComparison]::OrdinalIgnoreCase)) { $proc.ProcessName + '.exe'; break } }
+        }
+    } catch {}
+}
+
+function Add-FailedUpdate([string]$id, $r) {
+    $why = $r.Reason
+    $busy = @(Get-PackageInUse $id | Sort-Object -Unique)
+    if ($busy) { $why += "; still running: $($busy -join ', ') - close it and click update again" }
+    Add-Unfinished "$id did not update ($why)"
+}
 
 function Test-Elevated {
     ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -119,9 +194,10 @@ foreach (`$id in `$calls.Keys) {
         $codes = try { Get-Content -Raw $out.FullName | ConvertFrom-Json -AsHashtable } catch { $null }
         foreach ($id in $ids) {
             $code = if ($codes -and $codes.Contains($id)) { [int]$codes[$id] } else { $null }
-            $ok = $null -ne $code -and $code -in $WingetExitOk
-            $reason = if ($ok) { $null } elseif ($null -eq $code) { 'the administrator window did not finish' } else { 'exit code 0x{0:X8}, as administrator' -f $code }
-            $results[$id] = [pscustomobject]@{ Ok = $ok; Code = $code; Reason = $reason }
+            $reboot = $null -ne $code -and $code -in $WingetRebootCodes
+            $ok = $null -ne $code -and ($code -in $WingetExitOk -or $reboot)
+            $reason = if ($ok) { $null } elseif ($null -eq $code) { 'the administrator window did not finish' } else { Get-WingetReason $code ', as administrator' }
+            $results[$id] = [pscustomobject]@{ Ok = $ok; Code = $code; Reason = $reason; Reboot = $reboot }
         }
         $results
     } finally { Remove-Item $out -Force -ErrorAction SilentlyContinue }
@@ -510,20 +586,39 @@ function Invoke-Update {
         # Upgrading AutoHotkey closes running scripts: remember them to start them again.
         $scripts = @(Get-CimInstance Win32_Process -Filter "Name like 'AutoHotkey%'" | ForEach-Object CommandLine)
         $needAdmin = [Collections.Generic.List[string]]::new()
+        $reboots = [Collections.Generic.List[string]]::new()
+        $knownAdmin = @((Read-State).adminApps | Where-Object { $_ })
         foreach ($id in $ids) {
             if (-not (Test-WingetUnattended $id)) {
                 Add-Unfinished "$id not updated: its installer can't run unattended; open the app and it updates itself"
                 $notUpdated.Add($id)
                 continue
             }
+            # Git's installer refuses to run (exit 1) while any Git Bash / ssh / gpg process
+            # from its folder is alive, and nothing here may close a terminal you are using.
+            if ($id -eq 'Git.Git') {
+                $busy = @(Get-GitInUse)
+                if ($busy) {
+                    Add-Unfinished "Git.Git not updated: still in use by $(($busy | Sort-Object -Unique) -join ', '). Close terminals running Git Bash (bash.exe) and click update again"
+                    $notUpdated.Add($id)
+                    continue
+                }
+            }
+            # A package that has refused a normal token before goes straight to the elevated
+            # batch: no failed first attempt, no scary error in the window.
+            if ($id -in $knownAdmin -and -not (Test-Elevated)) { Write-Ok "$id needs administrator rights: updating it elevated below"; $needAdmin.Add($id); continue }
             Write-Ok "upgrading $id"
             # rustup-init is a console program: winget gives it a window of its own, and in
             # quiet mode it prints nothing while it downloads the toolchain.
             if ($id -eq 'Rustlang.Rustup') { Write-Ok 'Rust updates in a separate window that closes itself when done.' }
             $r = Invoke-Winget upgrade $id $null
-            if ($r.Ok) { continue }
-            if ($r.Code -in $WingetAdminCodes -and -not (Test-Elevated)) { Write-Ok "$id needs administrator rights: trying again elevated below"; $needAdmin.Add($id); continue }
-            Add-Unfinished "$id did not update ($($r.Reason))"
+            if ($r.Ok) { if ($r.Reboot) { $reboots.Add($id) }; continue }
+            if ($r.Code -in $WingetAdminCodes -and -not (Test-Elevated)) {
+                Write-Ok "$id needs administrator rights: trying again elevated below"; $needAdmin.Add($id)
+                $s = Read-State; $s.adminApps = @(@($s.adminApps) + $id | Where-Object { $_ } | Select-Object -Unique); Save-State $s
+                continue
+            }
+            Add-FailedUpdate $id $r
             $notUpdated.Add($id)
         }
         if ($needAdmin.Count) {
@@ -531,10 +626,11 @@ function Invoke-Update {
             $elevated = Invoke-WingetElevated @($needAdmin)
             foreach ($id in $needAdmin) {
                 $r = $elevated[$id]
-                if ($r.Ok) { Write-Ok "$id updated as administrator" }
-                else { Add-Unfinished "$id did not update ($($r.Reason))"; $notUpdated.Add($id) }
+                if ($r.Ok) { Write-Ok "$id updated as administrator"; if ($r.Reboot) { $reboots.Add($id) } }
+                else { Add-FailedUpdate $id $r; $notUpdated.Add($id) }
             }
         }
+        if ($reboots.Count) { Add-Unfinished "$($reboots -join ', ') updated, but Windows must restart to finish: restart your PC when convenient" }
         if ($ids -contains 'AutoHotkey.AutoHotkey') {
             $p = Update-Paths
             $running = @(Get-CimInstance Win32_Process -Filter "Name like 'AutoHotkey%'" | ForEach-Object CommandLine)

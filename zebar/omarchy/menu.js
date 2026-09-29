@@ -142,7 +142,7 @@ async function open(again = false) {
   [start, menus] = await Promise.all([get('route.json'), get('menu.json'), again && restyle()]);
   // Generated routes aren't in menu.json, so they need naming here or `menu.ahk open <x>`
   // silently falls back to root.
-  const generated = r => ['background', 'theme', 'keys', 'font', 'apps', 'herdr-keys', 'agent'].includes(r)
+  const generated = r => ['background', 'theme', 'keys', 'font', 'apps', 'herdr-keys', 'agent', 'timezone'].includes(r)
     || r === 'install' || r === 'remove' || r.startsWith('install-') || r.startsWith('remove-');
   await go(start?.route && (menus?.[start.route] || generated(start.route)) ? start.route : 'root', false);
   $('search').focus();
@@ -335,6 +335,20 @@ const fontKey = name => (name ?? '').toLowerCase().replace(/ nerd font mono$/, '
 // file rather than menu.json, and Enter just closes.
 const isKeys = r => r === 'keys' || r === 'herdr-keys';
 
+let zones = null;
+function zoneList() {
+  zones ??= Intl.supportedValuesOf('timeZone').map(name => {
+    let offset = '';
+    try {
+      offset = new Intl.DateTimeFormat('en', { timeZone: name, timeZoneName: 'longOffset' }).formatToParts()
+        .find(p => p.type === 'timeZoneName')?.value.replace('GMT', 'UTC') ?? '';
+      if (offset === 'UTC') offset = 'UTC+00:00';
+    } catch {}
+    return { name, label: name.replaceAll('_', ' '), offset };
+  });
+  return zones;
+}
+
 function currentItems() {
   const q = $('search').value.trim();
   if (isKeys(route)) {
@@ -347,6 +361,14 @@ function currentItems() {
     return (defaults?.agents ?? []).filter(a => matches(a.label, q)).map(a => ({
       label: a.installed ? a.label : `${a.label}  (not installed)`,
       icon: a.icon, current: a.current, action: ['default-agent', a.key],
+    }));
+  }
+  if (route === 'timezone') {
+    // Update > Timezone (Omarchy's omarchy-menu-timezone): every zone with its offset from
+    // UTC, the current one ticked. The world clock reads the same IANA names.
+    const here = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return zoneList().filter(z => matches(`${z.label} ${z.offset}`, q)).map(z => ({
+      label: `${z.label}  ${z.offset}`, icon: '\u{F01E7}', current: z.name === here, action: ['timezone-set', z.name],
     }));
   }
   if (route === 'theme') {
@@ -378,10 +400,13 @@ function currentItems() {
   if (route === 'install' || route === 'remove') {
     // The catalog's groups (catalog.json). Remove only offers a group with something in it.
     const removing = route === 'remove';
-    return (catalog?.groups ?? [])
+    const groups = (catalog?.groups ?? [])
       .filter(g => (removing ? g.items.some(i => i.installed) : true))
       .filter(g => matches(g.label, q))
       .map(g => ({ label: g.label, icon: g.icon, route: `${route}-${g.key}` }));
+    // Omarchy's Web App entry: a Start menu shortcut to a site in its own window.
+    const web = { label: 'Web App', icon: '\u{F059F}', action: removing ? ['web-app', 'remove'] : ['web-app'] };
+    return matches(web.label, q) ? [...groups, web] : groups;
   }
   if (route.startsWith('install-') || route.startsWith('remove-')) {
     const removing = route.startsWith('remove-');

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" type="text/css" href="./display.css" />
+    <link rel="stylesheet" type="text/css" href="./tailscale.css" />
+    <link rel="stylesheet" type="text/css" href="./bluetooth.css" />
+    <link rel="stylesheet" type="text/css" href="./theme.css" />
+    <link rel="stylesheet" type="text/css" href="./font.css" />
+    <link rel="stylesheet" type="text/css" href="./user.css" />
+  </head>
+  <body>
+    <!-- Omarchy Quattro's Bluetooth panel (shell/plugins/panels/bluetooth), dropped under the
+         bar's Bluetooth icon: the radio switch and your paired devices. t: on/off · r: refresh ·
+         Esc: close. -->
+    <div id="wrap">
+      <div id="panel" role="dialog" aria-label="Bluetooth">
+        <header id="hero">
+          <span class="glyph mark" id="heroMark" aria-hidden="true"></span>
+          <div class="who">
+            <span id="title">Bluetooth</span>
+            <span id="meta"></span>
+          </div>
+          <button class="switch" id="power" role="switch" aria-label="Bluetooth on/off"><span class="knob"></span></button>
+        </header>
+        <div id="status" class="hidden" role="status"></div>
+
+        <section id="devBox" class="hidden">
+          <div class="head"><h2>Devices</h2><span class="value" id="devCount"></span></div>
+          <div id="devices" class="rows"></div>
+        </section>
+        <section id="addBox">
+          <button class="row" id="pair"><span class="glyph"></span><span class="name">Pair a new device<small>Opens Windows Bluetooth settings</small></span><span class="side"></span></button>
+        </section>
+        <footer id="keys">t on/off · r refresh · Esc close</footer>
+      </div>
+    </div>
+    <script type="module" src="./bluetooth.js"></script>
+  </body>
+</html>

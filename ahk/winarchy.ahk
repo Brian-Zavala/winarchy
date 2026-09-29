@@ -1789,8 +1789,8 @@ OnMenuCommand(wParam, *) {
         case 3: ToggleAwake()
         case 4: ToggleTransparency()
         case 5: SetTimer ColorPicker, -10
-        case 6: TogglePanel("audio")
-        case 7: TogglePanel("bluetooth")
+        case 6: Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" audio-panel')
+        case 7: Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" bluetooth-panel')
         case 8: SetTimer ScreensaverStart, -400
         case 9: ToggleScreensaver()
         case 10: SetTimer CaptureText, -300
@@ -1984,12 +1984,13 @@ if BlockMinimize {
 #^!t::ShowTime()                                  ; time popup
 #^!b::ShowBattery()                               ; battery popup
 #^!w::ShowWeather()                               ; weather popup
-#^a::TogglePanel("audio")                         ; audio panel (again: close)
-#^b::TogglePanel("bluetooth")                     ; bluetooth panel (again: close)
-#^w::Run "ms-settings:network"                    ; network
+#^a::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" audio-panel')       ; audio panel (again: close)
+#^b::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" bluetooth-panel')   ; bluetooth panel (again: close)
+#^w::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" network-panel')     ; network panel (again: close)
 #^d::Run "ms-settings:display"                    ; display
 #^p::Run "ms-settings:powersleep"                 ; power
 #^!d::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" calendar')   ; calendar (the clock's)
+#^!e::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" worldclock')   ; world clock (Omarchy's Elsewhen)
 #+!SC033::Send "#n"                               ; Super+Shift+Alt+Comma: notification history
 #^z::Send "#{NumpadAdd}"                          ; zoom in (Magnifier)
 #^!z::Send "#{Esc}"                               ; reset zoom

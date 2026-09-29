@@ -1,0 +1,31 @@
+/* The Network panel: the Display panel's card, sections and rows (display.css) and the
+   Tailscale panel's switch and rows (tailscale.css); only what is its own is here. */
+
+.mark { font-size: 26px; width: 44px; text-align: center; }
+.mark.off { opacity: 0.5; }
+
+/* ---- speed test: two dials, each a half circle filled to its share of the scale */
+.dials { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 4px 0 10px; }
+.dial { position: relative; display: flex; flex-direction: column; align-items: center; }
+.dial svg { width: 100%; height: auto; display: block; overflow: visible; }
+.dial path { fill: none; stroke-width: 8; stroke-linecap: round; }
+.dial .track { stroke: color-mix(in srgb, var(--fg) 14%, transparent); }
+.dial .fill { stroke: var(--accent); stroke-dasharray: 100; stroke-dashoffset: 100; transition: stroke-dashoffset 240ms var(--ease); }
+.dial .num { position: absolute; top: 34%; font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.dial .cap { margin-top: -6px; font-size: 10px; letter-spacing: .5px; color: var(--ink-3); }
+.dial.live .num { color: var(--accent); }
+
+.run {
+  width: 100%; padding: 7px 0; border-radius: 5px; text-align: center;
+  border: 1px solid color-mix(in srgb, var(--fg) 30%, transparent);
+}
+.run:hover, .run.has-cursor { border-color: var(--accent); background: var(--hover); }
+.run:disabled { opacity: .55; cursor: default; }
+
+/* ---- DNS: four providers, the current one lit */
+.pills { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.pill { padding: 6px 0; border-radius: 5px; text-align: center; font-size: 12px; border: 1px solid color-mix(in srgb, var(--fg) 20%, transparent); }
+.pill:hover { border-color: var(--accent); }
+.pill.on { background: var(--selected); border-color: var(--accent); }
+
+#wifi { max-height: 220px; overflow-y: auto; }

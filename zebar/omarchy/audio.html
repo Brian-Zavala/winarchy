@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" type="text/css" href="./display.css" />
+    <link rel="stylesheet" type="text/css" href="./tailscale.css" />
+    <link rel="stylesheet" type="text/css" href="./audio.css" />
+    <link rel="stylesheet" type="text/css" href="./theme.css" />
+    <link rel="stylesheet" type="text/css" href="./font.css" />
+    <link rel="stylesheet" type="text/css" href="./user.css" />
+  </head>
+  <body>
+    <!-- Omarchy Quattro's Audio panel (shell/plugins/panels/audio), dropped under the bar's
+         audio icon: a master slider, the output picker, the microphone and a mixer with a
+         slider per app. m: mute · Left/Right: volume · Esc: close. -->
+    <div id="wrap">
+      <div id="panel" role="dialog" aria-label="Audio">
+        <header id="hero">
+          <button class="glyph mark" id="heroMark" title="Mute (m)"></button>
+          <div class="who">
+            <span id="title">Volume</span>
+            <span id="meta"></span>
+          </div>
+          <span id="pct"></span>
+        </header>
+        <input type="range" id="master" min="0" max="100" step="1" aria-label="Master volume" />
+
+        <section id="outBox">
+          <div class="head"><h2>Output</h2></div>
+          <div id="outputs" class="rows"></div>
+        </section>
+
+        <section id="inBox" class="hidden">
+          <div class="head"><h2>Microphone</h2><span class="value" id="micName"></span></div>
+          <div class="line"><button class="glyph tiny" id="micMute" title="Mute the microphone"></button><input type="range" id="mic" min="0" max="100" step="1" aria-label="Microphone volume" /><span class="num" id="micPct"></span></div>
+        </section>
+
+        <section id="appBox" class="hidden">
+          <div class="head"><h2>Apps</h2><span class="value" id="appCount"></span></div>
+          <div id="apps"></div>
+        </section>
+        <footer id="keys">m mute · ←/→ volume · Esc close</footer>
+      </div>
+    </div>
+    <script type="module" src="./audio.js"></script>
+  </body>
+</html>

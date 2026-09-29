@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Omarchy parity pass. The bar goes transparent when you double-click empty space on it (also _Style > Menu Bar > Transparency_). The world clock (Omarchy's Elsewhen): middle-click the clock or `Super + Ctrl + Alt + E`, with your cities, their offsets and a strip of the day. _Update > Timezone_ is now a picker and _Update > Time_ syncs the clock. _Trigger_ gains World Clock, Reminder, Transcode, Share (LocalSend) and Speed Test; _Setup > Network > DNS_ switches DHCP/Cloudflare/Google/custom; _Install_ gains AI Agents (Claude Code, Codex, Copilot, OpenCode, Grok), ChatGPT, OpenClaw, a Browser group, Xbox, Ruby/Elixir/Zig/OCaml/Scala, LocalSend, FFmpeg and Web App; OpenClaw joins the default-agent list. What Windows cannot do is in docs/parity.md.
+
 ## 0.1.8 — 2026-09-29
 
 - The bar has Omarchy Quattro's Display panel. The monitor icon (next to audio) opens it: a brightness slider for the monitor you clicked on (a laptop screen, or an external monitor over DDC/CI), a text size from 9 to 20 px that sizes the bar, its panels and your terminals together (`winarchy text-size`), the monitor's Windows scale, and, with more than one monitor, a switch to turn each off or on (the last one stays on). Scrolling on the icon changes the brightness, with an OSD.

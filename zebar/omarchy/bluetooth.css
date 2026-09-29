@@ -1,0 +1,8 @@
+/* The Bluetooth panel: the Display panel's card and rows (display.css) and the Tailscale
+   panel's hero, switch and rows (tailscale.css). */
+
+.mark { font-size: 26px; width: 44px; text-align: center; }
+.mark.off { opacity: 0.5; }
+#devices { max-height: 260px; overflow-y: auto; }
+.row.live .name { color: var(--fg); }
+.row .dot { color: var(--accent); }

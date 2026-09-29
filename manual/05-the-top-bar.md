@@ -2,6 +2,8 @@
 
 The top bar is Omarchy Quattro's, drawn with [Zebar](https://github.com/glzr-io/zebar). It stays above your windows, and tiles never go under it, except for fullscreen windows and games, which it gets out of the way of.
 
+Double-click empty space on the bar to make it transparent (again to bring the background back). It is remembered across restarts, and _Style > Menu Bar > Transparency_ does the same.
+
 From left to right:
 
 | Part | Click | Right-click |
@@ -9,7 +11,7 @@ From left to right:
 | The logo | The Omarchy menu | A terminal |
 | Workspaces | Go to that workspace | |
 | Indicators | Turn it off | |
-| The clock, centered | The calendar (`Super + Ctrl + Alt + D`) | The next date format |
+| The clock, centered | The calendar (`Super + Ctrl + Alt + D`) | The next date format; middle-click opens the world clock (`Super + Ctrl + Alt + E`) |
 | Weather | The weather details | |
 | Updates, when there are any | Update everything | |
 | The chevron | Running windows and the tray | |

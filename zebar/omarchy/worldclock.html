@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" type="text/css" href="./worldclock.css" />
+    <link rel="stylesheet" type="text/css" href="./theme.css" />
+    <link rel="stylesheet" type="text/css" href="./font.css" />
+    <link rel="stylesheet" type="text/css" href="./user.css" />
+  </head>
+  <body>
+    <!-- The world clock (Omarchy's omarchy.elsewhen): one row per city with its time, the
+         offset from here and a strip of the day. Clicking outside it closes it. -->
+    <div id="panel">
+      <div class="head"><span class="glyph"></span><span id="title">World Clock</span></div>
+      <div id="rows"></div>
+      <div class="add">
+        <input id="city" list="zones" placeholder="Add a city (Europe/Paris)" spellcheck="false" autocomplete="off" />
+        <datalist id="zones"></datalist>
+      </div>
+    </div>
+    <script type="module" src="./worldclock.js"></script>
+  </body>
+</html>

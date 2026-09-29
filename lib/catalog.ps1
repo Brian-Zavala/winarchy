@@ -33,20 +33,76 @@ function Test-CatalogCommand([string]$name) {
     [bool](Get-Command $name -ErrorAction SilentlyContinue)
 }
 
+# Microsoft Store apps are not in Add/Remove Programs; they are packages.
+function Test-CatalogAppx([string]$pattern) {
+    [bool](Get-AppxPackage -Name $pattern -ErrorAction SilentlyContinue)
+}
+
 # Every winget id here was checked against the winget index with `winget show -e --id`.
 # Anything that did not resolve was dropped rather than shipped as a row that fails on
 # click: Ghostty has no Windows package yet, and the official ChatGPT and Xbox apps are
 # Store-only, which needs an --source msstore path this does not have yet.
 # `silent = 'none'` marks a package whose manifest has no silent switch: installing it
 # from the menu opens its own setup window, and `winarchy update` leaves it to update itself.
+# Rows with no winget package install another way, like Herdr's `install`/`remove` blocks:
+# a global npm package (the coding agents), or a Microsoft Store product, which winget
+# installs from its msstore source. `id` is still the journal key. Package names and
+# Store ids here were each checked (npm view / winget show --source msstore).
+function Install-NpmGlobal([string]$Package, [string]$Label) {
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw "$Label installs with npm: install Node.js first (Install > Development > Node.js)" }
+    & npm install -g $Package
+    if ($LASTEXITCODE -ne 0) { throw "npm could not install $Label; try: npm install -g $Package" }
+}
+function Uninstall-NpmGlobal([string]$Package, [string]$Label) {
+    & npm uninstall -g $Package
+    if ($LASTEXITCODE -ne 0) { throw "npm could not remove $Label; try: npm uninstall -g $Package" }
+}
+function Install-StoreApp([string]$StoreId, [string]$Label) {
+    & winget install --id $StoreId --source msstore --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -ne 0) { throw "winget could not install $Label from the Microsoft Store; try: winget install --id $StoreId --source msstore" }
+}
+function Uninstall-StoreApp([string]$StoreId, [string]$Label) {
+    & winget uninstall --id $StoreId --silent --disable-interactivity
+    if ($LASTEXITCODE -ne 0) { throw "winget could not remove $Label; try: winget uninstall --id $StoreId" }
+}
+
 $Catalog = @(
     @{
         key = 'ai'; label = 'AI'; icon = $CatalogGlyph.ai
         items = @(
+            @{ key = 'chatgpt';     label = 'ChatGPT Desktop'; id = 'store-9nt1r1c2hh7j'
+               test = { Test-CatalogAppx '*ChatGPT*' }
+               install = { Install-StoreApp '9NT1R1C2HH7J' 'ChatGPT' }; remove = { Uninstall-StoreApp '9NT1R1C2HH7J' 'ChatGPT' }
+               note = 'ChatGPT comes from the Microsoft Store.' }
             @{ key = 'claude';      label = 'Claude Desktop'; id = 'Anthropic.Claude';       test = { param($s) Test-CatalogArp $s 'Claude' } }
+            @{ key = 'openclaw';    label = 'OpenClaw'; id = 'npm-openclaw'
+               test = { Test-CatalogCommand 'openclaw' }
+               install = { Install-NpmGlobal 'openclaw' 'OpenClaw' }; remove = { Uninstall-NpmGlobal 'openclaw' 'OpenClaw' } }
             @{ key = 'ollama';      label = 'Ollama';         id = 'Ollama.Ollama';          test = { Test-CatalogCommand 'ollama' } }
             @{ key = 'lm-studio';   label = 'LM Studio';      id = 'ElementLabs.LMStudio';   test = { param($s) Test-CatalogArp $s 'LM Studio' } }
             @{ key = 'perplexity';  label = 'Perplexity';     id = 'Perplexity.Perplexity';  test = { param($s) Test-CatalogArp $s 'Perplexity' } }
+        )
+    },
+    @{
+        # Omarchy installs these lazily through Setup > Defaults > Agent; here they are also
+        # listed so Install shows every agent on offer. Only ones with a checked package.
+        key = 'agents'; label = 'AI Agents'; icon = $CatalogGlyph.ai
+        items = @(
+            @{ key = 'claude-code'; label = 'Claude Code'; id = 'npm-claude-code'
+               test = { Test-CatalogCommand 'claude' }
+               install = { Install-NpmGlobal '@anthropic-ai/claude-code' 'Claude Code' }; remove = { Uninstall-NpmGlobal '@anthropic-ai/claude-code' 'Claude Code' } }
+            @{ key = 'codex'; label = 'Codex'; id = 'npm-codex'
+               test = { Test-CatalogCommand 'codex' }
+               install = { Install-NpmGlobal '@openai/codex' 'Codex' }; remove = { Uninstall-NpmGlobal '@openai/codex' 'Codex' } }
+            @{ key = 'copilot-cli'; label = 'GitHub Copilot'; id = 'npm-copilot'
+               test = { Test-CatalogCommand 'copilot' }
+               install = { Install-NpmGlobal '@github/copilot' 'GitHub Copilot' }; remove = { Uninstall-NpmGlobal '@github/copilot' 'GitHub Copilot' } }
+            @{ key = 'opencode'; label = 'OpenCode'; id = 'npm-opencode'
+               test = { Test-CatalogCommand 'opencode' }
+               install = { Install-NpmGlobal 'opencode-ai' 'OpenCode' }; remove = { Uninstall-NpmGlobal 'opencode-ai' 'OpenCode' } }
+            @{ key = 'grok-cli'; label = 'Grok'; id = 'npm-grok'
+               test = { Test-CatalogCommand 'grok' }
+               install = { Install-NpmGlobal '@xai-official/grok' 'Grok' }; remove = { Uninstall-NpmGlobal '@xai-official/grok' 'Grok' } }
         )
     },
     @{
@@ -59,6 +115,12 @@ $Catalog = @(
             @{ key = 'minecraft';   label = 'Minecraft';          id = 'Mojang.MinecraftLauncher';                 test = { param($s) Test-CatalogArp $s 'Minecraft' } }
             @{ key = 'geforce-now'; label = 'NVIDIA GeForce NOW'; id = 'Nvidia.GeForceNow';                        test = { param($s) Test-CatalogArp $s 'GeForce NOW' } }
             @{ key = 'playnite';    label = 'Playnite';           id = 'Playnite.Playnite';                        test = { param($s) Test-CatalogArp $s 'Playnite' } }
+            @{ key = 'xbox';        label = 'Xbox (Cloud Gaming)'; id = 'store-9mv0b5hzvk9z'
+               test = { Test-CatalogAppx 'Microsoft.GamingApp' }
+               install = { Install-StoreApp '9MV0B5HZVK9Z' 'Xbox' }; remove = { Uninstall-StoreApp '9MV0B5HZVK9Z' 'Xbox' } }
+            @{ key = 'xbox-controllers'; label = 'Xbox Controllers'; id = 'store-9nblggh30xj3'
+               test = { Test-CatalogAppx 'Microsoft.XboxDevices' }
+               install = { Install-StoreApp '9NBLGGH30XJ3' 'Xbox Accessories' }; remove = { Uninstall-StoreApp '9NBLGGH30XJ3' 'Xbox Accessories' } }
         )
     },
     @{
@@ -75,6 +137,11 @@ $Catalog = @(
             @{ key = 'java';    label = 'Java (Temurin)'; id = 'EclipseAdoptium.Temurin.21.JDK';   test = { Test-CatalogCommand 'java' } }
             @{ key = 'php';     label = 'PHP';            id = 'PHP.PHP.8.3';                      test = { Test-CatalogCommand 'php' } }
             @{ key = 'docker';  label = 'Docker Desktop'; id = 'Docker.DockerDesktop';             test = { param($s) Test-CatalogArp $s 'Docker Desktop' } }
+            @{ key = 'ruby';    label = 'Ruby';           id = 'RubyInstallerTeam.Ruby.3.4';       test = { Test-CatalogCommand 'ruby' } }
+            @{ key = 'elixir';  label = 'Elixir';         id = 'Elixir.Elixir';                    test = { Test-CatalogCommand 'elixir' } }
+            @{ key = 'zig';     label = 'Zig';            id = 'zig.zig';                          test = { Test-CatalogCommand 'zig' } }
+            @{ key = 'ocaml';   label = 'OCaml (opam)';   id = 'OCaml.opam';                       test = { Test-CatalogCommand 'opam' } }
+            @{ key = 'scala';   label = 'Scala (CLI)';    id = 'VirtusLab.ScalaCLI';               test = { Test-CatalogCommand 'scala-cli' } }
         )
     },
     @{
@@ -88,6 +155,16 @@ $Catalog = @(
             @{ key = 'neovim';  label = 'Neovim';       id = 'Neovim.Neovim';              test = { Test-CatalogCommand 'nvim' } }
             @{ key = 'vim';     label = 'Vim';          id = 'vim.vim';                    test = { param($s) Test-CatalogArp $s '^Vim\b' } }
             @{ key = 'emacs';   label = 'Emacs';        id = 'GNU.Emacs';                  test = { Test-CatalogCommand 'emacs' } }
+        )
+    },
+    @{
+        key = 'browser'; label = 'Browser'; icon = $CatalogGlyph.windows
+        items = @(
+            @{ key = 'chrome';  label = 'Google Chrome'; id = 'Google.Chrome';        test = { param($s) Test-CatalogArp $s 'Google Chrome' } }
+            @{ key = 'edge';    label = 'Microsoft Edge'; id = 'Microsoft.Edge';      test = { param($s) Test-CatalogArp $s 'Microsoft Edge' } }
+            @{ key = 'brave';   label = 'Brave';          id = 'Brave.Brave';         test = { param($s) Test-CatalogArp $s 'Brave' } }
+            @{ key = 'firefox'; label = 'Firefox';        id = 'Mozilla.Firefox';     test = { param($s) Test-CatalogArp $s 'Mozilla Firefox' } }
+            @{ key = 'zen';     label = 'Zen';            id = 'Zen-Team.Zen-Browser'; test = { param($s) Test-CatalogArp $s '^Zen' } }
         )
     },
     @{
@@ -117,6 +194,8 @@ $Catalog = @(
             # runs after winget, to start its sign-in (lib/tailscale.ps1).
             @{ key = 'tailscale'; label = 'Tailscale'; id = 'Tailscale.Tailscale';        test = { param($s) Test-CatalogArp $s 'Tailscale' }; postInstall = { Start-TailscaleApp } }
             @{ key = 'nordvpn';   label = 'NordVPN';   id = 'NordSecurity.NordVPN';       test = { param($s) Test-CatalogArp $s 'NordVPN' } }
+            # Omarchy's Trigger > Share is LocalSend too.
+            @{ key = 'localsend'; label = 'LocalSend'; id = 'LocalSend.LocalSend';        test = { param($s) Test-CatalogArp $s 'LocalSend' } }
         )
     },
     @{
@@ -128,6 +207,7 @@ $Catalog = @(
             @{ key = 'sunshine';  label = 'Sunshine';     id = 'LizardByte.Sunshine';      test = { param($s) Test-CatalogArp $s 'Sunshine' }; note = 'Host for Moonlight/Apollo game streaming.' }
             @{ key = 'fastfetch'; label = 'fastfetch';    id = 'Fastfetch-cli.Fastfetch';  test = { Test-CatalogCommand 'fastfetch' } }
             @{ key = 'btop';      label = 'btop';         id = 'aristocratos.btop4win';    test = { param($s) Test-CatalogArp $s 'btop' } }
+            @{ key = 'ffmpeg';    label = 'FFmpeg';       id = 'Gyan.FFmpeg';              test = { Test-CatalogCommand 'ffmpeg' }; note = 'Trigger > Transcode uses it.' }
         )
     }
 )

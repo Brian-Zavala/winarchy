@@ -284,7 +284,8 @@ function Get-ZpackJson($p) {
             presets = $presets
         }
     }
-    $bar = & $widget 'bar' './bar.html' 'top_most' $false $false @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf', 'icons/**/*.png') @(
+    # transparent: the bar can go clear (double-click; html.clear in bar.css).
+    $bar = & $widget 'bar' './bar.html' 'top_most' $false $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf', 'icons/**/*.png') @(
         [ordered]@{ program = 'taskmgr'; argsRegex = '.*' },
         [ordered]@{ program = 'explorer'; argsRegex = 'ms-settings:.*' },
         $menuPrivilege
@@ -333,11 +334,18 @@ function Get-ZpackJson($p) {
         } }
     $display = & $widget 'display' './display.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'd')
     $tailscale = & $widget 'tailscale' './tailscale.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.txt', '*.ttf') @($menuPrivilege) @(& $panelPresets 't')
+    # The world clock (Omarchy's omarchy.elsewhen): w0..w7. It keeps its cities in localStorage.
+    $worldclock = & $widget 'worldclock' './worldclock.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.ttf') @($menuPrivilege) @(& $panelPresets 'w')
+    # The bar's Network, Audio and Bluetooth panels (Quattro's omarchy.network / audio /
+    # bluetooth): n0..n7, a0..a7, b0..b7. They read state files that winarchy writes.
+    $network = & $widget 'network' './network.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'n')
+    $audio = & $widget 'audio' './audio.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'a')
+    $bluetooth = & $widget 'bluetooth' './bluetooth.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'b')
     [ordered]@{
         '$schema' = 'https://github.com/glzr-io/zebar/raw/v3.0.0/resources/zpack-schema.json'
         name = 'omarchy'; version = '3.0.0'; description = 'Omarchy style top bar, menu and pickers for GlazeWM (winarchy)'
         tags = @('topbar'); previewImages = @(); repositoryUrl = ''
-        widgets = @($bar, $menu, $calendar, $usage, $display, $tailscale)
+        widgets = @($bar, $menu, $calendar, $usage, $display, $tailscale, $worldclock, $network, $audio, $bluetooth)
     } | ConvertTo-Json -Depth 12
 }
 

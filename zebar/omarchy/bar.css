@@ -29,6 +29,10 @@ html, body {
   cursor: default;
 }
 
+/* Double-click on the bar: no background, only the modules (Omarchy's bar transparency). */
+html.clear, html.clear body { background: transparent; }
+html.clear #bar { text-shadow: 0 0 3px rgba(0, 0, 0, 0.7); }
+
 #bar {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -43,7 +47,11 @@ html, body {
    centerAnchor); indicators hug it on the left, weather/update on the right. */
 #clock { cursor: pointer; padding: 0 6px; white-space: nowrap; }
 .indicators { margin-left: auto; }
-.post { gap: 10px; margin-left: 4px; }
+/* Mirrors the indicators on the left of the clock: the globe gets the same 21px slot, flush
+   against the clock's padding, and the rest follow at an even gap. */
+.post { gap: 6px; margin-left: 0; }
+#elsewhen { min-width: 21px; text-align: center; }
+.post .module { min-width: 21px; text-align: center; }
 .right { margin-left: auto; padding-left: 14px; gap: 14px; }
 #agents { margin-right: 4px; }
 
@@ -64,9 +72,13 @@ html, body {
   margin: 0 1.5px;
   min-width: 9px;
   cursor: pointer;
+  transition: opacity 140ms cubic-bezier(0.33, 1, 0.68, 1), color 160ms ease;
 }
 .workspace.empty { opacity: 0.5; }
 .workspace.focused { color: var(--accent); }
+/* Quattro's Workspaces.qml has no hover box (WidgetButton: pointer cursor + a 140 ms OutCubic
+   opacity fade and a 160 ms colour fade when occupied/focused change), so neither do we. */
+@media (prefers-reduced-motion: reduce) { .workspace { transition: none; } }
 
 .indicator { min-width: 21px; text-align: center; color: var(--fg); }
 /* Off: hidden until the center is hovered, then dimmed left of the active ones. */

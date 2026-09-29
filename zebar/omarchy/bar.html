@@ -26,9 +26,10 @@
           <span class="indicator off" id="awake"></span>
         </div>
       </div>
-      <span id="clock" title="Click: calendar · Right-click: date format"></span>
+      <span id="clock" title="Click: calendar · Right-click: date format · Middle-click: world clock"></span>
       <div class="side">
         <div class="post" id="post">
+          <span class="module" id="elsewhen" title="World clock (Super+Ctrl+Alt+E)"></span>
           <span class="module hidden" id="weather"></span>
           <span class="module update hidden" id="update"></span>
         </div>
@@ -112,6 +113,9 @@
       $('dictation').textContent = ICONS.dictation;
       $('recording').textContent = ICONS.recording;
       $('update').textContent = ICONS.update;
+      // Omarchy's omarchy.elsewhen: a globe next to the clock that opens the world clock.
+      $('elsewhen').textContent = '\u{F01E7}';
+      $('elsewhen').onclick = () => act('worldclock');
       $('agents').textContent = ICONS.agents;
       $('winChevron').textContent = ICONS.chevron;
       // Indicators toggle on click (Omarchy); weather/update open details.
@@ -160,16 +164,21 @@
         const list = [...glaze.currentWorkspaces]
           .filter(ws => ws.name !== 'scratch' || ws.isDisplayed)
           .sort((a, b) => wsOrder(a) - wsOrder(b));
-        el.replaceChildren(...list.map(ws => {
-          const b = document.createElement('button');
-          b.className = 'workspace';
-          if (!ws.children?.length && !ws.isDisplayed) b.classList.add('empty');
-          if (ws.hasFocus) b.classList.add('focused');
-          b.textContent = ws.isDisplayed ? ICONS.activeWs : (ws.displayName ?? ws.name);
+        // Elements are kept (not rebuilt) so the hover/focus transitions in bar.css can run.
+        const bind = (b, ws) => {
+          b.classList.toggle('empty', !ws.children?.length && !ws.isDisplayed);
+          b.classList.toggle('focused', !!ws.hasFocus);
+          const text = ws.isDisplayed ? ICONS.activeWs : (ws.displayName ?? ws.name);
+          if (b.textContent !== text) b.textContent = text;
           b.title = `Workspace ${ws.displayName ?? ws.name}`;
           b.onclick = () => glaze.runCommand(`focus --workspace ${ws.name}`);
+        };
+        syncList(el, list, ws => ws.name, ws => {
+          const b = document.createElement('button');
+          b.className = 'workspace';
+          bind(b, ws);
           return b;
-        }));
+        }, bind);
         $('logo').classList.toggle('paused', !!glaze.isPaused);
       }
 
@@ -405,12 +414,20 @@
         renderBattery(o.battery);
       }
 
+      // Double-click on empty bar space toggles the transparent bar (as in Omarchy); a
+      // double-click on a module is that module's business.
+      $('bar').addEventListener('dblclick', e => {
+        if (e.target.closest('.module, .indicator, .workspace, .logo, #clock, .drawer, button')) return;
+        act('bar-clear');
+      });
+
       // Logo: left click = Omarchy menu, right click = terminal (as in Omarchy).
       $('logo').onclick = () => act('open', 'root');
       $('logo').oncontextmenu = e => { e.preventDefault(); act('terminal'); };
 
       // Clock: left click = calendar (Super + Ctrl + Alt + D, as Quattro's calendar popup); right click = next format.
       $('clock').onclick = () => act('calendar');
+      $('clock').onauxclick = e => { if (e.button === 1) { e.preventDefault(); act('worldclock'); } };
       $('clock').oncontextmenu = e => {
         e.preventDefault();
         clockFormat = (clockFormat + 1) % CLOCK_FORMATS.length;
@@ -427,16 +444,19 @@
       // Click actions (Omarchy opens btop / audio panel; closest Windows equivalents).
       $('cpu').onclick = () => act('activity');   // btop (Omarchy's Activity)
       $('cpu').oncontextmenu = e => { e.preventDefault(); zebar.shellExec('taskmgr').catch(() => {}); };
-      $('network').onclick = () => zebar.shellExec('explorer', 'ms-settings:network').catch(() => {});
+      // Network / audio / bluetooth: Quattro's own panels (speed test, DNS and Wi-Fi; the
+      // mixer; paired devices). Right click on the network icon still opens Windows' settings.
+      $('network').onclick = () => act('network-panel');
+      $('network').oncontextmenu = e => { e.preventDefault(); zebar.shellExec('explorer', 'ms-settings:network').catch(() => {}); };
       // Audio / Bluetooth: left click toggles Windows' quick panel (as Super+Ctrl+A / B);
       // audio right click mutes, scroll changes volume.
-      $('audio').onclick = () => act('panel', 'audio');
+      $('audio').onclick = () => act('audio-panel');
       $('audio').oncontextmenu = e => {
         e.preventDefault();
         const dev = providers.outputMap.audio?.defaultPlaybackDevice;
         if (dev) providers.outputMap.audio.setMute(!dev.isMuted);
       };
-      $('bluetooth').onclick = () => act('panel', 'bluetooth');
+      $('bluetooth').onclick = () => act('bluetooth-panel');
       $('audio').onwheel = e => {
         const audio = providers.outputMap.audio;
         const dev = audio?.defaultPlaybackDevice;
@@ -518,6 +538,9 @@
         const get = f => fetch(`./${f}?t=${Date.now()}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
         const [status, ind, bt, weather, updates, windows, usage] = await Promise.all(
           ['status.json', 'indicators.json', 'bluetooth.json', 'weather.json', 'updates.json', 'windows.json', 'agents.json'].map(get));
+        // Double-click transparency (bar-state.json is written by `menu.ahk bar-clear`).
+        const barState = await get('bar-state.json');
+        document.documentElement.classList.toggle('clear', !!barState?.clear);
         const ts = await get('tailscale.json');
         const link = await get('network.json');
         if (JSON.stringify(link) !== JSON.stringify(netLink)) { netLink = link; renderNetwork(providers.outputMap.network); }

@@ -294,7 +294,7 @@ Describe 'Menu wiring' {
     }
     It 'names both generated routes in menu.js, or menu.ahk open <route> falls back to root' {
         $js = Get-Content -Raw (Join-Path $Code 'zebar\omarchy\menu.js')
-        $js | Should -Match "'herdr-keys', 'agent'\]\.includes"
+        $js | Should -Match "'herdr-keys', 'agent', 'timezone'\]\.includes"
     }
     It 'has menu.ahk verbs for every action the rows send' {
         $ahk = Get-Content -Raw (Join-Path $Code 'ahk\menu.ahk')

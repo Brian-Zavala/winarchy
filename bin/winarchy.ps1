@@ -99,6 +99,9 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\lib\animations.ps1"
 . "$PSScriptRoot\..\lib\autotile.ps1"
 . "$PSScriptRoot\..\lib\transition.ps1"
+. "$PSScriptRoot\..\lib\system.ps1"
+. "$PSScriptRoot\..\lib\netpanel.ps1"
+. "$PSScriptRoot\..\lib\audio.ps1"
 
 $version = (Get-Content -Raw (Join-Path $Code 'VERSION') -ErrorAction SilentlyContinue)?.Trim()
 
@@ -210,6 +213,27 @@ switch ($Verb) {
         $p = Get-Paths
         if ($p.nvim) { & $p.nvim $ConfigFile } else { Start-Process notepad.exe $ConfigFile }
     }
+    # Update > Timezone / Time, Setup > Network > DNS, and the Trigger / Install extras
+    # (lib/system.ps1). The menu runs them in a terminal.
+    'timezone-set' { Set-WinarchyTimeZone $Arg }
+    'time-sync' { Sync-WinarchyTime }
+    'dns-set' { Set-WinarchyDns $Arg }
+    'reminder' {
+        switch ($Arg) {
+            'show' { Show-WinarchyReminders }
+            'clear' { Clear-WinarchyReminders }
+            default { New-WinarchyReminder $Arg $Arg2 }
+        }
+    }
+    'speedtest' { Invoke-SpeedTest $Arg }
+    # The bar's Network panel: its state file, the speed test dials, and its Wi-Fi actions.
+    'network-state' { [void](Update-NetPanelState) }
+    'speedtest-run' { Invoke-SpeedRun }
+    'wifi' { Invoke-WifiAction $Arg $Arg2 }
+    'audio' { Invoke-AudioAction $Arg $Arg2 $Arg3 }
+    'transcode' { Invoke-Transcode $Arg $Arg2 }
+    'share' { Start-Share }
+    'web-app' { if ($Arg -eq 'remove') { Remove-WebApp $Arg2 } else { New-WebApp $Arg $Arg2 } }
     'keys' { (Get-Content (Join-Path $Pack 'keybindings.txt') -ErrorAction SilentlyContinue) ?? (Get-Content (Join-Path $Code 'default\keybindings.txt')) }
     'status' { $s = Read-State; "theme: $($s.theme)"; "background: $($s.background)"; "font: $(Get-FontFamily)" }
     'version' { "winarchy $version" }

@@ -87,13 +87,15 @@ UTILITIES
   Super + Ctrl + D / P          Display / power settings
   Super + Ctrl + Alt + T / B / W  Show time / battery / weather
   Super + Ctrl + Alt + D        Calendar
+  Super + Ctrl + Alt + E        World clock
   Super + Shift + Alt + ,       Notification history
   Super + Ctrl + Z              Zoom in (+ Alt: reset)
   Super + Ctrl + L              Lock  (Win + L also locks)
 
 SYSTEM
   Bar logo: left / right click  Omarchy menu / terminal
-  Bar clock: left / right click Calendar / date format
+  Bar clock: left / right / middle click Calendar / date format / world clock
+  Bar: double-click empty space Transparent bar on / off
   Bar indicators                Click to turn off (stay awake, nightlight, do not disturb)
   Bar weather / update icons    Click: weather details / update everything
   Bar gamepad icon (game open)  Click: switch to the game, right click: close it (twice: force-quit)
