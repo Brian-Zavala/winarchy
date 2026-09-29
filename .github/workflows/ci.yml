@@ -57,6 +57,9 @@ jobs:
         with:
           fetch-depth: 0
           ref: main
+          # main's ruleset lets only admins push without a pull request, and a personal repo
+          # can't add GitHub Actions to its bypass list: push with the owner's token.
+          token: ${{ secrets.WINARCHY_ADMIN_TOKEN || github.token }}
       - name: Bump the version
         id: bump
         shell: pwsh
