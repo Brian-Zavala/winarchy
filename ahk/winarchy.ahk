@@ -162,11 +162,18 @@ HoverPlace := Env("openOnHoveredMonitor", "1") = "1"
 HoverPoint := {x: 0, y: 0}        ; cursor as it was before the newest window appeared
 HoverHold := 0                    ; > 0 while a placement is in flight: sampling paused
 HoverHoldUntil := 0               ; absolute backstop for the hold
+PrePlaceTarget := Map()          ; new window -> monitor point it belongs on (see PrePlaceOnShow)
+PrePlaceHook := 0
 if HoverPlace {
     HoverSample()
     SetTimer HoverSample, 120
     DllCall("RegisterShellHookWindow", "ptr", A_ScriptHwnd)
     OnMessage DllCall("RegisterWindowMessage", "Str", "SHELLHOOK", "UInt"), OnShellHook
+    ; Moves the window onto that monitor the instant it is shown (see PrePlaceOnShow), so
+    ; it is never painted on the wrong one first.
+    PrePlaceHook := DllCall("SetWinEventHook", "uint", 0x8002, "uint", 0x8002, "ptr", 0
+        , "ptr", CallbackCreate(PrePlaceOnShow, "F", 7), "uint", 0, "uint", 0, "uint", 0x0002, "ptr")  ; EVENT_OBJECT_SHOW, WINEVENT_SKIPOWNPROCESS
+    OnExit UnhookPrePlace
 }
 ; The monitor you are working on - under the pointer, or where keyboard focus went since
 ; (see "The monitor you are working on" below). New windows, the menu and OSDs use it.
@@ -2661,12 +2668,56 @@ HoverRelease() {
 }
 
 OnShellHook(wParam, lParam, *) {
-    global HoverHold, HoverHoldUntil
+    global HoverHold, HoverHoldUntil, PrePlaceTarget
     if (wParam & 0x7FFF) != 1                ; HSHELL_WINDOWCREATED
         return
     HoverHold++
     HoverHoldUntil := A_TickCount + 2500
+    PrePlaceTarget[lParam] := HoverTarget()   ; fixed now, before the window can move the pointer
     SetTimer HoverPlaceWindow.Bind(lParam, 1, HoverTarget()), -120
+}
+
+; A new window is created wherever Windows likes (usually the primary monitor) and only
+; then moved by HoverPlaceWindow, once GlazeWM manages it - a visible flash on the wrong
+; screen. Moving it here, from EVENT_OBJECT_SHOW (before its first paint), keeps the same
+; relative position on the target monitor; GlazeWM then manages it where it already is,
+; and HoverPlaceWindow finds it "already there". Only windows created since the shell hook
+; noted a target are touched (PrePlaceTarget).
+PrePlaceOnShow(hWinEventHook, event, hwnd, idObject, idChild, *) {
+    global PrePlaceTarget
+    if idObject != 0 || idChild != 0 || !hwnd || !PrePlaceTarget.Has(hwnd)
+        return
+    pt := PrePlaceTarget[hwnd]
+    PrePlaceTarget.Delete(hwnd)
+    if PrePlaceTarget.Count > 32               ; windows that never showed
+        PrePlaceTarget.Clear()
+    try {
+        if MonitorGetCount() < 2
+            return
+        PerMonitorDpi()
+        if DllCall("GetAncestor", "ptr", hwnd, "uint", 2, "ptr") != hwnd
+            return
+        if !IsRestorableWindow(hwnd) || !FocusFollowEligible(hwnd) || WinGetMinMax(hwnd) != 0
+            return
+        dst := MonitorFromPoint(pt.x, pt.y)
+        src := MonitorOfWindow(hwnd)
+        if !dst || dst = src
+            return
+        WinGetPos &x, &y, &w, &h, hwnd
+        MonitorGetWorkArea src, &sl, &st
+        MonitorGetWorkArea dst, &dl, &dt, &dr, &db
+        nx := Max(dl, Min(dl + (x - sl), dr - w))
+        ny := Max(dt, Min(dt + (y - st), db - h))
+        DllCall("SetWindowPos", "ptr", hwnd, "ptr", 0, "int", nx, "int", ny, "int", 0, "int", 0
+            , "uint", 0x0015)                  ; SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
+    }
+}
+
+UnhookPrePlace(*) {
+    global PrePlaceHook
+    if PrePlaceHook
+        DllCall("UnhookWinEvent", "ptr", PrePlaceHook)
+    PrePlaceHook := 0
 }
 
 ; Where a new window belongs, fixed as it appears: the hovered point, or - when keyboard
