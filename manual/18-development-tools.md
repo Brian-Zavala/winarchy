@@ -4,7 +4,7 @@ Omarchy's _Install_ menu sets up a programming language or an editor in one step
 
 ### Development
 
-_Install > Development_ in the Omarchy menu: Git, Python, Node.js, Bun, Deno, Go, Rust, .NET, Java (Temurin), PHP and Docker Desktop.
+_Install > Development_ in the Omarchy menu: Git, Python, Node.js, Bun, Deno, Go, Rust, .NET, Java (Temurin), PHP, Docker Desktop, Ruby, Elixir, Zig, OCaml and Scala.
 
 ### Editors
 

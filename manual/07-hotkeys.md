@@ -108,9 +108,9 @@ No `Print` key on your laptop? `Super + Ctrl + C` opens the capture menu.
 
 | Hotkey | Function |
 |---|---|
-| `Super + Ctrl + A` | Audio panel: output device and volumes |
-| `Super + Ctrl + B` | Bluetooth panel |
-| `Super + Ctrl + W` | Network settings |
+| `Super + Ctrl + A` | Audio panel: master volume, output, microphone and per-app volumes |
+| `Super + Ctrl + B` | Bluetooth panel: radio switch and paired devices |
+| `Super + Ctrl + W` | Network panel: speed test, DNS and Wi-Fi |
 | `Super + Ctrl + D` / `Super + Ctrl + P` | Display / power settings |
 | `Super + Ctrl + T` | Activity (btop) |
 | `Super + Ctrl + Q` | Calculator |

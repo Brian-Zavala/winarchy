@@ -51,6 +51,12 @@ Everything the Omarchy menu does is also a `winarchy` command, for scripts or wh
 | `winarchy install [-Yes]` | Set everything up; `-Yes` takes every recommended answer |
 | `winarchy update` | Update Winarchy, the themes, Herdr and your apps (see [updates](30-updates.md)) |
 | `winarchy update-check` | Look for updates now |
+| `winarchy timezone-set <Region/City>` / `winarchy time-sync` | Set the time zone / sync the clock (admin prompt) |
+| `winarchy dns-set <dhcp\|cloudflare\|google\|custom>` | Switch the DNS servers on your connections (admin prompt) |
+| `winarchy reminder [when] [text]` / `reminder show` / `reminder clear` | Set, list or clear reminders |
+| `winarchy speedtest [network\|disk]` | Measure your internet or disk speed |
+| `winarchy transcode [format] [file]` | Convert a video, audio or image file with FFmpeg |
+| `winarchy web-app [name] [url]` / `web-app remove` | Add or remove a Start menu web app |
 | `winarchy deps` | Install anything Winarchy needs that's missing |
 | `winarchy sync [-Offline]` | Download Omarchy's themes and backgrounds, and rebuild the selectors |
 | `winarchy uninstall [-DryRun] [-KeepApps] [-Purge] [-Yes]` | Back to normal Windows (see [system snapshots](47-system-snapshots.md)) |

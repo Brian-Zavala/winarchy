@@ -13,3 +13,5 @@ An update goes through, in order:
 Then your settings are applied again, so everything picks up the new version.
 
 If you'd rather check yourself, `winarchy update-check` refreshes the icon, and _Update_ in the Omarchy menu has every step on its own.
+
+_Update > Timezone_ and _Update > Time_ set your time zone and sync the clock (see [notices](10-notices.md)).

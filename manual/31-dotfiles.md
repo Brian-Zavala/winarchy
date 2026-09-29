@@ -40,7 +40,7 @@ It's JSON, so a `\` in a path is written `\\`. A file with a mistake in it is le
 | Key | Default | What it does |
 |---|---|---|
 | `apps.terminal` / `browser` / `editor` / `files` | `"auto"` | The programs the launcher keys and menus open. `"auto"` finds Windows Terminal, your default browser, Neovim then VS Code then Notepad, and File Explorer |
-| `apps.agent` | `"auto"` | The coding agent _Trigger > Agent_ and the Herdr layouts start: `claude`, `codex`, `copilot`, `opencode`, `crush`, `cursor-agent`, `grok`, `agy`, `muse`, `omp`, `ori`, `pi` or `hermes`. `"auto"` means none is chosen yet, as on Omarchy. See [AI](17-ai.md) |
+| `apps.agent` | `"auto"` | The coding agent _Trigger > Agent_ and the Herdr layouts start: `claude`, `codex`, `copilot`, `opencode`, `crush`, `cursor-agent`, `grok`, `agy`, `muse`, `omp`, `ori`, `pi`, `hermes` or `openclaw`. `"auto"` means none is chosen yet, as on Omarchy. See [AI](17-ai.md) |
 
 ### Look
 
