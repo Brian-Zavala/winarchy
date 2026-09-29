@@ -3,6 +3,7 @@
 #Include lib\env.ahk
 #Include lib\osd.ahk
 #Include lib\tailscale.ahk
+#Include lib\network.ahk
 
 ; Omarchy extras that GlazeWM can't do itself: the bar's screen space, menus,
 ; toggles, panels, capture, drag, clipboard and utility keys.
@@ -220,6 +221,9 @@ BluetoothStatus()
 ; like Quattro's widget. Only a FileExist while Tailscale isn't installed.
 SetTimer Quiet.Bind(TailscaleRefresh), 30000
 TailscaleRefresh()
+; Network type for the bar icon (network.json), read from Windows every 10 s.
+SetTimer Quiet.Bind(NetworkRefresh), 10000
+NetworkRefresh()
 ; Pick up new favorite backgrounds after login settles (local only, no downloads).
 if Env("syncAtLogin", "1") = "1"
     SetTimer Later.Bind(() => OmarchyCmd("sync", "-Offline")), -90000

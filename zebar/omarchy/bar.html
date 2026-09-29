@@ -203,7 +203,9 @@
       function renderTray(tray) {
         const el = $('tray');
         if (!tray) { el.replaceChildren(); updateChevron(); return; }
-        syncList(el, tray.icons, icon => icon.id, icon => {
+        // Tailscale has its own bar icon (#tailscale) once installed: hide its native tray icon.
+        const icons = tray.icons.filter(icon => !/^tailscale/i.test(icon.tooltip ?? ''));
+        syncList(el, icons, icon => icon.id, icon => {
           const img = document.createElement('img');
           bindTrayIcon(img, tray, icon);
           return img;
@@ -223,7 +225,7 @@
       // rather than waiting, since the fetch is async and the list refreshes every 2 s anyway.
       function renderWindows(win) {
         const el = $('winstrip');
-        const list = win?.windows ?? [];
+        const list = (win?.windows ?? []).filter(w => !/^tailscale/i.test(w.exe));
         syncList(el, list, w => w.icon, w => windowIcon(w, `./icons/${w.icon}.png`), (elm, w) => {
           bindWindowIcon(elm, w);
           // The glyph stands in only until the icon is cached: look again every few seconds,
@@ -263,8 +265,20 @@
         el.onclick = () => act('focus-window', w.hwnd);
       }
 
+      // network.json (winarchy.ahk, read from Windows) says which link carries traffic; Zebar's
+      // network provider is only the fallback while that file is missing.
+      let netLink = null;
       function renderNetwork(net) {
         const el = $('network');
+        if (netLink) {
+          if (netLink.type === 'ethernet') { el.textContent = ICONS.ethernet; el.title = netLink.name || 'Ethernet'; }
+          else if (netLink.type === 'wifi') {
+            const s = netLink.signal ?? 0;
+            el.textContent = ICONS.wifi[Math.min(4, Math.floor(s / 20))];
+            el.title = `${netLink.ssid || 'Wi-Fi'} (${s}%)`;
+          } else { el.textContent = ICONS.offline; el.title = 'Disconnected'; }
+          return;
+        }
         const iface = net?.defaultInterface;
         if (!iface) { el.textContent = ICONS.offline; el.title = 'Disconnected'; return; }
         if (iface.type === 'wifi') {
@@ -463,6 +477,13 @@
         if (tauri && !revealCheck) revealCheck = setInterval(async () => { if (!(await pointerInBar())) collapse(); }, 250);
       }
       for (const id of ['indicators', 'clock', 'post']) $(id).addEventListener('mouseenter', reveal);
+      // The whole middle of the bar is the hover target, not just the clock and the icons
+      // themselves; leaving that zone folds them again (the icons' own boxes stay part of it).
+      document.body.addEventListener('mousemove', e => {
+        const half = Math.max(300, innerWidth * 0.2);
+        if (Math.abs(e.clientX - innerWidth / 2) < half) reveal();
+        else if ($('bar').classList.contains('reveal') && !e.target.closest('#indicators, #clock, #post')) collapse();
+      });
       document.body.addEventListener('mouseenter', () => clearTimeout(revealTimer));
       document.body.addEventListener('mouseleave', () => {
         clearTimeout(revealTimer);
@@ -498,6 +519,8 @@
         const [status, ind, bt, weather, updates, windows, usage] = await Promise.all(
           ['status.json', 'indicators.json', 'bluetooth.json', 'weather.json', 'updates.json', 'windows.json', 'agents.json'].map(get));
         const ts = await get('tailscale.json');
+        const link = await get('network.json');
+        if (JSON.stringify(link) !== JSON.stringify(netLink)) { netLink = link; renderNetwork(providers.outputMap.network); }
         renderTailscale(ts, ts?.installed ? await get('tailscale-status.json') : null);
         if (status?.themeVersion && status.themeVersion !== themeVersion) {
           if (themeVersion !== null) {

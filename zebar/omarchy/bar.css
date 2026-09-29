@@ -84,7 +84,7 @@ html, body {
    icons - not a Quattro system module) hide behind it, same off/reveal idiom as the
    Quattro indicators above, under its own class (winreveal) so hovering the
    clock/indicators doesn't also unfold this. */
-.drawer { display: flex; align-items: center; gap: 8px; }
+.drawer { display: flex; align-items: center; gap: 8px; margin-right: -11px; }
 .chevron {
   background: none;
   border: 0;
@@ -101,6 +101,8 @@ html, body {
 .chevron:hover { opacity: 1; }
 /* Open drawer: the icons take the chevron's place (the pointer is already in the drawer). */
 #bar.winreveal .chevron { display: none; }
+/* The chevron's pull toward the system icons ends with it: expanded apps get room. */
+#bar.winreveal .drawer { margin-right: 4px; }
 
 .winstrip { display: flex; align-items: center; gap: 8px; }
 .winstrip .win { width: 16px; height: 16px; display: none; order: -1; cursor: pointer; }
