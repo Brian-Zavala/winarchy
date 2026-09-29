@@ -44,6 +44,28 @@ function Read-Json([string]$path, [switch]$AsHashtable) {
 }
 function Write-Json([string]$path, $obj, [int]$Depth = 32) { Write-Utf8 $path ($obj | ConvertTo-Json -Depth $Depth) }
 
+# A build default/prebuilt.json pins (.github/workflows/prebuilt.yml publishes them), or
+# $null while it has no published url and hash yet: then the caller builds it as before.
+function Get-Prebuilt([string]$key) {
+    $all = Read-Json (Join-Path $Code 'default\prebuilt.json') -AsHashtable
+    if (-not $all -or -not $all.Contains($key)) { return $null }
+    $e = $all[$key]
+    if ($e.url -and $e.sha256) { $e }
+}
+
+# Downloads a file whose SHA-256 the code pins to $dest. Nothing lands at $dest unless the
+# hash matches: a changed or broken download throws instead.
+function Save-PinnedFile([string]$url, [string]$sha256, [string]$dest, [int]$timeoutSec = 600) {
+    $part = "$dest.part"
+    New-Item -ItemType Directory -Force (Split-Path $dest) | Out-Null
+    try {
+        Invoke-WebRequest $url -OutFile $part -TimeoutSec $timeoutSec -ErrorAction Stop
+        $hash = (Get-FileHash -LiteralPath $part -Algorithm SHA256).Hash
+        if ($hash -ne $sha256.ToUpper()) { throw "the download does not match its pinned SHA-256 (got $hash)" }
+        Move-Item -Force -LiteralPath $part $dest
+    } finally { Remove-Item -LiteralPath $part -Force -ErrorAction SilentlyContinue }
+}
+
 # ~ and %VARS% in user-supplied paths. ~\Pictures (Videos, Documents, Music, Desktop)
 # means that folder wherever Windows keeps it: OneDrive often moves it out of the profile,
 # and install makes Pictures\Wallpapers in the real one. A literal folder that exists wins.

@@ -1,0 +1,20 @@
+{
+  "_help": "Programs the install would otherwise compile on every PC, built once by .github/workflows/prebuilt.yml from the source pinned here and published as a release. The workflow runs when this file changes and builds each entry that has no url yet; put the url and sha256 from its run summary here by hand, so an install never downloads something this file has not pinned. Bump rev to publish a new build of the same source. An entry without a url is built on the PC as before.",
+  "ttfx": {
+    "source": "omacom/ttfx",
+    "tag": "v0.3.3",
+    "version": "0.3.3",
+    "rev": 1,
+    "url": null,
+    "sha256": null
+  },
+  "glazewm-animations": {
+    "source": "florensm/glazewm",
+    "commit": "d76641418f9642837b63817a8eeed7fbed4aadb5",
+    "version": "3.10.1",
+    "fallbackToolchain": "nightly-2026-07-20",
+    "rev": 1,
+    "url": null,
+    "sha256": null
+  }
+}

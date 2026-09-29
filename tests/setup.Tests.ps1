@@ -252,3 +252,57 @@ Describe 'Invoke-Winget' {
         $r.Reboot | Should -BeTrue
     }
 }
+
+Describe 'Theme download during the app installs' {
+    It 'starts after ~/.glzr is journaled and before the apps install' {
+        $body = (Get-Command Invoke-Install).ScriptBlock.ToString()
+        $saveDir = $body.IndexOf("Save-Dir (Join-Path `$env:USERPROFILE '.glzr')")
+        $start = $body.IndexOf('Start-ThemeDownload')
+        $deps = $body.IndexOf('Install-Dependencies')
+        $saveDir | Should -BeGreaterThan -1
+        $start | Should -BeGreaterThan $saveDir
+        $deps | Should -BeGreaterThan $start
+    }
+    It 'waits for it, then fetches what it missed, before a theme is set' {
+        $body = (Get-Command Invoke-Install).ScriptBlock.ToString()
+        $wait = $body.IndexOf('Wait-ThemeDownload')
+        $sync = $body.IndexOf('Use-Lock { Invoke-Sync }')
+        $wait | Should -BeGreaterThan $body.IndexOf('Install-Dependencies')
+        $sync | Should -BeGreaterThan $wait
+        $body.IndexOf('Invoke-ThemeSet') | Should -BeGreaterThan $sync
+    }
+    It 'stops a download that hangs' {
+        $ThemeDownloadProgress = Join-Path $TestDrive 'theme-download.json'
+        Mock Write-Ok {}
+        Mock Log {}
+        $state = @{ killed = $false }
+        $proc = [pscustomobject]@{ HasExited = $false }
+        $proc | Add-Member ScriptMethod WaitForExit { param($ms) $false }
+        $proc | Add-Member ScriptMethod Kill { param($tree) $state.killed = $true }.GetNewClosure()
+        Wait-ThemeDownload $proc 0
+        $state.killed | Should -BeTrue
+    }
+    It 'runs in the background with no lock and makes the thumbnails too' {
+        Get-Content -Raw (Join-Path $Code 'bin\winarchy.ps1') | Should -Match "'sync' \{ if \(\`$Background\) \{ Save-OmarchyFiles \`$ThemeDownloadProgress; New-MissingThumbs \}"
+    }
+}
+
+Describe 'Zebar settings before GlazeWM installs' {
+    BeforeAll {
+        # From lib/apply.ps1 and lib/journal.ps1, which this file does not load.
+        function Set-ZebarStartup {} ; function Save-Winget {}
+    }
+    It 'are written before the GlazeWM + Zebar installer runs' {
+        $script:order = [Collections.Generic.List[string]]::new()
+        Mock Write-Step {}
+        Mock Write-Ok {}
+        Mock Save-Winget {}
+        Mock Update-Paths {}
+        Mock Get-Paths { @{} }
+        Mock Add-Unfinished {}
+        Mock Set-ZebarStartup { $script:order.Add('zebar') }
+        Mock Install-WingetPackage { $script:order.Add($id); $true }
+        Install-Apps
+        $script:order -join ',' | Should -Be 'zebar,glzr-io.glazewm,Flow-Launcher.Flow-Launcher'
+    }
+}

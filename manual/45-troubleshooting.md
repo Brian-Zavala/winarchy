@@ -10,6 +10,10 @@ The log is in `%USERPROFILE%\.winarchy\logs\winarchy.log`, and says what Winarch
 
 A `config.json` with a typing mistake is left alone rather than overwritten, and Winarchy runs on the defaults until it's fixed. `winarchy doctor` says where the mistake is. The usual one is a single `\` in a path: in JSON it has to be written `\`, as in `"C:\Games"`.
 
+### A plain bar shows instead of Winarchy's
+
+That's Zebar's own starter bar. Zebar puts it in when it starts and finds no settings of its own, for example after its settings folder was deleted. Winarchy notices it within a few seconds and runs `winarchy apply`, which points Zebar back at Winarchy's bar and restarts it. You can run `winarchy apply` yourself too. `winarchy doctor` says so when Zebar is set to open another bar.
+
 ### Some windows can't be moved or tiled
 
 Windows running as administrator can't be managed by programs that don't, and GlazeWM and AutoHotkey don't. That's a Windows security boundary; see [security](48-security.md). For games, `winarchy game-setup` helps; see [gaming](26-gaming.md).

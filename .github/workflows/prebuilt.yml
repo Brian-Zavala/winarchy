@@ -1,0 +1,155 @@
+name: prebuilt
+# Programs the install would otherwise compile on every PC, built here once from the source
+# default/prebuilt.json pins and published as a release (a prerelease, so the version
+# releases stay "latest"): ttfx (MIT), the screensaver's effects engine, and the
+# window-animation GlazeWM (GPL-3.0, released together with its complete source). It runs
+# when that file changes and builds each entry that has no url yet and no release under
+# its tag. The url and SHA-256 are printed in the run's summary: put them into
+# default/prebuilt.json by hand, so no install ever fetches something the code has not pinned.
+on:
+  push:
+    paths:
+      - default/prebuilt.json
+      - .github/workflows/prebuilt.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: prebuilt
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      ttfx: ${{ steps.plan.outputs.ttfx }}
+      glazewm: ${{ steps.plan.outputs.glazewm }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: plan
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $m = Get-Content -Raw default/prebuilt.json | ConvertFrom-Json
+          $tags = @{
+            ttfx    = "prebuilt-ttfx-v$($m.ttfx.version)-$($m.ttfx.rev)"
+            glazewm = "prebuilt-glazewm-animations-v$($m.'glazewm-animations'.version)-$($m.'glazewm-animations'.commit.Substring(0, 12))-$($m.'glazewm-animations'.rev)"
+          }
+          $entries = @{ ttfx = $m.ttfx; glazewm = $m.'glazewm-animations' }
+          foreach ($k in $tags.Keys) {
+            $tag = $tags[$k]
+            if ($entries[$k].url) { "$($k): pinned already ($($entries[$k].url))" | Tee-Object -Append $env:GITHUB_STEP_SUMMARY; continue }
+            gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+            if (-not $LASTEXITCODE) { "$($k): release $tag exists already; pin its url and sha256" | Tee-Object -Append $env:GITHUB_STEP_SUMMARY; continue }
+            "$k=$tag" >> $env:GITHUB_OUTPUT
+            "$($k): building $tag" | Tee-Object -Append $env:GITHUB_STEP_SUMMARY
+          }
+          $global:LASTEXITCODE = 0
+
+  ttfx:
+    needs: plan
+    if: needs.plan.outputs.ttfx != ''
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      TAG: ${{ needs.plan.outputs.ttfx }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        shell: pwsh
+        run: |
+          $p = (Get-Content -Raw default/prebuilt.json | ConvertFrom-Json).ttfx
+          git clone --depth 1 --branch $p.tag "https://github.com/$($p.source).git" src
+          if ($LASTEXITCODE) { exit 1 }
+          Push-Location src
+          cargo build --release --locked
+          if ($LASTEXITCODE) { exit 1 }
+          Pop-Location
+          & ./src/target/release/ttfx.exe --help | Out-Null
+          if ($LASTEXITCODE) { Write-Error 'ttfx.exe --help failed'; exit 1 }
+      - name: Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $p = (Get-Content -Raw default/prebuilt.json | ConvertFrom-Json).ttfx
+          $commit = git -C src rev-parse HEAD
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item src/target/release/ttfx.exe, src/LICENSE dist/
+          if (Test-Path src/NOTICE) { Copy-Item src/NOTICE dist/ }
+          $zip = "ttfx-$($p.version)-win-x64.zip"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::CreateFromDirectory((Resolve-Path dist).Path, (Join-Path $PWD $zip))
+          $notes = "ttfx $($p.version) (MIT), built from $($p.source) $($p.tag) ($commit) by winarchy's prebuilt workflow for the screensaver. Not signed."
+          gh release create $env:TAG $zip --title "ttfx $($p.version) for Windows (prebuilt $($p.rev))" --notes $notes --prerelease --target $env:GITHUB_SHA
+          if ($LASTEXITCODE) { exit 1 }
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          "url: https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:TAG/$zip`nsha256: $hash" | Tee-Object -Append $env:GITHUB_STEP_SUMMARY
+
+  glazewm-animations:
+    needs: plan
+    if: needs.plan.outputs.glazewm != ''
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      TAG: ${{ needs.plan.outputs.glazewm }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        id: build
+        shell: pwsh
+        run: |
+          $p = (Get-Content -Raw default/prebuilt.json | ConvertFrom-Json).'glazewm-animations'
+          git init --quiet src
+          git -C src remote add origin "https://github.com/$($p.source).git"
+          git -C src fetch --depth 1 origin $p.commit
+          if ($LASTEXITCODE) { exit 1 }
+          git -C src checkout --quiet --force FETCH_HEAD
+          # build.rs embeds the version: the official GlazeWM this build is based on.
+          $env:VERSION_NUMBER = $p.version
+          Push-Location src
+          # The pinned toolchain first (known to build this commit), then the latest nightly,
+          # the two lib/animations.ps1 tries on a PC.
+          $built = $null
+          foreach ($tc in @($p.fallbackToolchain, 'nightly') | Where-Object { $_ }) {
+            rustup toolchain install $tc --profile minimal --no-self-update
+            if ($LASTEXITCODE) { continue }
+            cargo "+$tc" build --release --locked -p wm -p wm-cli -p wm-watcher
+            if (-not $LASTEXITCODE) { $built = $tc; break }
+            Write-Host "build with $tc failed"
+          }
+          Pop-Location
+          if (-not $built) { Write-Error 'the GlazeWM animation build failed'; exit 1 }
+          "toolchain=$built" >> $env:GITHUB_OUTPUT
+      - name: Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TOOLCHAIN: ${{ steps.build.outputs.toolchain }}
+        run: |
+          $p = (Get-Content -Raw default/prebuilt.json | ConvertFrom-Json).'glazewm-animations'
+          $short = $p.commit.Substring(0, 12)
+          # The installed layout (lib/animations.ps1 $AnimFiles), with the license and how it was built.
+          New-Item -ItemType Directory -Force dist/cli | Out-Null
+          Copy-Item src/target/release/glazewm.exe, src/target/release/glazewm-watcher.exe dist/
+          Copy-Item src/target/release/glazewm-cli.exe dist/cli/glazewm.exe
+          Copy-Item src/LICENSE.md dist/LICENSE.md
+          $src = "glazewm-animations-$short-source.tar.gz"
+          @(
+            "GlazeWM $($p.version) with window animations (glzr-io/glazewm pull request #1392), GPL-3.0."
+            "Source: https://github.com/$($p.source) commit $($p.commit)"
+            "The complete source is also attached to this release as $src."
+            "Built by https://github.com/$env:GITHUB_REPOSITORY/blob/$env:GITHUB_SHA/.github/workflows/prebuilt.yml:"
+            "  set VERSION_NUMBER=$($p.version)"
+            "  cargo +$env:TOOLCHAIN build --release --locked -p wm -p wm-cli -p wm-watcher"
+            "glazewm-cli.exe is installed as cli\glazewm.exe."
+          ) | Set-Content dist/BUILD.txt
+          $zip = "glazewm-animations-$($p.version)-$short-win-x64.zip"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::CreateFromDirectory((Resolve-Path dist).Path, (Join-Path $PWD $zip))
+          git -C src archive --format=tar.gz --prefix="glazewm-$short/" -o (Join-Path $PWD $src) HEAD
+          if ($LASTEXITCODE) { exit 1 }
+          $notes = "GlazeWM $($p.version) with the window-animation pull request (glzr-io/glazewm#1392), built from $($p.source)@$($p.commit) with $env:TOOLCHAIN by winarchy's prebuilt workflow, for winarchy animations setup. GPL-3.0: the complete corresponding source is attached ($src); BUILD.txt in the zip gives the build command. Not signed."
+          gh release create $env:TAG $zip $src --title "GlazeWM $($p.version) + animations for Windows (prebuilt $($p.rev))" --notes $notes --prerelease --target $env:GITHUB_SHA
+          if ($LASTEXITCODE) { exit 1 }
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          "url: https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:TAG/$zip`nsha256: $hash" | Tee-Object -Append $env:GITHUB_STEP_SUMMARY
