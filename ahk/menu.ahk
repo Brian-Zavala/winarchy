@@ -5,6 +5,7 @@
 #Include lib\osd.ahk
 #Include lib\display.ahk
 #Include lib\tailscale.ahk
+#Include lib\power.ahk
 OnError ScriptLogError
 ; Action dispatcher for the Zebar bar + Omarchy menu widget (whitelisted in zpack.json),
 ; and for winarchy.ahk hotkeys that open the menu.
@@ -19,6 +20,8 @@ OnError ScriptLogError
 ;   menu.ahk display-panel | display-state | brightness <n> <pct> | brightness-step <delta> | scale <n> <pct>
 ;            monitor <key> <on|off> | text-size <px>                  (bar display icon: Display panel)
 ;   menu.ahk tailscale-panel | tailscale <toggle|up|down|login|refresh|exit-node <ip|none>|switch <id>|send <peer>>
+;   menu.ahk power-panel | power-state | power-mode <saver|balanced|performance> [panel]
+;            battery-percentage                               (bar battery icon: Power panel)
 ;   menu.ahk copy <text>                                              (panels: copy an IP / a name)
 ;   menu.ahk send <keys> | run <target> [args] | url <url> | settings <ms-settings:...>
 ;   menu.ahk edit <file | glaze-config | bar-css | config | launchers | keybindings>
@@ -39,7 +42,7 @@ arg := A_Args.Length > 1 ? A_Args[2] : ""
 ; Keystrokes and window commands must land on the window the menu covered,
 ; so wait for the menu to finish closing first. The picker verbs send no keys: they start
 ; right away while the menu plays its apply animation (and waits for the new background).
-if !(verb ~= "^(open|log|network-panel|audio-panel|bluetooth-panel|network-state|speedtest-run|wifi|dns-quick|audio|bluetooth|bar-clear|worldclock|bar-start|bg-set|theme-set|font-set|apps-refresh|display-panel|display-state|brightness|brightness-step|scale|monitor|text-size|tailscale|tailscale-panel|copy|catalog-refresh)$")
+if !(verb ~= "^(open|log|network-panel|audio-panel|bluetooth-panel|network-state|speedtest-run|wifi|dns-quick|audio|bluetooth|bar-clear|worldclock|bar-start|bg-set|theme-set|font-set|apps-refresh|display-panel|display-state|brightness|brightness-step|scale|monitor|text-size|tailscale|tailscale-panel|power-panel|power-state|battery-percentage|copy|catalog-refresh)$")
     WinWaitClose MenuTitle, , 1
 
 switch verb {
@@ -86,6 +89,15 @@ switch verb {
     ; The bar's Tailscale icon (Quattro's omarchy.tailscale), only there once it is installed.
     case "tailscale-panel": OpenPanel("tailscale", "t", (*) => TailscaleRefresh(true))
     case "tailscale": TailscaleAction(arg, A_Args.Length > 2 ? A_Args[3] : "")
+    ; The bar's battery icon and Super+Ctrl+P (Quattro's omarchy.power): the Power panel, or
+    ; the Power menu on a PC without a battery. Right click on the icon shows the percentage.
+    case "power-panel":
+        if HasBattery()
+            OpenPanel("power", "p", WritePowerState)
+        else
+            OpenMenu("power")
+    case "power-state": WritePowerState()
+    case "battery-percentage": ToggleBarState("percent")
     ; The bar's Network, Audio and Bluetooth icons (Quattro's panels). The panels read state
     ; files that winarchy writes and call back here for changes, waiting on each so they can
     ; show the result: network-state / wifi / audio / bluetooth answer when they are done.
@@ -160,7 +172,7 @@ switch verb {
     case "notify": OmarchyCmd("reminder", "refresh"), Osd(arg, 12000), Sleep(12100)
     case "animations": ToggleAnimations()
     ; Double-click on the bar (or Style > Menu Bar > Transparency): bar-state.json is what every bar polls.
-    case "bar-clear": ToggleBarClear()
+    case "bar-clear": ToggleBarState("clear")
     case "glaze": try Run('"' Env("glazewmCli") '" command ' arg, , "Hide")
     case "activity": SignalWm("activity")
     case "browser-setup": RunInTerminal("Browser toolbar color", CliInTerminal("browser-setup"))
@@ -182,8 +194,9 @@ switch verb {
     case "restart": RestartPart(arg)
     ; Update > Config: back to winarchy's own template (yours is kept as .bak).
     case "config-reset": ResetConfig(arg)
-    ; Setup > Power / Super+Ctrl+P (Omarchy's power profiles): Windows' power mode.
-    case "power-mode": SetPowerMode(arg)
+    ; Setup > Power (Omarchy's power profiles): Windows' power mode. From the Power panel it
+    ; is quiet, and the panel shows the new mode.
+    case "power-mode": SetPowerMode(arg, A_Args.Length > 2 && A_Args[3] = "panel")
     ; Trigger > Hardware (Omarchy's omarchy-hyprland-monitor-internal[-mirror]).
     case "display": ToggleDisplay(arg)
     case "shutdown": Run "shutdown.exe /s /t 0", , "Hide"
@@ -263,16 +276,18 @@ ResetConfig(which) {
 ; duplicate the laptop screen on the other one, and back to extended the next time.
 ; Windows' power mode (Settings > Power > Power mode), which works on top of the Balanced
 ; plan: Omarchy's power-saver / balanced / performance profiles.
-SetPowerMode(mode) {
-    static ids := Map("saver", "{961CC777-2547-4F9D-8174-7D86181B8A7A}"
-        , "balanced", "{00000000-0000-0000-0000-000000000000}"
-        , "performance", "{DED574B5-45A0-4F42-8737-46345C09C238}")
+SetPowerMode(mode, quiet := false) {
+    ids := PowerModeIds()
     if !ids.Has(mode)
         return
     guid := Buffer(16, 0)
     DllCall("ole32\CLSIDFromString", "str", ids[mode], "ptr", guid)
     ok := false
     try ok := DllCall("powrprof\PowerSetActiveOverlayScheme", "ptr", guid, "uint") = 0
+    if quiet
+        WritePowerState()
+    if quiet && ok
+        return
     names := Map("saver", "Power saver", "balanced", "Balanced", "performance", "Performance")
     Osd(ok ? "Power: " names[mode] : "Windows would not change the power mode (Settings > Power has it)", 1500)
     Sleep 1600
@@ -404,14 +419,19 @@ ToggleAnimations() {
     Notify("Window animations " (Env("animations", "0") = "1" ? "on" : "off"))
 }
 
-; Omarchy's bar transparency: one flag in the pack, so every monitor's bar follows it and
-; it survives a restart of the bar.
-ToggleBarClear() {
+; bar-state.json: the bar's own switches, in the pack so every monitor's bar follows them
+; and they survive a restart of the bar. clear = Omarchy's transparent background, percent =
+; the battery percentage next to its icon (Quattro's showPercentage). Each flips on its own.
+ToggleBarState(key) {
     file := Env("pack") "\bar-state.json"
-    on := false
-    try on := InStr(FileRead(file, "UTF-8"), '"clear":true') > 0
+    text := ""
+    try text := FileRead(file, "UTF-8")
+    state := Map()
+    for k in ["clear", "percent"]
+        state[k] := InStr(text, '"' k '":true') > 0
+    state[key] := !state[key]
     f := FileOpen(file, "w", "UTF-8-RAW")
-    f.Write('{"clear":' (on ? "false" : "true") '}')
+    f.Write('{"clear":' (state["clear"] ? "true" : "false") ',"percent":' (state["percent"] ? "true" : "false") '}')
     f.Close()
 }
 

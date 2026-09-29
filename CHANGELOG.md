@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The battery icon opens Omarchy Quattro's Power panel on a laptop (`Super + Ctrl + P`): the charge, battery size, charge cycles, time left or to full, the power draw, and Power-saver / Balanced / Performance (Windows' power modes). Right-click the icon, or _Toggle > Battery Percentage_, to show the percentage next to it. A desktop's `Super + Ctrl + P` still opens the Power menu.
+
 ## 0.1.23 — 2026-09-29
 
 - The installer banner says a first install takes about 5 minutes, depending on the connection.
