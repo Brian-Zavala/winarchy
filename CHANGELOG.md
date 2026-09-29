@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.12 — 2026-09-29
+
 - Omarchy parity pass. The bar goes transparent when you double-click empty space on it (also _Style > Menu Bar > Transparency_). The world clock (Omarchy's Elsewhen): middle-click the clock or `Super + Ctrl + Alt + E`, with your cities, their offsets and a strip of the day. _Update > Timezone_ is now a picker and _Update > Time_ syncs the clock. _Trigger_ gains World Clock, Reminder, Transcode, Share (LocalSend) and Speed Test; _Setup > Network > DNS_ switches DHCP/Cloudflare/Google/custom; _Install_ gains AI Agents (Claude Code, Codex, Copilot, OpenCode, Grok), ChatGPT, OpenClaw, a Browser group, Xbox, Ruby/Elixir/Zig/OCaml/Scala, LocalSend, FFmpeg and Web App; OpenClaw joins the default-agent list. What Windows cannot do is in docs/parity.md.
 
 ## 0.1.8 — 2026-09-29
