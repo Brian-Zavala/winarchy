@@ -5,6 +5,7 @@
 #Include lib\osd.ahk
 #Include lib\display.ahk
 #Include lib\tailscale.ahk
+#Include lib\widgets.ahk
 #Include lib\power.ahk
 OnError ScriptLogError
 ; Action dispatcher for the Zebar bar + Omarchy menu widget (whitelisted in zpack.json),
@@ -57,11 +58,12 @@ switch verb {
     case "catalog-refresh": OmarchyCmd("catalog")
     case "start": Send "^{Esc}"
     case "terminal": Run Env("terminal", "wt.exe")
-    case "calendar": OpenCalendar()
+    case "calendar": OpenPanel("calendar", "c", 0, false, WorkingMonitor)
     ; The world clock (Omarchy's omarchy.elsewhen): bar clock middle click, Super+Ctrl+Alt+E.
-    case "worldclock": OpenPanel("worldclock", "w", (*) => 0)
-    ; The bar's agent icon: the usage panel, and its refresh key (r).
-    case "usage": OpenUsage()
+    case "worldclock": OpenPanel("worldclock", "w")
+    ; The bar's agent icon: the usage panel, and its refresh key (r). Opening it also
+    ; refreshes the limits, which is what it is usually opened to check.
+    case "usage": OpenPanel("usage", "u", (*) => OmarchyCmd("agent-usage", "-LimitsOnly"))
     case "usage-refresh": OmarchyCmd("agent-usage", "-Force")
     ; Its Make something tiles start the default agent with a starter prompt, in its own
     ; window; Sign in runs the agent's login in a terminal, where it can ask for a code.
@@ -70,8 +72,8 @@ switch verb {
             Notify("Your agent didn't start (winarchy agent list shows whether it's installed)")
     case "agent-login": RunInTerminal("Sign in", CliInTerminal("agent-login", arg))
     ; The bar's display icon (Quattro's omarchy.monitor): the Display panel and its controls.
-    ; Monitor numbers are AHK's; the panel got them from display.json.
-    case "display-panel": OpenPanel("display", "d", WriteDisplayState)
+    ; Monitor numbers are AHK's; the panel got them from display.json and display-anchor.json.
+    case "display-panel": OpenPanel("display", "d")
     case "display-state": PerMonitorDpi(), WriteDisplayState(arg != "" ? Integer(arg) : MonitorUnderMouse())
     case "brightness":
         if A_Args.Length > 2
@@ -91,10 +93,10 @@ switch verb {
             Notify("Text size change failed (Update > Doctor shows why)")
         else if !WinExist("Zebar - omarchy / display ahk_exe zebar.exe") {
             Sleep 1500
-            OpenPanel("display", "d", WriteDisplayState, true)
+            OpenPanel("display", "d", 0, true)
         }
     ; The bar's Tailscale icon (Quattro's omarchy.tailscale), only there once it is installed.
-    case "tailscale-panel": OpenPanel("tailscale", "t", (*) => TailscaleRefresh(true))
+    case "tailscale-panel": OpenPanel("tailscale", "t")
     case "tailscale": TailscaleAction(arg, A_Args.Length > 2 ? A_Args[3] : "")
     ; The bar's battery icon and Super+Ctrl+P (Quattro's omarchy.power): the Power panel, or
     ; the Power menu on a PC without a battery. Right click on the icon shows the percentage.
@@ -108,9 +110,9 @@ switch verb {
     ; The bar's Network, Audio and Bluetooth icons (Quattro's panels). The panels read state
     ; files that winarchy writes and call back here for changes, waiting on each so they can
     ; show the result: network-state / wifi / audio / bluetooth answer when they are done.
-    case "network-panel": OpenPanel("network", "n", (*) => OmarchyCmd("network-state"))
-    case "audio-panel": OpenPanel("audio", "a", (*) => 0)
-    case "bluetooth-panel": OpenPanel("bluetooth", "b", (*) => 0)
+    case "network-panel": OpenPanel("network", "n")
+    case "audio-panel": OpenPanel("audio", "a")
+    case "bluetooth-panel": OpenPanel("bluetooth", "b")
     case "network-state": OmarchyCmdWait("network-state")
     case "speedtest-run": OmarchyCmd("speedtest-run")
     case "wifi":
@@ -473,27 +475,12 @@ SignalWm(name) {
 }
 
 ; Open the menu widget on the monitor you're working on (see WorkingMonitor). Pressing the
-; key again closes it.
+; key again closes it. A closed menu stays loaded, hidden (menu.js): OpenMenuWarm shows it
+; again, and it starts over from route.json. Much faster than a new webview.
 OpenMenu(route) {
     global MenuTitle
-    pack := Env("pack")
-    if hwnd := WinExist(MenuTitle) {
-        ; (menu.js turns this into its fade and hides the window for next time)
-        PostMessage 0x10, 0, 0, , hwnd      ; WinClose can stall on Zebar's webview windows
+    if OpenMenuWarm(route, &mon)
         return
-    }
-    PerMonitorDpi()
-    mon := WorkingMonitor()
-    f := FileOpen(pack "\route.json", "w", "UTF-8-RAW")
-    f.Write('{"route":"' route '"}')
-    f.Close()
-    ; A closed menu stays loaded, hidden (menu.js): show it again, and it starts over from
-    ; route.json. Much faster than a new webview.
-    if hwnd := HiddenMenu(mon) {
-        WinShow hwnd
-        try WinActivate hwnd
-        return
-    }
     ; Zebar's presets m0..m7 follow its monitor order (left to right, top to bottom).
     preset := "m" MonitorPosition(mon)
     Run '"' Env("zebar") '" start-widget-preset --pack omarchy --widget-name menu --preset ' preset, , "Hide"
@@ -504,86 +491,35 @@ OpenMenu(route) {
     }
 }
 
-; The hidden menu window on monitor `mon`, if a closed menu left one there.
-HiddenMenu(mon) {
-    global MenuTitle
-    prev := A_DetectHiddenWindows
-    DetectHiddenWindows true
-    MonitorGet mon, &l, &t, &r, &b
-    found := 0
-    for hwnd in WinGetList(MenuTitle) {
-        try {
-            if WinGetStyle(hwnd) & 0x10000000           ; WS_VISIBLE: not one of ours
-                continue
-            WinGetPos &x, &y, &w, &h, hwnd
-            if (cx := x + w // 2) >= l && cx < r && (cy := y + h // 2) >= t && cy < b {
-                found := hwnd
-                break
-            }
-        }
-    }
-    DetectHiddenWindows prev
-    return found
-}
-
-; The clock's calendar (Omarchy Quattro), on the monitor you're working on; again closes it.
-; The agent usage panel (Omarchy's agents widget), dropped under the bar icon it was
-; opened from: the click's x, in the widget's CSS pixels, goes in usage-anchor.json.
-; Opening it also refreshes the limits, which is what it is usually opened to check.
-OpenUsage() {
-    title := "Zebar - omarchy / usage ahk_exe zebar.exe"
+; The bar's panels (audio, network, Bluetooth, display, Tailscale, power, agent usage, calendar,
+; world clock), dropped under the icon they were opened from: the click's x, in the widget's
+; CSS pixels, and the monitor go in <name>-anchor.json. Again closes it. A closed panel stays
+; loaded, hidden (panel.js), and is shown again here: a new webview only when there is none on
+; that monitor. The panel draws what it last read at once and refreshes itself, so nothing
+; slow (DDC/CI, tailscale.exe, PowerShell) runs before it shows; `prepare(monitor)` may only
+; start things. keepAnchor reopens it where it was (after a restart of the bar).
+OpenPanel(name, prefix, prepare := 0, keepAnchor := false, pick := 0) {
+    DetectHiddenWindows false            ; "open" means visible: a hidden one is a spare
+    title := WidgetTitle(name)
     if hwnd := WinExist(title) {
-        PostMessage 0x10, 0, 0, , hwnd
+        PostMessage 0x10, 0, 0, , hwnd   ; the page fades and hides it for next time
         return
     }
     PerMonitorDpi()
-    n := MonitorUnderMouse()
-    CoordMode "Mouse", "Screen"
-    MouseGetPos &mx
-    MonitorGet n, &left
-    f := FileOpen(Env("pack") "\usage-anchor.json", "w", "UTF-8-RAW")
-    f.Write('{"x":' Round((mx - left) * 96 / MonitorDpi(n)) '}')
-    f.Close()
-    OmarchyCmd("agent-usage", "-LimitsOnly")
-    Run '"' Env("zebar") '" start-widget-preset --pack omarchy --widget-name usage --preset u' MonitorPosition(n), , "Hide"
-    if hwnd := WinWait(title, , 3)
-        try WinActivate hwnd
-}
-
-; The bar's Display and Tailscale panels, dropped under the icon they were opened from
-; (the click's x in the widget's CSS pixels goes in <name>-anchor.json, as the usage
-; panel's). `prepare(monitor)` writes the state the panel shows first; again closes it.
-; keepAnchor reopens it where it was (after a restart of the bar).
-OpenPanel(name, prefix, prepare, keepAnchor := false) {
-    title := "Zebar - omarchy / " name " ahk_exe zebar.exe"
-    if hwnd := WinExist(title) {
-        PostMessage 0x10, 0, 0, , hwnd
-        return
-    }
-    PerMonitorDpi()
-    n := MonitorUnderMouse()
+    n := pick ? pick() : MonitorUnderMouse()      ; the calendar: the monitor you work on
     if !keepAnchor {
         CoordMode "Mouse", "Screen"
         MouseGetPos &mx
         MonitorGet n, &left
         f := FileOpen(Env("pack") "\" name "-anchor.json", "w", "UTF-8-RAW")
-        f.Write('{"x":' Round((mx - left) * 96 / MonitorDpi(n)) '}')
+        f.Write('{"x":' Round((mx - left) * 96 / MonitorDpi(n)) ',"n":' n '}')
         f.Close()
     }
-    prepare(n)
-    Run '"' Env("zebar") '" start-widget-preset --pack omarchy --widget-name ' name ' --preset ' prefix MonitorPosition(n), , "Hide"
-    if hwnd := WinWait(title, , 3)
-        try WinActivate hwnd
-}
-
-OpenCalendar() {
-    title := "Zebar - omarchy / calendar ahk_exe zebar.exe"
-    if hwnd := WinExist(title) {
-        PostMessage 0x10, 0, 0, , hwnd
+    if prepare
+        prepare(n)
+    if ShowHiddenWidget(title, n)
         return
-    }
-    PerMonitorDpi()
-    Run '"' Env("zebar") '" start-widget-preset --pack omarchy --widget-name calendar --preset c' MonitorPosition(WorkingMonitor()), , "Hide"
+    Run '"' Env("zebar") '" start-widget-preset --pack omarchy --widget-name ' name ' --preset ' prefix MonitorPosition(n), , "Hide"
     if hwnd := WinWait(title, , 3)
         try WinActivate hwnd
 }

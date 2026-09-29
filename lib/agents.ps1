@@ -143,7 +143,8 @@ function Resolve-AgentName([string]$name) {
 function Test-AgentInstalled([string]$name) {
     $a = $AgentTable[$name]
     if (-not $a) { return $false }
-    [bool](Get-Command $a.cmd -ErrorAction SilentlyContinue)
+    # Programs and .ps1 shims (npm's): an untyped lookup that misses searches every module.
+    [bool](Get-Command $a.cmd -CommandType Application, ExternalScript -ErrorAction SilentlyContinue)
 }
 
 # Every agent, with whether it is here and whether it is the default: the menu's

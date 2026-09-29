@@ -8,7 +8,7 @@
 //   j / k, arrows: move    Enter, Space: press    r: refresh    Esc: close
 import * as zebar from './zebar.mjs';
 import * as env from './env.js';
-import { calm } from './motion.js';
+import { panel } from './panel.js';
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls ?? '', textContent: text ?? '' });
@@ -322,14 +322,8 @@ function refresh() {
   refreshTimer = setTimeout(() => { if (refreshing) { refreshing = false; render(); } }, 90000);
 }
 
-// ---- lifecycle (as the calendar)
-let closing = false;
-function close() {
-  if (closing) return;
-  closing = true;
-  document.body.classList.remove('shown');
-  setTimeout(() => Promise.resolve(zebar.currentWidget().window.tauri.close()).catch(() => {}), calm.matches ? 0 : 110);
-}
+// ---- lifecycle (panel.js: the window hides on close and is shown again next time)
+const close = () => p.close();
 
 $('add').textContent = GLYPH.add;
 $('add').onclick = () => { act('open', 'agent'); close(); };
@@ -341,7 +335,6 @@ for (const t of document.querySelectorAll('.tile')) {
   t.onclick = () => { act('agent-make', t.dataset.kind); close(); };
 }
 
-document.addEventListener('mousedown', e => { if (!$('panel').contains(e.target)) close(); });
 document.addEventListener('mouseover', e => {
   const i = nodes().findIndex(n => n.contains(e.target));
   if (i >= 0 && i !== cursor) { cursor = i; if (cursorOn) paintCursor(); }
@@ -370,18 +363,21 @@ window.addEventListener('keydown', e => {
   e.preventDefault();
 });
 
-document.documentElement.style.setProperty('--top', `${(env.BAR_HEIGHT ?? 26) + (env.GAP ?? 10)}px`);
-const [first, defaults, anchor] = await Promise.all([get('agents.json'), get('defaults.json'), get('usage-anchor.json')]);
-anchorX = Number.isFinite(anchor?.x) ? anchor.x : null;
-known = defaults?.agents ?? [];
-data = first;
-stamp = first?.updatedAt ?? null;
-render();
-setInterval(poll, 2000);
+const p = panel({
+  name: 'usage',
+  async open({ anchor }) {
+    anchorX = Number.isFinite(anchor.x) ? anchor.x : null;
+    // Read again on every open: the default agent, or another monitor's panel, may have moved on.
+    try { opened = new Set(JSON.parse(localStorage.getItem('agents-open') ?? '[]')); } catch {}
+    cursorOn = false;
+    cursor = 0;
+    const [first, defaults] = await Promise.all([get('agents.json'), get('defaults.json')]);
+    known = defaults?.agents ?? known;
+    if (first) { data = first; stamp = first.updatedAt ?? null; }
+    render();
+  },
+  onHidden: hideTip,
+});
+p.every(2000, poll);
 // Reset times count down while the panel is open.
-setInterval(() => { if (!refreshing) render(); }, 30000);
-
-const shown = () => requestAnimationFrame(() => document.body.classList.add('shown'));
-if (document.hasFocus()) shown();
-else { window.addEventListener('focus', shown, { once: true }); setTimeout(shown, 300); }
-setTimeout(() => window.addEventListener('blur', close), 400);
+p.every(30000, () => { if (!refreshing) render(); });

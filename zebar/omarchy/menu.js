@@ -7,6 +7,7 @@ import * as zebar from './zebar.mjs';
 import * as env from './env.js';
 const { AHK, MENU } = env;
 import { calm, wait, swap, skipSwap, glide, pop, stagger } from './motion.js';
+import { restyle } from './style.js';
 const COLS = 4;
 // Palette vars registered in menu.css (@property), so a previewed theme animates in.
 const MORPH = ['bg', 'bg-light', 'fg', 'fg-dim', 'accent', 'alert', 'muted', 'selection'];
@@ -44,6 +45,9 @@ let herdrKeys = null;// parsed herdr-keys.txt (Learn > Herdr)
 let defaults = null; // defaults.json: the coding agents, and which one is the default
 let flags = null;    // menu-flags.json: what this PC has, for rows with a "when" (Omarchy's
                      // `when` conditions: Hibernate, the laptop display and touchpad)
+// menu.json and menu-flags.json outlive a hide: only apply writes them, and apply restarts
+// Zebar. The Apps and Install lists are rebuilt behind the menu, once per open at most.
+let refreshed = {};
 
 const stack = [];
 let route = null;
@@ -62,6 +66,7 @@ let selEl = null;
 let closing = false;
 let busy = false;    // an apply animation is playing: ignore input
 let idle = false;    // hidden, waiting to be shown again
+let wakeLater = false;   // menu.ahk showed it again while it was on its way out
 let openedAt = Date.now();
 const win = () => zebar.currentWidget().window.tauri;
 // fade: how long body.closing takes in menu.css (the landing fades slower).
@@ -80,12 +85,16 @@ async function hide() {
     await win().hide();
   } catch (e) {
     log(`menu: hide failed, closing instead: ${e}`);
-    // Let this close through: the close-request handler below would cancel it otherwise.
-    quitting = true;
-    return Promise.resolve(win().close()).catch(() => {});
+    return quit();
   }
   reset();
   idle = true;
+  // Shown again before the hide went through: open for it now, or it stays up and empty.
+  if (wakeLater) {
+    wakeLater = false;
+    open(true);
+    Promise.resolve(win().setFocus?.()).catch(() => {});   // show() alone leaves the keys elsewhere
+  }
 }
 // Back to the empty page menu.html starts with.
 function reset() {
@@ -95,7 +104,8 @@ function reset() {
   items = [];
   sel = tab = 0;
   groups = [];
-  index = status = keys = fonts = herdrKeys = defaults = flags = null;
+  index = status = keys = fonts = herdrKeys = defaults = null;
+  refreshed = {};
   // The menu search's lists: apps and the catalog are fetched fresh next open too.
   apps = catalog = prefetching = null;
   pools.clear();
@@ -121,28 +131,13 @@ function reset() {
   typing = 0;
   closing = busy = false;
 }
-// A theme or font change while hidden: fresh copies of the generated stylesheets, swapped
-// in once loaded, without the palette morph (that is for previews).
-async function restyle() {
-  const root = document.documentElement;
-  const olds = [...document.querySelectorAll('link[rel="stylesheet"]')].filter(l => !/menu\.css/.test(l.getAttribute('href')));
-  root.style.transition = 'none';
-  await Promise.all(olds.map(old => new Promise(r => {
-    const l = Object.assign(document.createElement('link'), { rel: 'stylesheet' });
-    l.onload = l.onerror = r;
-    l.href = `${old.getAttribute('href').replace(/\?.*$/, '')}?v=${Date.now()}`;
-    old.after(l);
-  })));
-  olds.forEach(l => l.remove());
-  getComputedStyle(root).getPropertyValue('--bg');   // settle before the morph is back
-  root.style.transition = '';
-}
 async function open(again = false) {
   idle = false;
   openedAt = Date.now();
   if (again) Promise.resolve(win().show()).catch(() => {});   // keep Tauri's state in step with menu.ahk's WinShow
   let start;
-  [start, menus] = await Promise.all([get('route.json'), get('menu.json'), again && restyle()]);
+  // (A theme or font change while hidden: restyle swaps the generated sheets, when one changed.)
+  [start, menus] = await Promise.all([get('route.json'), menus ?? get('menu.json'), restyle()]);
   // Generated routes aren't in menu.json, so they need naming here or `menu.ahk open <x>`
   // silently falls back to root.
   const generated = r => ['background', 'theme', 'keys', 'font', 'apps', 'herdr-keys', 'agent', 'timezone'].includes(r)
@@ -152,10 +147,21 @@ async function open(again = false) {
   await focused();
   requestAnimationFrame(() => document.body.classList.add('shown'));
 }
-window.addEventListener('focus', () => { if (idle) open(true); });
-// menu.ahk's toggle (and anything else closing the window) fades and hides it instead.
+window.addEventListener('focus', () => { if (idle) open(true); else if (closing) wakeLater = true; });
+// menu.ahk's toggle (and anything else closing the window) fades and hides it instead. A
+// close while hidden is meant (menu.ahk: this spare no longer fits its monitor): let it
+// through by dropping this handler, as Tauri then closes the window itself.
 let quitting = false;
-Promise.resolve(win().onCloseRequested?.(e => { if (quitting) return; e.preventDefault(); if (!idle) close(); })).catch(() => {});
+const unlisten = Promise.resolve(win().onCloseRequested?.(e => {
+  if (quitting) return;
+  e.preventDefault();
+  if (idle) quit(); else close();
+})).catch(() => null);
+async function quit() {
+  quitting = true;
+  try { (await unlisten)?.(); } catch {}
+  Promise.resolve(win().close()).catch(() => {});
+}
 function run(action) {
   if (action[0] === 'bg-set') return land(items[sel]);
   // Fire the action, then close: menu.ahk waits for this window to go away before
@@ -232,7 +238,6 @@ async function land(it) {
   $('land').replaceWith(img);
   await wait(Math.max(0, 180 - (Date.now() - t0)));   // overlap the card's exit
   const start = await revealStart(t0);
-  log(`landing: band at ${start} (${start - t0} ms after the pick)`);
   await wait(start - Date.now());
   document.body.classList.add('revealing');
   // The sharp picture settles as the blur pushes back behind it.
@@ -247,32 +252,42 @@ window.addEventListener('blur', () => busy || idle || Date.now() - openedAt < 40
 $('scrim').onclick = () => busy || close();
 
 // ---------------------------------------------------------------- routes
+// Rebuild the Apps (apps-refresh) or Install/Remove (catalog-refresh) list behind the menu,
+// once per open: each is a PowerShell run, and walking the Install routes asked for one on
+// every step.
+function refresh(what) {
+  if (refreshed[what]) return;
+  refreshed[what] = true;
+  zebar.shellExec(AHK, [MENU, what]).catch(() => {});
+}
 async function load(name) {
   if (!flags) flags = (await get('menu-flags.json')) ?? {};
   pools.clear();   // whatever this loads may be newer than what the search last saw
   if (menus?.[name]) prefetch();
+  // What prefetch is already fetching is used, not fetched a second time.
+  else if (prefetching) await prefetching;
   if (name === 'background' || name === 'theme') {
-    [index, status] = await Promise.all([get('index.json'), get('status.json')]);
+    [index, status] = await Promise.all([index ?? get('index.json'), get('status.json')]);
   } else if (name === 'keys' && !keys) {
     keys = parseKeys((await get('keybindings.txt', 'text')) ?? '');
   } else if (name === 'font') {
-    [fonts, status] = await Promise.all([get('fonts.json'), get('status.json')]);
+    [fonts, status] = await Promise.all([fonts ?? get('fonts.json'), get('status.json')]);
   } else if (name === 'apps') {
-    apps = await get('apps.json');
+    apps ??= await get('apps.json');
     // The list is only as current as the last apply, and installing something should show
     // up without one. Rebuilding it takes about a second, far too long to open the route
     // behind, so kick it off unawaited: this open uses the file on disk, the next one is
     // current. (First ever open has no file yet, and renderList says so.)
-    zebar.shellExec(AHK, [MENU, 'apps-refresh']).catch(() => {});
+    refresh('apps-refresh');
   } else if (name === 'herdr-keys' && !herdrKeys) {
     herdrKeys = parseKeys((await get('herdr-keys.txt', 'text')) ?? '');
   } else if (name === 'agent') {
-    defaults = await get('defaults.json');
+    defaults ??= await get('defaults.json');
   } else if (name === 'install' || name === 'remove' || name.startsWith('install-') || name.startsWith('remove-')) {
     // Same deal as apps: show the file on disk now, and rebuild behind us so the next
     // open knows about anything just installed or removed.
-    catalog = await get('catalog.json');
-    zebar.shellExec(AHK, [MENU, 'catalog-refresh']).catch(() => {});
+    catalog ??= await get('catalog.json');
+    refresh('catalog-refresh');
   }
 }
 
@@ -525,7 +540,7 @@ function prefetch() {
     pools.clear();
     // An app list more than a few minutes old may be missing something just installed:
     // rebuild it behind us (this open searches the file on disk, the next one is current).
-    if (!apps || Date.now() - Date.parse(apps.generated) > 10 * 60e3) zebar.shellExec(AHK, [MENU, 'apps-refresh']).catch(() => {});
+    if (!apps || Date.now() - Date.parse(apps.generated) > 10 * 60e3) refresh('apps-refresh');
     if (!closing && !idle && menus?.[route] && $('search').value.trim()) render();
   });
   return prefetching;

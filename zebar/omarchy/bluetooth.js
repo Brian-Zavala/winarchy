@@ -5,7 +5,7 @@
 // device row opens Windows' own Bluetooth settings, where that is one click.
 import * as zebar from './zebar.mjs';
 import * as env from './env.js';
-import { calm } from './motion.js';
+import { panel } from './panel.js';
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls ?? '', textContent: text ?? '' });
@@ -78,15 +78,8 @@ function place() {
   document.documentElement.style.setProperty('--left', `${Math.max(12, Math.min(window.innerWidth - w - 12, x - w / 2))}px`);
 }
 
-// ---- lifecycle
-let closing = false;
-function close() {
-  if (closing) return;
-  closing = true;
-  document.body.classList.remove('shown');
-  setTimeout(() => Promise.resolve(zebar.currentWidget().window.tauri.close()).catch(() => {}), calm.matches ? 0 : 110);
-}
-document.addEventListener('mousedown', e => { if (!$('panel').contains(e.target)) close(); });
+// ---- lifecycle (panel.js: the window hides on close and is shown again next time)
+const close = () => p.close();
 window.addEventListener('keydown', e => {
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (k === 'Escape') return close();
@@ -96,15 +89,15 @@ window.addEventListener('keydown', e => {
   e.preventDefault();
 });
 
-document.documentElement.style.setProperty('--top', `${(env.BAR_HEIGHT ?? 26) + (env.GAP ?? 10)}px`);
-const anchor = await getJson('bluetooth-anchor.json');
-anchorX = Number.isFinite(anchor?.x) ? anchor.x : null;
-await load();
-render();
-refresh();
-setInterval(() => { if (!busy) refresh(); }, 6000);
-
-const shown = () => requestAnimationFrame(() => document.body.classList.add('shown'));
-if (document.hasFocus()) shown();
-else { window.addEventListener('focus', shown, { once: true }); setTimeout(shown, 300); }
-setTimeout(() => window.addEventListener('blur', close), 400);
+const p = panel({
+  name: 'bluetooth',
+  async open({ anchor }) {
+    anchorX = Number.isFinite(anchor.x) ? anchor.x : null;
+    busy = false;
+    await load();
+    render();
+    refresh();                   // the radio and devices now, behind what was there
+  },
+});
+// (every() skips a round while the last one - a PowerShell 5.1 WinRT query - still runs.)
+p.every(6000, async () => { if (!busy) await refresh(); });

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Snappier everywhere:
+  - **Menus and panels.** The bar's panels (audio, network, Bluetooth, display, Tailscale, power, agent usage, calendar, world clock) stay loaded after you close them, as the Omarchy menu does, so opening one again is instant instead of starting a new window. `Super + Space` and the other menu keys show the menu without starting a helper process. The menu no longer reloads the theme's stylesheets on every open.
+  - **The bar.** It picks up a theme, font or indicator change within half a second (it could take 2), and stay-awake, night light and do-not-disturb flip the moment you click them. It redraws only what changed.
+  - **Hotkeys.** They no longer stall now and then: the always-running script stopped making slow Windows (WMI) queries every second or two to check on GlazeWM, the auto-tiler and the network. Super releases and window moves skip AutoHotkey's built-in delays.
+  - **Panel actions.** Audio sliders, the app mixer and `Shift + Mute` respond faster: the audio code is compiled once instead of on every call, and bar actions load only the parts of Winarchy they need. The network panel pings the router and the internet at once, and open panels stop polling in the background once they are closed.
+
 ## 0.1.29 — 2026-09-29
 
 - The bar's agent panel follows Omarchy's new agents panel. It shows every subscription at once, with tokens today across all of them. Each limit has a meter and the time left until it resets. _Use_ switches the default agent, and _Sign in_ fixes an expired Claude Code sign-in. Three _Make something_ tiles, _Theme_, _Plugin_ and _App_, start your default agent to build one with you (`winarchy agent-make`). A plugin is a Zebar widget pack of your own, and it now follows theme and font changes. Tokens by day and by model are one click away on each subscription. Prompts sent to an agent (`winarchy agent -Prompt`) now reach it exactly as written, even with quotes or `$` in them.

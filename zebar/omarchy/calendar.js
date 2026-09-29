@@ -1,9 +1,7 @@
 // The clock's calendar (a port of Omarchy Quattro's shell/plugins/panels/clock):
 // a read-out, not a picker. Today is the only marked day; chevrons, the wheel and
 // the arrow keys step the month. menu.ahk opens it (clock click, Super+Ctrl+Alt+D).
-import * as zebar from './zebar.mjs';
-import * as env from './env.js';
-import { calm } from './motion.js';
+import { panel } from './panel.js';
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls, textContent: text ?? '' });
@@ -96,14 +94,8 @@ function toggleWeekStart() {
   render();
 }
 
-// ---- lifecycle
-let closing = false;
-function close() {
-  if (closing) return;
-  closing = true;
-  document.body.classList.remove('shown');
-  setTimeout(() => Promise.resolve(zebar.currentWidget().window.tauri.close()).catch(() => {}), calm.matches ? 0 : 110);
-}
+// ---- lifecycle (panel.js: the window hides on close and is shown again next time)
+const close = () => p.close();
 
 document.querySelector('#hero .glyph').textContent = '\u{F00ED}';   // calendar
 $('prev').textContent = '\u{F0141}';                                 // chevron left
@@ -112,9 +104,6 @@ $('hero').onclick = goToToday;
 $('prev').onclick = () => moveMonth(-1);
 $('next').onclick = () => moveMonth(1);
 $('panel').addEventListener('wheel', e => { if (e.deltaY) moveMonth(e.deltaY < 0 ? -1 : 1); }, { passive: true });
-// The window covers the monitor (transparent): a click outside the panel closes it,
-// and one on the bar's clock lands here too, so the clock toggles it.
-document.addEventListener('mousedown', e => { if (!$('panel').contains(e.target)) close(); });
 window.addEventListener('keydown', e => {
   const k = e.key;
   if (k === 'Escape') close();
@@ -127,21 +116,25 @@ window.addEventListener('keydown', e => {
   else return;
   e.preventDefault();
 });
+
+const p = panel({
+  name: 'calendar',
+  anchor: false,
+  open() {
+    // Each open starts at this month, as a fresh one did; the week start may have been
+    // changed in another monitor's calendar.
+    today = new Date();
+    view = { y: today.getFullYear(), m: today.getMonth() };
+    try { const s = localStorage.getItem('weekStart'); if (s !== null) weekStart = Number(s) % 7; } catch {}
+    render();
+  },
+});
 // Midnight rolls today over (and follows it when you are looking at this month).
-setInterval(() => {
+p.every(30000, () => {
   const now = new Date();
   if (key(now) === key(today)) return;
   const following = view.y === today.getFullYear() && view.m === today.getMonth();
   today = now;
   if (following) view = { y: now.getFullYear(), m: now.getMonth() };
   render();
-}, 30000);
-
-// Right under the bar (winarchy apply writes its height and the window gap).
-document.documentElement.style.setProperty('--top', `${(env.BAR_HEIGHT ?? 26) + (env.GAP ?? 10)}px`);
-render();
-// menu.ahk activates the window once it exists: open then (the webview paints on focus).
-const shown = () => requestAnimationFrame(() => document.body.classList.add('shown'));
-if (document.hasFocus()) shown();
-else { window.addEventListener('focus', shown, { once: true }); setTimeout(shown, 300); }
-setTimeout(() => window.addEventListener('blur', close), 400);
+});

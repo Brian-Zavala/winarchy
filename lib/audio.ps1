@@ -4,9 +4,11 @@
 # Audio interfaces: switching the default device, and the per-app sessions.
 #   audio.json   {"sessions":[{"pid":123,"name":"Spotify","volume":72,"muted":false}]}
 
+# Compiled once and kept (Add-NativeType): the Audio panel asks every few seconds, and each
+# ask is a new process.
 function Initialize-CoreAudio {
     if ('WinarchyAudio' -as [type]) { return }
-    Add-Type -TypeDefinition @'
+    Add-NativeType CoreAudio -TypeName WinarchyAudio -TypeDefinition @'
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
