@@ -5,6 +5,7 @@
 #Include lib\tailscale.ahk
 #Include lib\network.ahk
 #Include lib\compose.ahk
+#Include lib\widgets.ahk
 
 ; Omarchy extras that GlazeWM can't do itself: the bar's screen space, menus,
 ; toggles, panels, capture, drag, clipboard and utility keys.
@@ -929,6 +930,7 @@ OnDisplayChange() {
         return
     }
     DisplayPending := false
+    CloseHiddenWidgets()                  ; the hidden menu and panels fit the old layout
     if MonitorGetCount() != MonitorCount {
         MonitorCount := MonitorGetCount()
         OmarchyCmd("apply", "-MonitorsOnly")
@@ -2274,8 +2276,11 @@ ColorPicker() {
 }
 
 ; --- Helpers ----------------------------------------------------------------
+; The menu's keys: a hidden menu (the last one closed) is shown from here, which skips
+; starting menu.ahk and its settings; menu.ahk starts a new widget when there is none.
 OpenMenu(route) {
-    Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" open ' route)
+    if !OpenMenuWarm(route)
+        Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" open ' route)
 }
 
 Glaze(cmd) {

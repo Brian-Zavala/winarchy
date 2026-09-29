@@ -5,6 +5,7 @@
 #Include lib\osd.ahk
 #Include lib\display.ahk
 #Include lib\tailscale.ahk
+#Include lib\widgets.ahk
 OnError ScriptLogError
 ; Action dispatcher for the Zebar bar + Omarchy menu widget (whitelisted in zpack.json),
 ; and for winarchy.ahk hotkeys that open the menu.
@@ -433,27 +434,12 @@ SignalWm(name) {
 }
 
 ; Open the menu widget on the monitor you're working on (see WorkingMonitor). Pressing the
-; key again closes it.
+; key again closes it. A closed menu stays loaded, hidden (menu.js): OpenMenuWarm shows it
+; again, and it starts over from route.json. Much faster than a new webview.
 OpenMenu(route) {
     global MenuTitle
-    pack := Env("pack")
-    if hwnd := WinExist(MenuTitle) {
-        ; (menu.js turns this into its fade and hides the window for next time)
-        PostMessage 0x10, 0, 0, , hwnd      ; WinClose can stall on Zebar's webview windows
+    if OpenMenuWarm(route, &mon)
         return
-    }
-    PerMonitorDpi()
-    mon := WorkingMonitor()
-    f := FileOpen(pack "\route.json", "w", "UTF-8-RAW")
-    f.Write('{"route":"' route '"}')
-    f.Close()
-    ; A closed menu stays loaded, hidden (menu.js): show it again, and it starts over from
-    ; route.json. Much faster than a new webview.
-    if hwnd := HiddenMenu(mon) {
-        WinShow hwnd
-        try WinActivate hwnd
-        return
-    }
     ; Zebar's presets m0..m7 follow its monitor order (left to right, top to bottom).
     preset := "m" MonitorPosition(mon)
     Run '"' Env("zebar") '" start-widget-preset --pack omarchy --widget-name menu --preset ' preset, , "Hide"
@@ -462,28 +448,6 @@ OpenMenu(route) {
     if hwnd := WinWait(MenuTitle, , 3) {
         try WinActivate hwnd
     }
-}
-
-; The hidden menu window on monitor `mon`, if a closed menu left one there.
-HiddenMenu(mon) {
-    global MenuTitle
-    prev := A_DetectHiddenWindows
-    DetectHiddenWindows true
-    MonitorGet mon, &l, &t, &r, &b
-    found := 0
-    for hwnd in WinGetList(MenuTitle) {
-        try {
-            if WinGetStyle(hwnd) & 0x10000000           ; WS_VISIBLE: not one of ours
-                continue
-            WinGetPos &x, &y, &w, &h, hwnd
-            if (cx := x + w // 2) >= l && cx < r && (cy := y + h // 2) >= t && cy < b {
-                found := hwnd
-                break
-            }
-        }
-    }
-    DetectHiddenWindows prev
-    return found
 }
 
 ; The clock's calendar (Omarchy Quattro), on the monitor you're working on; again closes it.
