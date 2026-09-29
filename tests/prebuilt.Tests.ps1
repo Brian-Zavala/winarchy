@@ -154,6 +154,16 @@ Describe 'Animation build download' {
         (Read-Json (Join-Path $AnimDir 'build.json')).commit | Should -Be $pin.commit
         (Get-AnimationBuild).commit | Should -Be $pin.commit
     }
+    It 'counts a build missing its watcher as gone, so setup puts it back' {
+        $script:testZip = New-TestZip @{ 'glazewm.exe' = 'wm'; 'glazewm-watcher.exe' = 'watcher'; 'cli/glazewm.exe' = 'cli' }
+        Mock Save-PinnedFile { Copy-Item $script:testZip $dest }
+        Mock Get-Config { @{ animations = @{ source = @{ commit = $pin.commit } } } }
+        Install-AnimationPrebuilt $pin
+        Test-AnimationBuildInPlace | Should -BeTrue
+        Remove-Item (Join-Path $AnimDir 'glazewm-watcher.exe')
+        Get-AnimationBuild | Should -BeNullOrEmpty
+        Test-AnimationBuildInPlace | Should -BeFalse
+    }
     It 'refuses a download that is missing a file' {
         $script:testZip = New-TestZip @{ 'glazewm.exe' = 'wm'; 'cli/glazewm.exe' = 'cli' }
         Mock Save-PinnedFile { Copy-Item $script:testZip $dest }

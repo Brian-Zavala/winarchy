@@ -9,9 +9,11 @@ $AnimDir = Join-Path $Data 'glazewm-animations'
 $AnimSrc = Join-Path $Data 'build\glazewm'
 $SwitchFlag = Join-Path $Data 'generated\glazewm-switch.flag'
 
+# All three of its files ($AnimFiles), or $null: Defender can take any one of them, and a
+# build missing one is put back (Restore-AnimationFiles) rather than run.
 function Get-AnimationBuild {
     $exe = Join-Path $AnimDir 'glazewm.exe'
-    if (-not (Test-Path $exe) -or -not (Test-Path (Join-Path $AnimDir 'cli\glazewm.exe'))) { return $null }
+    foreach ($f in $AnimFiles.Values) { if (-not (Test-Path (Join-Path $AnimDir $f))) { return $null } }
     $info = Read-Json (Join-Path $AnimDir 'build.json')
     [ordered]@{ exe = $exe; cli = Join-Path $AnimDir 'cli\glazewm.exe'; commit = $info.commit; built = $info.built }
 }
