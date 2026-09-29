@@ -4,7 +4,8 @@ BeforeAll {
     $root = Split-Path -Parent $PSScriptRoot
     # herdr: the Terminal group's Herdr row answers its presence test from lib/herdr.ps1.
     # webapps (+ journal): the Web Apps group's rows come from default/webapps.json.
-    foreach ($f in 'common', 'detect', 'render', 'journal', 'webapps', 'catalog', 'herdr') { . "$root\lib\$f.ps1" }
+    # apps, ui: a custom terminal app rebuilds the Apps list and says so (both mocked).
+    foreach ($f in 'common', 'detect', 'render', 'journal', 'webapps', 'catalog', 'herdr', 'apps', 'ui') { . "$root\lib\$f.ps1" }
     $Code = $root
     # Log lines from tests go to a scratch log, never the real one.
     $LogFile = Join-Path $TestDrive 'winarchy.log'
@@ -163,7 +164,68 @@ Describe 'Terminal apps in Start' {
     }
 }
 
+Describe 'Your own terminal apps' {
+    BeforeEach {
+        $Data = Join-Path $TestDrive ([guid]::NewGuid())
+        New-Item -ItemType Directory $Data | Out-Null
+        Mock Find-TuiExe { Join-Path $env:SystemRoot 'notepad.exe' }
+        Mock Add-TuiShortcut { $true }
+        Mock Remove-TuiShortcut {}
+        Mock Update-AppList {}
+        Mock Update-Catalog {}
+        Mock Write-Ok {}
+    }
+    It 'keeps a name and a command, with its arguments split off' {
+        Add-CustomTui 'Music' 'cliamp --shuffle'
+        $t = @(Get-CustomTuis)
+        $t.Count | Should -Be 1
+        $t[0].tui.command | Should -Be 'cliamp'
+        $t[0].tui.args | Should -Be '--shuffle'
+        Should -Invoke Add-TuiShortcut -Times 1
+    }
+    It 'takes a quoted path with spaces' {
+        Add-CustomTui 'Tool' '"C:\Program Files\Tool\tool.exe" -x'
+        (Get-CustomTuis).tui.command | Should -Be 'C:\Program Files\Tool\tool.exe'
+    }
+    It 'replaces one of the same name instead of adding a second' {
+        Add-CustomTui 'Music' 'cliamp'
+        Add-CustomTui 'Music' 'cliamp --shuffle'
+        @(Get-CustomTuis).Count | Should -Be 1
+    }
+    It 'refuses a command it cannot find' {
+        Mock Find-TuiExe { $null }
+        { Add-CustomTui 'Nope' 'winarchy-no-such-command' } | Should -Throw "*can't find*"
+        Test-Path (Get-CustomTuiFile) | Should -BeFalse
+    }
+    It 'removes one again, shortcut and all' {
+        Add-CustomTui 'Music' 'cliamp'
+        Remove-CustomTui 'Music'
+        @(Get-CustomTuis).Count | Should -Be 0
+        Should -Invoke Remove-TuiShortcut -ParameterFilter { $item.label -eq 'Music' }
+    }
+    It 'is a setting uninstall can keep' {
+        . "$root\lib\uninstall.ps1"
+        $SettingsItems | Should -Contain 'tuis.json'
+    }
+}
+
 Describe 'The menu side' {
+    It 'searches everything under a menu, not just its own rows' {
+        $js = Get-Content -Raw "$root\zebar\omarchy\menu.js"
+        $js | Should -Match "if \(q && r === route\) return search\(r, q\)"
+        # The apps, what can still be installed, themes, fonts and agents join the search.
+        $js | Should -Match "const SEARCHED = \['apps', 'theme', 'font', 'agent'\]"
+        # A confirmation's "Yes" (Undo Winarchy?) is never a search result.
+        $js | Should -Match 'items\?\.some\(i => i\.back\)'
+        Get-Content -Raw "$root\zebar\omarchy\menu.css" | Should -Match '\.row \.crumb'
+    }
+    It 'refreshes terminal app shortcuts with the Apps list' {
+        $cli = Get-Content -Raw "$root\bin\winarchy.ps1"
+        $cli | Should -Match "(?s)'apps' \{\s+try \{ Sync-TuiShortcuts \}"
+        $ahk = Get-Content -Raw "$root\ahk\menu.ahk"
+        $ahk | Should -Match '(?m)^\s+case "tui-add":'
+        $ahk | Should -Match '(?m)^\s+case "tui-remove":'
+    }
     It 'offers Install and Remove from the root menu' {
         $menu = Get-Content -Raw "$root\zebar\omarchy\menu.json" | ConvertFrom-Json
         @($menu.root.items | Where-Object { $_.route -eq 'install' }).Count | Should -Be 1

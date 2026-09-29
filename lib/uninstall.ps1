@@ -3,7 +3,7 @@
 # What in ~/.winarchy is the person's own doing rather than a download or a cache: kept
 # when they ask to keep their settings, and put back to work by the next install.
 $SettingsItems = 'config.json', 'state.json', 'glazewm.yaml.tpl', 'herdr.toml.tpl',
-    'keybindings-apps.txt', 'herdr-welcomed', 'branding', 'restore.json'
+    'keybindings-apps.txt', 'herdr-welcomed', 'branding', 'restore.json', 'tuis.json'
 # Left behind by an uninstall that kept the settings; install reads it and restores them.
 $RestoreFile = Join-Path $Data 'restore.json'
 

@@ -332,7 +332,9 @@ function Update-Catalog {
                 })
         }
     }
-    Write-Json (Join-Path $Pack 'catalog.json') ([ordered]@{ generated = (Get-Date).ToString('s'); groups = @($groups) })
+    # Your own terminal apps (Install > TUI > Custom TUI), for Remove > TUI.
+    $custom = @(Get-CustomTuis | ForEach-Object { $_.label })
+    Write-Json (Join-Path $Pack 'catalog.json') ([ordered]@{ generated = (Get-Date).ToString('s'); groups = @($groups); customTuis = $custom })
     $state
 }
 
@@ -381,8 +383,9 @@ function Remove-TuiShortcut($item) {
     if ((Test-Path -LiteralPath $dir) -and -not (Get-ChildItem -LiteralPath $dir -Force)) { Remove-Item -LiteralPath $dir -Force -ErrorAction SilentlyContinue }
 }
 
-# apply: a shortcut for every installed terminal app that lacks one, and none for one that
-# was uninstalled some other way.
+# apply, and every refresh of the Apps list: a shortcut for every installed terminal app
+# that lacks one (installed with winget by hand counts too), and none for one that was
+# uninstalled some other way.
 function Sync-TuiShortcuts {
     $snapshot = Get-InstalledSnapshot
     foreach ($item in $Catalog | ForEach-Object { $_.items } | Where-Object { $_.tui }) {
@@ -391,6 +394,65 @@ function Sync-TuiShortcuts {
         if ($installed -and -not $has) { [void](Add-TuiShortcut $item) }
         elseif (-not $installed -and $has) { Remove-TuiShortcut $item }
     }
+    # Your own (Install > TUI > Custom TUI): kept while the command is still there.
+    foreach ($item in Get-CustomTuis) {
+        if (-not (Test-Path -LiteralPath (Get-TuiShortcutPath $item)) -and (Find-TuiExe $item)) { [void](Add-TuiShortcut $item) }
+    }
+}
+
+# Omarchy's Install > TUI takes any terminal program: a name and the command that starts it.
+# The list lives in tuis.json beside config.json (a setting, so uninstall can keep it), and
+# each one gets the same Start shortcut as a catalog row.
+function Get-CustomTuiFile { Join-Path $Data 'tuis.json' }
+
+function Get-CustomTuis {
+    $raw = Read-Json (Get-CustomTuiFile)
+    foreach ($t in @($raw.tuis)) {
+        if (-not $t.name -or -not $t.command) { continue }
+        @{
+            key = 'custom-' + ([string]$t.name).ToLowerInvariant() -replace '[^a-z0-9]+', '-'
+            label = [string]$t.name
+            tui = @{ name = [string]$t.name; command = [string]$t.command; args = [string]$t.args }
+        }
+    }
+}
+
+function Add-CustomTui([string]$Name, [string]$Command) {
+    if (-not $Name) { $Name = Read-Host 'Name (as it shows in Apps)' }
+    if (-not $Command) { $Command = Read-Host 'Command (e.g. btop, or a full path, then any arguments)' }
+    $Name = $Name.Trim(); $Command = $Command.Trim()
+    if (-not $Name -or -not $Command) { throw 'a terminal app needs a name and a command' }
+    if ($Name -match '[\\/:*?"<>|]') { throw "a name can't contain \ / : * ? `" < > |" }
+    # The program, then whatever follows it; a path with spaces comes in quotes.
+    $exe, $rest = if ($Command -match '^"([^"]+)"\s*(.*)$' -or $Command -match '^(\S+)\s*(.*)$') { $Matches[1], $Matches[2] }
+    $item = @{ key = 'custom'; label = $Name; tui = @{ name = $Name; command = $exe; args = $rest } }
+    if (-not (Find-TuiExe $item)) { throw "can't find '$exe' (is it installed, and on PATH?)" }
+    $file = Get-CustomTuiFile
+    $list = @(@((Read-Json $file).tuis) | Where-Object { $_ -and $_.name -ne $Name }) + [ordered]@{ name = $Name; command = $exe; args = $rest }
+    Write-Json $file ([ordered]@{ tuis = $list })
+    $item = Get-CustomTuis | Where-Object { $_.label -eq $Name } | Select-Object -First 1
+    Remove-TuiShortcut $item   # a changed command replaces the old shortcut
+    [void](Add-TuiShortcut $item)
+    [void](Update-AppList)
+    [void](Update-Catalog)
+    Write-Ok "$Name is in Start and the menu's Apps list"
+}
+
+function Remove-CustomTui([string]$Name) {
+    $mine = @(Get-CustomTuis)
+    if (-not $Name) {
+        if (-not $mine) { Write-Host 'No custom terminal apps.'; return }
+        $mine | ForEach-Object { Write-Host "  $($_.label)" }
+        $Name = Read-Host 'Remove which one'
+    }
+    $item = $mine | Where-Object { $_.label -eq $Name } | Select-Object -First 1
+    if (-not $item) { throw "no custom terminal app named '$Name'" }
+    Remove-TuiShortcut $item
+    $file = Get-CustomTuiFile
+    Write-Json $file ([ordered]@{ tuis = @(@((Read-Json $file).tuis) | Where-Object { $_ -and $_.name -ne $Name }) })
+    [void](Update-AppList)
+    [void](Update-Catalog)
+    Write-Ok "Removed $Name"
 }
 
 function Install-CatalogItem([string]$key) {

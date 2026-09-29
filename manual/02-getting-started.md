@@ -18,6 +18,8 @@ You need Windows 11 22H2 or newer, winget (App Installer, which ships with Windo
 
 Then press `Super + Space` for the Omarchy menu and `Super + K` for every key.
 
+You don't have to know where something lives in the menu: just type. The search reaches everything under the menu you're in, so from the top, `clion` finds CLion in _Apps_, `tokyo` the Tokyo Night theme and `docker` Docker Desktop in _Install_. Each result says where it's from, and `Enter` runs it.
+
 ### Dependencies stay automatic
 
 `winarchy update` installs anything a newer Winarchy needs that your PC doesn't have yet, and `winarchy doctor -Fix` puts back anything that went missing. Each only installs what isn't there, and records it so uninstall takes it back out.

@@ -14,4 +14,8 @@ Winarchy uses a few terminal apps the way Omarchy does, and themes each of them 
 
 The installer sets up btop and fastfetch, and both are also in _Install > Windows_ in the Omarchy menu. Herdr is in _Install > Terminal_; lazydocker, lazygit, Cliamp and dua are in _Install > TUI_. A key for one that isn't installed yet says where to get it.
 
-Each of them also goes in Start when it's installed, so the menu's _Apps_ list and Flow Launcher find it by name; it opens in the terminal. Removing it from _Remove_ takes that entry out again.
+Each of them also goes in Start when it's installed, so the menu's _Apps_ list and Flow Launcher find it by name; it opens in the terminal. That holds however you installed it: opening _Apps_ adds any that are missing, `winget install` by hand included. Removing it from _Remove_ takes that entry out again.
+
+### Your own
+
+Any other terminal program can join them, as in Omarchy: _Install > TUI > Custom TUI_ asks for a name and the command that starts it (`btm`, or a full path, then any arguments), and it's in Start and _Apps_ from then on. _Remove > TUI_ takes it out again. From a terminal, it's `winarchy tui-add <name> "<command>"` and `winarchy tui-remove <name>`. The list is kept in `~/.winarchy/tuis.json`, with your other settings.

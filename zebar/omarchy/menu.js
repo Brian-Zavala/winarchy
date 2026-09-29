@@ -96,6 +96,9 @@ function reset() {
   sel = tab = 0;
   groups = [];
   index = status = keys = fonts = herdrKeys = defaults = flags = null;
+  // The menu search's lists: apps and the catalog are fetched fresh next open too.
+  apps = catalog = prefetching = null;
+  pools.clear();
   $('search').value = '';
   palette(null);
   $('card').className = '';
@@ -246,6 +249,8 @@ $('scrim').onclick = () => busy || close();
 // ---------------------------------------------------------------- routes
 async function load(name) {
   if (!flags) flags = (await get('menu-flags.json')) ?? {};
+  pools.clear();   // whatever this loads may be newer than what the search last saw
+  if (menus?.[name]) prefetch();
   if (name === 'background' || name === 'theme') {
     [index, status] = await Promise.all([get('index.json'), get('status.json')]);
   } else if (name === 'keys' && !keys) {
@@ -351,13 +356,12 @@ function zoneList() {
   return zones;
 }
 
-function currentItems() {
-  const q = $('search').value.trim();
-  if (isKeys(route)) {
-    const rows = (route === 'keys' ? keys : herdrKeys) ?? [];
+function currentItems(r = route, q = $('search').value.trim()) {
+  if (isKeys(r)) {
+    const rows = (r === 'keys' ? keys : herdrKeys) ?? [];
     return q ? rows.filter(k => !k.section && matches(`${k.keys} ${k.label}`, q)) : rows;
   }
-  if (route === 'agent') {
+  if (r === 'agent') {
     // Omarchy picks no agent for you, so nothing is ticked until one is chosen. One that
     // isn't installed still shows: picking it says how to install it.
     return (defaults?.agents ?? []).filter(a => matches(a.label, q)).map(a => ({
@@ -365,7 +369,7 @@ function currentItems() {
       icon: a.icon, current: a.current, action: ['default-agent', a.key],
     }));
   }
-  if (route === 'timezone') {
+  if (r === 'timezone') {
     // Update > Timezone (Omarchy's omarchy-menu-timezone): every zone with its offset from
     // UTC, the current one ticked. The world clock reads the same IANA names.
     const here = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -373,18 +377,18 @@ function currentItems() {
       label: `${z.label}  ${z.offset}`, icon: '\u{F01E7}', current: z.name === here, action: ['timezone-set', z.name],
     }));
   }
-  if (route === 'theme') {
+  if (r === 'theme') {
     return (index?.themes ?? []).filter(t => matches(t.label, q)).map(t => ({
       ...t, current: t.name === status?.theme, action: ['theme-set', t.name],
     }));
   }
-  if (route === 'background') {
+  if (r === 'background') {
     const pool = q ? groups.flatMap(g => g.items.map(i => ({ ...i, group: g.label }))) : (groups[tab]?.items ?? []);
     return pool.filter(i => matches(`${i.label} ${i.group ?? ''}`, q)).map(i => ({
       ...i, current: same(i.path, status?.background), action: ['bg-set', i.path],
     }));
   }
-  if (route === 'font') {
+  if (r === 'font') {
     // Installed monospace fonts (winarchy font-list), Nerd Fonts first.
     const list = (fonts?.fonts ?? []).filter(f => matches(f.name, q)).map(f => ({
       label: f.name, font: f.name, icon: f.nerd ? '' : '', current: fontKey(f.name) === fontKey(status?.font), action: ['font-set', f.name],
@@ -392,30 +396,30 @@ function currentItems() {
     const more = { label: 'Install a Nerd Font…', icon: '', route: 'font-install' };
     return matches(more.label, q) ? [...list, more] : list;
   }
-  if (route === 'apps') {
+  if (r === 'apps') {
     // Everything Windows lists in Start (winarchy apps -> apps.json). Store apps and
     // desktop programs both launch through shell:AppsFolder, so one action covers both.
     return (apps?.apps ?? []).filter(a => matches(a.name, q)).map(a => ({
       label: a.name, icon: a.store ? '' : '', action: ['run-app', a.id],
     }));
   }
-  if (route === 'install' || route === 'remove') {
+  if (r === 'install' || r === 'remove') {
     // The catalog's groups (catalog.json). Remove only offers a group with something in it.
-    const removing = route === 'remove';
+    const removing = r === 'remove';
     const groups = (catalog?.groups ?? [])
-      .filter(g => (removing ? g.items.some(i => i.installed) : true))
+      .filter(g => (removing ? g.items.some(i => i.installed) || (g.key === 'tui' && catalog?.customTuis?.length) : true))
       .filter(g => matches(g.label, q))
-      .map(g => ({ label: g.label, icon: g.icon, route: `${route}-${g.key}` }));
+      .map(g => ({ label: g.label, icon: g.icon, route: `${r}-${g.key}` }));
     // Omarchy's Web App entry for any other site (the presets are the Web Apps group).
     const web = { label: 'Custom Web App', icon: '\u{F059F}', action: removing ? ['web-app', 'remove'] : ['web-app'] };
     return matches(web.label, q) ? [...groups, web] : groups;
   }
-  if (route.startsWith('install-') || route.startsWith('remove-')) {
-    const removing = route.startsWith('remove-');
-    const group = (catalog?.groups ?? []).find(g => g.key === route.slice(removing ? 7 : 8));
+  if (r.startsWith('install-') || r.startsWith('remove-')) {
+    const removing = r.startsWith('remove-');
+    const group = (catalog?.groups ?? []).find(g => g.key === r.slice(removing ? 7 : 8));
     // Remove lists only what is there; Install lists everything and marks what you have.
     const pool = (group?.items ?? []).filter(i => (removing ? i.installed : true));
-    return pool.filter(i => matches(i.label, q)).map(i => ({
+    const rows = pool.filter(i => matches(i.label, q)).map(i => ({
       label: i.label, icon: i.icon,
       // An installed row stays listed but goes dim with a check, so the Install list still
       // reads as a catalog of everything on offer rather than hiding what you installed
@@ -423,9 +427,107 @@ function currentItems() {
       current: !removing && i.installed, dim: !removing && i.installed,
       action: [removing ? 'remove-app' : 'install-app', i.key],
     }));
+    if (group?.key !== 'tui') return rows;
+    // Omarchy's Install > TUI takes any terminal program too (winarchy tui-add).
+    const own = removing
+      ? (catalog?.customTuis ?? []).map(name => ({ label: name, icon: group.icon, action: ['tui-remove', name] }))
+      : (catalog?.customTuis ?? []).map(name => ({ label: name, icon: group.icon, current: true, dim: true }));
+    const more = removing ? [] : [{ label: 'Custom TUI…', icon: group.icon, action: ['tui-add'] }];
+    return [...rows, ...[...own, ...more].filter(i => matches(i.label, q))];
   }
-  const m = menus?.[route];
-  return (m?.items ?? []).filter(i => (!i.when || flags?.[i.when]) && matches(i.label, q));
+  const m = menus?.[r];
+  const rows = (m?.items ?? []).filter(i => !i.when || flags?.[i.when]);
+  // Typing in a menu searches everything under it, not just the rows on screen: from Go,
+  // "clion" finds CLion in Apps. (A route asked for by the search itself is listed whole.)
+  if (q && r === route) return search(r, q);
+  return rows.filter(i => matches(i.label, q));
+}
+
+// ---------------------------------------------------------------- search under a menu
+// Every row reachable from a menu, built once per route and open, with the path to it.
+// The generated lists that are worth finding join in: apps, what the catalog can still
+// install, themes, fonts and agents. Keybindings, backgrounds and time zones stay out:
+// hundreds of rows that would bury what you were after.
+const SEARCHED = ['apps', 'theme', 'font', 'agent'];
+const pools = new Map();
+function searchPool(start) {
+  const out = [];
+  const seen = new Set([start]);
+  const add = (it, trail, rank) => out.push({ ...it, crumb: trail.join(' › '), rank, depth: trail.length });
+  const walk = (name, trail) => {
+    for (const it of currentItems(name, '')) {
+      if (it.section || it.back) continue;
+      // Rows on the menu you are in rank first, then apps, then other menus' rows.
+      add(it, trail, trail.length ? 2 : 0);
+      const child = it.route;
+      if (!child || seen.has(child)) continue;
+      seen.add(child);
+      const here = [...trail, it.label];
+      // A menu with a Cancel row is a confirmation (Undo Winarchy?): the search finds the
+      // row that asks, never the "Yes" behind it.
+      if (menus?.[child]) { if (!menus[child].items?.some(i => i.back)) walk(child, here); }
+      else if (child === 'install') {
+        // Its own rows (Custom Web App), then everything its groups can still install.
+        for (const x of currentItems('install', '')) if (!x.route) add(x, here, 3);
+        for (const g of catalog?.groups ?? []) {
+          for (const x of currentItems(`install-${g.key}`, '')) if (!x.dim) add(x, [...here, g.label], 3);
+        }
+      } else if (SEARCHED.includes(child)) {
+        for (const x of currentItems(child, '')) if (!x.section) add(x, here, child === 'apps' ? 1 : 3);
+      }
+    }
+  };
+  walk(start, []);
+  return out;
+}
+
+// Closer matches first: the whole label, its start, a word's start, anywhere in it (also
+// with spaces and dashes ignored: "wifi" finds Wi-Fi), and last the menu's usual loose
+// match, the letters in order. That last one only for the rows on screen: across a few
+// hundred apps it finds "theme" in Grand THEft auto IV - The CoMplEte edition.
+const squash = t => t.replace(/[^\p{L}\p{N}]+/gu, '');
+function tier(label, q, loose) {
+  const l = label.toLowerCase();
+  const s = q.toLowerCase();
+  if (l === s) return 0;
+  if (l.startsWith(s)) return 1;
+  const at = l.indexOf(s);
+  if (at > 0) return l.split(/[^\p{L}\p{N}]+/u).some(w => w.startsWith(s)) ? 2 : 3;
+  if (squash(s) && squash(l).includes(squash(s))) return 3;
+  return loose && matches(label, q) ? 4 : -1;
+}
+
+const SEARCH_MAX = 50;   // more than a screenful, and few enough to render at once
+function search(r, q) {
+  let pool = pools.get(r);
+  if (!pool) pools.set(r, (pool = searchPool(r)));
+  const hits = [];
+  for (const it of pool) {
+    const t = tier(it.label, q, it.rank === 0);
+    if (t >= 0) hits.push({ t, it });
+  }
+  // Ties: the nearer menu (Style › Menu Bar before Update › Process › Menu Bar), the shorter name.
+  hits.sort((a, b) => a.t - b.t || a.it.rank - b.it.rank || a.it.depth - b.it.depth
+    || a.it.label.length - b.it.label.length || a.it.label.localeCompare(b.it.label));
+  return hits.slice(0, SEARCH_MAX).map(h => h.it);
+}
+
+// The search reaches into lists a menu only loads when you open them, so fetch those in
+// the background as soon as a menu is on screen (all small local files).
+let prefetching = null;
+function prefetch() {
+  prefetching ??= Promise.all([
+    apps ?? get('apps.json'), catalog ?? get('catalog.json'), index ?? get('index.json'),
+    fonts ?? get('fonts.json'), defaults ?? get('defaults.json'),
+  ]).then(([a, c, i, f, d]) => {
+    apps ??= a; catalog ??= c; index ??= i; fonts ??= f; defaults ??= d;
+    pools.clear();
+    // An app list more than a few minutes old may be missing something just installed:
+    // rebuild it behind us (this open searches the file on disk, the next one is current).
+    if (!apps || Date.now() - Date.parse(apps.generated) > 10 * 60e3) zebar.shellExec(AHK, [MENU, 'apps-refresh']).catch(() => {});
+    if (!closing && !idle && menus?.[route] && $('search').value.trim()) render();
+  });
+  return prefetching;
 }
 
 // ---------------------------------------------------------------- rendering
@@ -493,6 +595,8 @@ function renderList(entry) {
       // A glyph from Omarchy's own font (its logo), as Omarchy's menu marks with iconFont.
       if (it.iconFont) icon.style.fontFamily = `'${it.iconFont}'`;
       row.append(icon, label);
+      // A search result from under this menu says where it lives (Apps, Install \u203a TUI).
+      if (it.crumb) row.append(span('crumb', it.crumb));
       if (it.route) row.append(span('hint', '\uf105'));
       else if (it.current) row.append(span('hint', '\uf00c'));
     }

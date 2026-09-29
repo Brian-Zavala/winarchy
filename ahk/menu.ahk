@@ -13,6 +13,7 @@ OnError ScriptLogError
 ;   menu.ahk run-app <AppsFolder AppID> | apps-refresh    (Apps route; refresh -> winarchy CLI)
 ;   menu.ahk focus-window <hwnd>                          (bar chevron flyout: raise a running window)
 ;   menu.ahk install-app <key> | remove-app <key> | catalog-refresh   (Install/Remove routes)
+;   menu.ahk tui-add | tui-remove <name>                              (Install/Remove > TUI: your own)
 ;   menu.ahk herdr | agent | default-agent <name>                     (Herdr + coding agents)
 ;   menu.ahk usage | usage-refresh                                    (bar agent icon: usage panel)
 ;   menu.ahk display-panel | display-state | brightness <n> <pct> | brightness-step <delta> | scale <n> <pct>
@@ -142,6 +143,9 @@ switch verb {
     case "default-agent": RunInTerminal("Default agent", CliInTerminal("default-agent", arg))
     case "install-app": RunInTerminal("Install " arg, CliInTerminal("install-app", arg))
     case "remove-app": RunInTerminal("Remove " arg, CliInTerminal("remove-app", arg))
+    ; Install > TUI > Custom TUI (asks for a name and command) and Remove > TUI for one of those.
+    case "tui-add": RunInTerminal("Terminal app", CliInTerminal("tui-add"))
+    case "tui-remove": RunInTerminal("Remove " arg, CliInTerminal("tui-remove", arg))
     ; Update > Timezone/Time, Setup > Network > DNS, Trigger > Reminder/Speed Test/Transcode/Share,
     ; Install > Web App: winarchy verbs (lib/system.ps1) in a terminal, for their prompts and results.
     case "timezone-set": RunInTerminal("Timezone", CliInTerminal("timezone-set", arg))

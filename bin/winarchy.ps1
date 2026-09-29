@@ -27,6 +27,8 @@
   winarchy apps                        rebuild the menu's Apps list from what Windows has installed
   winarchy catalog                     rebuild the menu's Install/Remove lists (and show them)
   winarchy install-app <key>           install one catalog item (the menu's Install section)
+  winarchy tui-add [<name> <command>] | tui-remove [<name>]
+                                          any terminal program in Start and the Apps list
   winarchy ports [list|update]         Omarchy's own apps built for Windows (Omawrite, Omacalc, ...)
   winarchy shell [on|off|status]       Omarchy's shell setup in PowerShell (starship, zoxide, eza, fzf, aliases)
   winarchy remove-app <key>            remove one again (the menu's Remove section)
@@ -173,7 +175,14 @@ switch ($Verb) {
         Use-Lock { $family = Install-NerdFont $Arg; [void](Update-FontList); Invoke-FontSet $family }
     }
     # The Apps route's list; the menu refreshes it in the background each time it opens.
-    'apps' { Update-AppList | ForEach-Object { $_.name } }
+    # Terminal apps get their Start entries first, so one installed any way shows up.
+    'apps' {
+        try { Sync-TuiShortcuts } catch { Log "terminal app shortcuts FAILED: $($_.Exception.Message)" }
+        Update-AppList | ForEach-Object { $_.name }
+    }
+    # Install > TUI > Custom TUI, and Remove > TUI for one of those.
+    'tui-add' { Add-CustomTui $Arg $Arg2 }
+    'tui-remove' { Remove-CustomTui $Arg }
     # The Install/Remove routes' list, refreshed the same way. '*' marks what is installed.
     'catalog' { Update-Catalog | ForEach-Object { "$(if ($_.installed) { '*' } else { ' ' }) $($_.group)/$($_.key)  $($_.label)" } }
     # windows.json's icon cache (bar chevron): one-shot, called by winarchy.ahk at most once per exe.
