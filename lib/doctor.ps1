@@ -134,7 +134,7 @@ function Invoke-Doctor([switch]$Fix) {
     $top = if ($yaml -match "'(\d+)px'\s*# gaps:top") { [int]$Matches[1] } else { 0 }
     # With the bar turned off (Super + Shift + Space) the strip is given back on purpose.
     if (Test-Path (Join-Path $Generated 'bar-off')) { & $check 'top bar turned off (winarchy bar on brings it back)' $true '' }
-    else { & $check "bar strip kept free of windows (GlazeWM top gap $top px)" ($top -ge [int]$cfg.barHeight) 'winarchy apply' }
+    else { & $check "bar strip kept free of windows (GlazeWM top gap $top px)" ($top -ge (Get-BarHeight $cfg)) 'winarchy apply' }
     # Screensaver health: the effects engine must not be crash-looping.
     $crashes = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; ProviderName = 'Application Error'; StartTime = (Get-Date).AddHours(-1) } -MaxEvents 500 -ErrorAction SilentlyContinue |
         Where-Object { $_.Message -match 'ttfx' }).Count

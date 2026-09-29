@@ -377,6 +377,7 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     Save-Dir (Join-Path $env:USERPROFILE '.glzr')
     Install-Dependencies
     Install-HerdrStep
+    Install-TailscaleStep -Restoring:$restoring
     $p = Update-Paths
 
     $cfg = Get-InstallAnswers $p -Restoring:$restoring

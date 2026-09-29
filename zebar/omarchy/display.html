@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" type="text/css" href="./display.css" />
+    <link rel="stylesheet" type="text/css" href="./theme.css" />
+    <link rel="stylesheet" type="text/css" href="./font.css" id="font" />
+    <link rel="stylesheet" type="text/css" href="./user.css" />
+  </head>
+  <body>
+    <!-- Omarchy Quattro's Display panel (shell/plugins/panels/monitor), dropped under the
+         bar's display icon. j/k: section · h/l: adjust · Enter: choose · Esc: close. -->
+    <div id="wrap">
+      <div id="panel" role="dialog" aria-label="Display">
+        <header id="hero">
+          <span class="glyph" id="heroGlyph" aria-hidden="true"></span>
+          <div class="who">
+            <span id="title">Display</span>
+            <span id="mood"></span>
+          </div>
+        </header>
+
+        <section id="brightnessBox" class="hidden" data-section="brightness">
+          <div class="head"><h2>Brightness</h2><span class="value" id="brightnessValue"></span></div>
+          <div class="slider" id="brightness" role="slider" aria-label="Brightness" aria-valuemin="1" aria-valuemax="100">
+            <span class="track"><span class="fill"></span></span><span class="knob"></span>
+          </div>
+        </section>
+
+        <section id="textBox" data-section="textsize">
+          <div class="head"><h2>Text size</h2><span class="value" id="textValue"></span></div>
+          <div class="slider notched" id="textsize" role="slider" aria-label="Text size">
+            <span class="track"><span class="fill"></span></span><span class="ticks"></span><span class="knob"></span>
+          </div>
+        </section>
+
+        <section id="scaleBox" data-section="scale">
+          <div class="head"><h2>Scale</h2><span class="value" id="scaleMonitor"></span></div>
+          <div id="scales" class="pills" role="radiogroup" aria-label="Scale"></div>
+        </section>
+
+        <section id="monitorsBox" class="hidden" data-section="monitors">
+          <div class="head"><h2>Displays</h2></div>
+          <div id="monitors" class="rows"></div>
+        </section>
+      </div>
+    </div>
+    <script type="module" src="./display.js"></script>
+  </body>
+</html>

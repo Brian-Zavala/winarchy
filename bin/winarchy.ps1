@@ -22,6 +22,8 @@
   winarchy sync [-Offline]             download Omarchy themes + backgrounds, rebuild pickers
   winarchy font [<family> | list]      terminal, bar, menus and launcher font
   winarchy font-install <Name>         install a Nerd Font (CascadiaMono, Meslo, FiraCode, ...)
+  winarchy text-size [<9-20> | reset]  text size of the bar, menus, panels and terminals
+                                          (px, 12 = default; the bar's Display panel sets it)
   winarchy apps                        rebuild the menu's Apps list from what Windows has installed
   winarchy catalog                     rebuild the menu's Install/Remove lists (and show them)
   winarchy install-app <key>           install one catalog item (the menu's Install section)
@@ -92,6 +94,7 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\lib\catalog.ps1"
 . "$PSScriptRoot\..\lib\agents.ps1"
 . "$PSScriptRoot\..\lib\herdr.ps1"
+. "$PSScriptRoot\..\lib\tailscale.ps1"
 . "$PSScriptRoot\..\lib\winicons.ps1"
 . "$PSScriptRoot\..\lib\animations.ps1"
 . "$PSScriptRoot\..\lib\autotile.ps1"
@@ -152,6 +155,8 @@ switch ($Verb) {
         if (-not $Arg -or $Arg -eq 'list') { Update-FontList | ForEach-Object { "$(if ($_.name -eq (Get-FontFamily)) { '*' } else { ' ' }) $($_.name)" } }
         else { Use-Lock { Invoke-FontSet $Arg } }
     }
+    # Quattro's Display panel > Text size (omarchy-display-text-size).
+    'text-size' { Use-Lock { Invoke-TextSize $Arg } }
     'font-install' {
         if (-not $Arg) { "fonts: $($NerdFonts.Keys -join ', ')"; return }
         Use-Lock { $family = Install-NerdFont $Arg; [void](Update-FontList); Invoke-FontSet $family }

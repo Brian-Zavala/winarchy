@@ -20,4 +20,8 @@ Windows has no idea of a "focused monitor", so it opens every new window on the 
 
 ### Scaling
 
-The bar, the gaps and the pickers are all sized per monitor, so they line up on a 4K screen next to a 1080p one. Change a monitor's scaling in Windows' own display settings (_Setup > Monitors_ in the Omarchy menu opens them).
+The bar, the gaps and the pickers are all sized per monitor, so they line up on a 4K screen next to a 1080p one. Change a monitor's scaling from the Display panel (the monitor icon in the top bar), or in Windows' own display settings (_Setup > Monitors_ in the Omarchy menu opens them).
+
+### Brightness, text size, turning a monitor off
+
+The Display panel in the top bar also has each monitor's brightness, the text size, and, with more than one monitor, a switch for each one. See [the top bar](05-the-top-bar.md).

@@ -42,8 +42,12 @@
           </div>
           <span class="module hidden" id="agents"></span>
           <span class="module hidden" id="bluetooth"></span>
+          <!-- Quattro's omarchy.tailscale: only there once Tailscale is installed. -->
+          <span class="module hidden" id="tailscale"></span>
           <span class="module" id="network"></span>
           <span class="module" id="audio"></span>
+          <!-- Quattro's omarchy.monitor: brightness, text size, scale, displays. -->
+          <span class="module" id="display"></span>
           <span class="module" id="cpu"></span>
           <span class="module hidden" id="battery"></span>
         </div>
@@ -81,6 +85,8 @@
         battery: ['\u{F008E}', '\u{F007A}', '\u{F007C}', '\u{F007E}', '\u{F0080}', '\u{F0079}'],
         charging: '\u{F0084}',
         chevron: '\u{F0141}',       // chevron-left (running-windows flyout)
+        monitor: '\u{F0379}',       // Quattro's display widget: monitor, or monitor-multiple
+        monitors: '\u{F037A}',
         appFallback: '\u{F0F1D}',   // generic app-window glyph, used when no icon is cached yet
       };
       // Omarchy: "dddd HH:mm", alternate "d MMMM 'W'ww yyyy" (12-hour here by request).
@@ -124,6 +130,22 @@
       $('update').onclick = () => act('upgrade');
       $('agents').onclick = () => act('usage');
       $('agents').oncontextmenu = e => { e.preventDefault(); act('agent'); };
+      // Display (Quattro's omarchy.monitor): click = the panel, scroll = brightness 5 a step
+      // (with the OSD). Wheel ticks are summed briefly: each one otherwise starts its own
+      // DDC/CI round trip, and those would race each other.
+      $('display').onclick = () => act('display-panel');
+      $('display').oncontextmenu = e => { e.preventDefault(); act('display-panel'); };
+      let wheelSum = 0, wheelTimer = 0;
+      $('display').onwheel = e => {
+        wheelSum += e.deltaY < 0 ? 5 : -5;
+        clearTimeout(wheelTimer);
+        wheelTimer = setTimeout(() => { act('brightness-step', String(wheelSum)); wheelSum = 0; }, 120);
+      };
+      // Tailscale (Quattro): click = the panel, right click = on/off, middle click = refresh.
+      $('tailscale').innerHTML = tailscaleMark();
+      $('tailscale').onclick = () => act('tailscale-panel');
+      $('tailscale').oncontextmenu = e => { e.preventDefault(); act('tailscale', 'toggle'); };
+      $('tailscale').onauxclick = e => { if (e.button === 1) act('tailscale', 'refresh'); };
 
       const act = (...args) => zebar.shellExec(AHK, [MENU, ...args]).catch(e => console.error(e));
 
@@ -311,6 +333,38 @@
         el.title = `Bluetooth ${bt.on ? 'on' : 'off'} (click: panel)`;
       }
 
+      // Quattro's TailscaleIcon: the logo as a 3x3 dot grid in the text color (middle row and
+      // bottom-center solid, the rest faint), struck through when off, a "!" badge when it
+      // needs a sign-in. Drawn in SVG so it scales with the text like the glyphs around it.
+      function tailscaleMark() {
+        const faint = [0, 1, 2, 6, 8];
+        const dots = [...Array(9)].map((_, i) =>
+          `<circle cx="${1.2 + (i % 3) * 3.8}" cy="${1.2 + Math.floor(i / 3) * 3.8}" r="1.2" opacity="${faint.includes(i) ? 0.24 : 1}"/>`).join('');
+        return `<svg class="ts-mark" viewBox="0 0 10 10" aria-hidden="true"><g fill="currentColor">${dots}</g>`
+          + '<line class="ts-strike" x1="-0.6" y1="10.6" x2="10.6" y2="-0.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'
+          + '<g class="ts-badge"><circle cx="8.6" cy="8.6" r="2.4"/><text x="8.6" y="9.9" text-anchor="middle">!</text></g></svg>';
+      }
+      // tailscale.json says whether it is installed; tailscale-status.json is `tailscale
+      // status --json` (both written by winarchy.ahk every 30 s, and after any action).
+      function renderTailscale(ts, st) {
+        const el = $('tailscale');
+        el.classList.toggle('hidden', !ts?.installed);
+        if (!ts?.installed) return;
+        const state = st?.BackendState ?? '';
+        const on = state === 'Running', login = state === 'NeedsLogin';
+        el.classList.toggle('ts-off', !on && !login);
+        el.classList.toggle('ts-login', login);
+        const text = login ? 'Needs login' : on ? 'Connected' : state === 'Stopped' ? 'Disconnected' : state || 'Unavailable';
+        const tailnet = st?.CurrentTailnet?.Name;
+        el.title = `Tailscale: ${text}${on && tailnet ? ` (${tailnet})` : ''}\nClick: machines · Right-click: ${on ? 'turn off' : login ? 'sign in' : 'turn on'}`;
+      }
+
+      function renderDisplay(glaze) {
+        const n = glaze?.allMonitors?.length ?? 1;
+        $('display').textContent = n > 1 ? ICONS.monitors : ICONS.monitor;
+        $('display').title = 'Display: brightness, text size, scale (click) · Scroll: brightness';
+      }
+
       function renderCpu(cpu) {
         $('cpu').textContent = ICONS.cpu;
         $('cpu').title = cpu ? `CPU ${Math.round(cpu.usage)}%` : 'CPU';
@@ -329,6 +383,7 @@
       function render() {
         const o = providers.outputMap;
         renderWorkspaces(o.glazewm);
+        renderDisplay(o.glazewm);
         renderTray(o.systray);
         renderNetwork(o.network);
         renderAudio(o.audio);
@@ -442,6 +497,8 @@
         const get = f => fetch(`./${f}?t=${Date.now()}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
         const [status, ind, bt, weather, updates, windows, usage] = await Promise.all(
           ['status.json', 'indicators.json', 'bluetooth.json', 'weather.json', 'updates.json', 'windows.json', 'agents.json'].map(get));
+        const ts = await get('tailscale.json');
+        renderTailscale(ts, ts?.installed ? await get('tailscale-status.json') : null);
         if (status?.themeVersion && status.themeVersion !== themeVersion) {
           if (themeVersion !== null) {
             $('theme').href = `./theme.css?v=${status.themeVersion}`;

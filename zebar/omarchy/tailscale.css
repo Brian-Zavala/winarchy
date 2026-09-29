@@ -1,0 +1,59 @@
+/* Omarchy Quattro's Tailscale panel. Shares the Display panel's card, sections and rows
+   (display.css); only what is its own is here. */
+
+.mark svg { width: 30px; height: 30px; overflow: visible; display: block; margin: 0 7px; }
+.mark.off { opacity: 0.5; }
+.ts-strike, .ts-badge { display: none; }
+.mark.off .ts-strike { display: inline; }
+.mark.login .ts-badge { display: inline; }
+.ts-badge circle { fill: var(--alert); stroke: var(--bg); stroke-width: 0.6; }
+.ts-badge text { fill: var(--bg); font-size: 3.6px; font-weight: 700; font-family: sans-serif; }
+
+#hero .who { flex: 1; }
+#meta { font-size: 11px; color: var(--ink-3); letter-spacing: .4px; }
+
+/* Quattro's ToggleSwitch, on the hero's trailing edge */
+.switch {
+  flex: none; position: relative; width: 38px; height: 22px; border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--fg) 35%, transparent);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  transition: background 160ms var(--ease), border-color 160ms var(--ease);
+}
+.switch .knob {
+  position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--fg); opacity: .6; transition: translate 160ms var(--ease), opacity 160ms;
+}
+.switch.on { background: var(--selected); border-color: var(--accent); }
+.switch.on .knob { translate: 16px 0; opacity: 1; }
+.switch.busy { opacity: .6; }
+
+#status { font-size: 12px; color: var(--ink-2); line-height: 1.45; }
+#status.error { color: var(--alert); }
+
+.row {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+  padding: 6px 8px; border-radius: 5px; text-align: left; width: 100%;
+}
+.row:hover, .row.has-cursor { background: var(--hover); }
+.row .glyph { font-size: 15px; width: 18px; text-align: center; color: var(--ink-3); }
+.row.on .glyph, .row.on .name { color: var(--fg); }
+.row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .name small { display: block; color: var(--ink-3); font-size: 11px; }
+.row .side { font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.row .check { color: var(--accent); }
+.row .tools { display: none; gap: 4px; }
+.row:hover .tools, .row.has-cursor .tools { display: flex; }
+.row:hover .ip, .row.has-cursor .ip { display: none; }
+.tool {
+  padding: 1px 6px; border-radius: 4px; font-size: 11px; color: var(--ink-2);
+  border: 1px solid color-mix(in srgb, var(--fg) 20%, transparent);
+}
+.tool:hover { color: var(--fg); border-color: var(--accent); }
+
+#exits, #peers { max-height: 240px; overflow-y: auto; }
+.empty { padding: 6px 8px; color: var(--ink-3); }
+
+footer#keys {
+  padding-top: 10px; border-top: 1px solid var(--hair);
+  font-size: 10px; letter-spacing: .4px; color: var(--ink-3); text-align: center;
+}

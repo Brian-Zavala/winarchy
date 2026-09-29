@@ -23,7 +23,8 @@ It's JSON, so a `\` in a path is written `\\`. A file with a mistake in it is le
 |---|---|---|
 | `workspaces` | `"auto"` | The ten workspaces split over your monitors from left to right. Or a map of monitor position (1 is the leftmost) to workspace names: `{ "1": ["1","2","3"], "2": ["4","5"] }`. See [monitors](33-monitors.md) |
 | `gap` | `10` | Gap between windows and around the edges, in pixels at 100% scaling |
-| `barHeight` | `26` | Height of the top bar, in pixels at 100% scaling |
+| `barHeight` | `26` | Height of the top bar, in pixels at 100% scaling. It grows with `textSize` above 12 |
+| `textSize` | `12` | Text size of the bar, its panels and the terminals, in px from 9 to 20. The bar's Display panel sets it, as does `winarchy text-size` |
 | `hideTaskbar` | `true` | Hide the Windows taskbar while GlazeWM runs (it comes back if GlazeWM stops) |
 | `takeOverWinSpace` | `true` | `Super + Space` opens the Omarchy menu. `false` leaves `Win + Space` to Windows' layout switching; the menu then stays on `Super + Alt + Space`, and the launcher on `Alt + Space` |
 | `launchers` | `true` | Winarchy's app keys (`Super + Return` terminal, `Super + Shift + B` browser, ...). `false` if you use your own launcher script |

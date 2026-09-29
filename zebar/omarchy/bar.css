@@ -139,3 +139,20 @@ html, body {
 .update { color: var(--accent); }
 #weather { cursor: pointer; }
 #game { cursor: pointer; }
+
+/* Text size (the Display panel, winarchy text-size): font.css sets --text-scale, 12px = 1.
+   Quattro scales its whole shell from one base size; zoom does the same for the bar's
+   text, icons and spacing. winarchy apply grows the bar window to match. */
+#bar { zoom: var(--text-scale, 1); height: calc(100vh / var(--text-scale, 1)); }
+
+/* Tailscale (Quattro's TailscaleIcon): the dot mark, struck through when off, with a "!"
+   badge when it needs a sign-in. */
+#tailscale { display: inline-flex; align-items: center; }
+#tailscale.hidden { display: none; }
+.ts-mark { width: 11px; height: 11px; overflow: visible; }
+.ts-strike, .ts-badge { display: none; }
+#tailscale.ts-off { opacity: 0.55; }
+#tailscale.ts-off .ts-strike { display: inline; }
+#tailscale.ts-login .ts-badge { display: inline; }
+.ts-badge circle { fill: var(--alert); stroke: var(--bg); stroke-width: 0.8; }
+.ts-badge text { fill: var(--bg); font-size: 3.6px; font-weight: 700; font-family: sans-serif; }

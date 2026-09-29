@@ -113,7 +113,9 @@ $Catalog = @(
             @{ key = 'dropbox';   label = 'Dropbox';   id = 'Dropbox.Dropbox';            test = { param($s) Test-CatalogArp $s 'Dropbox' } }
             @{ key = 'spotify';   label = 'Spotify';   id = 'Spotify.Spotify';            test = { param($s) Test-CatalogArp $s 'Spotify' } }
             @{ key = 'signal';    label = 'Signal';    id = 'OpenWhisperSystems.Signal';  test = { param($s) Test-CatalogArp $s 'Signal' } }
-            @{ key = 'tailscale'; label = 'Tailscale'; id = 'Tailscale.Tailscale';        test = { param($s) Test-CatalogArp $s 'Tailscale' } }
+            # Tailscale also gets the bar icon and panel (Omarchy's omarchy.tailscale): postInstall
+            # runs after winget, to start its sign-in (lib/tailscale.ps1).
+            @{ key = 'tailscale'; label = 'Tailscale'; id = 'Tailscale.Tailscale';        test = { param($s) Test-CatalogArp $s 'Tailscale' }; postInstall = { Start-TailscaleApp } }
             @{ key = 'nordvpn';   label = 'NordVPN';   id = 'NordSecurity.NordVPN';       test = { param($s) Test-CatalogArp $s 'NordVPN' } }
         )
     },
@@ -204,6 +206,8 @@ function Install-CatalogItem([string]$key) {
     $ok = Install-WingetPackage $item.id $item.label $item.scope
     [void](Update-Catalog)
     if (-not $ok) { throw "winget could not install $($item.label); try: winget install -e --id $($item.id)" }
+    # Setup after the package itself (Tailscale: start its sign-in, show it in the bar).
+    if ($item.postInstall) { & $item.postInstall }
 }
 
 function Uninstall-CatalogItem([string]$key) {

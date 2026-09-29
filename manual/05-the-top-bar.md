@@ -15,14 +15,33 @@ From left to right:
 | The chevron | Running windows and the tray | |
 | The AI agent icon | The agent usage panel (see [AI](17-ai.md)) | Start your coding agent |
 | Bluetooth | The Bluetooth panel (`Super + Ctrl + B`) | |
+| Tailscale, once installed | The Tailscale panel | Turn it on or off; middle-click refreshes |
 | Network | Network settings | |
 | Audio | The audio panel (`Super + Ctrl + A`) | Mute; scroll for the volume |
+| Display | The Display panel | Scroll for the brightness |
 | CPU | btop (`Super + Ctrl + T`) | Task Manager |
 | Battery, on a laptop | | |
 
 ### Indicators
 
 Left of the clock, an icon shows while one of these is on: stay awake, nightlight, do not disturb, dictation, screen recording, a game in front, and a waiting admin prompt. Hover the area to see the ones that are off too, and click one to toggle it. See [toggles](13-toggles-idle-screensaver.md).
+
+### Display
+
+The monitor icon opens Quattro's Display panel for the monitor you clicked on:
+
+- **Brightness**, a slider from 1 to 100%. A laptop's own screen always has it. An external monitor has it when it supports DDC/CI, which most do; turn DDC/CI on in the monitor's own menu if the slider isn't there. Scrolling on the icon changes it 5% at a time.
+- **Text size**, from 9 to 20 px (12 is the default). It sizes the bar, these panels and your terminals together, and the bar grows taller for sizes above 12. `winarchy text-size <px>` does the same from a terminal.
+- **Scale**, the monitor's Windows scaling (100%, 125%, 150%...), limited to the steps Windows offers for it. The dot marks the recommended one.
+- **Displays**, with more than one monitor: click one to turn it off or back on. The last monitor that is on stays on.
+
+`j` / `k` move between the sections, `h` / `l` adjust, `Enter` picks, and `Esc` closes it. See [monitors](33-monitors.md).
+
+### Tailscale
+
+[Tailscale](https://tailscale.com) isn't installed by default. The installer offers it, and _Install > Service > Tailscale_ adds it any time. Once it's installed, its icon joins the ones on the right: solid when connected, struck through when off, and with a red `!` when it needs you to sign in.
+
+Its panel has an on/off switch, your connections (with more than one account), exit nodes (including Mullvad's), and the machines online on your tailnet. Hover a machine to copy its IP, name or DNS name, or to send it files with Taildrop. From the keyboard: `c`, `n` and `d` copy, `s` sends files, `t` turns Tailscale on or off, and `r` refreshes.
 
 ### Games
 

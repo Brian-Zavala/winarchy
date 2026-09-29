@@ -3,6 +3,8 @@
 #SingleInstance Off
 #Include lib\env.ahk
 #Include lib\osd.ahk
+#Include lib\display.ahk
+#Include lib\tailscale.ahk
 OnError ScriptLogError
 ; Action dispatcher for the Zebar bar + Omarchy menu widget (whitelisted in zpack.json),
 ; and for winarchy.ahk hotkeys that open the menu.
@@ -13,6 +15,10 @@ OnError ScriptLogError
 ;   menu.ahk install-app <key> | remove-app <key> | catalog-refresh   (Install/Remove routes)
 ;   menu.ahk herdr | agent | default-agent <name>                     (Herdr + coding agents)
 ;   menu.ahk usage | usage-refresh                                    (bar agent icon: usage panel)
+;   menu.ahk display-panel | display-state | brightness <n> <pct> | brightness-step <delta> | scale <n> <pct>
+;            monitor <key> <on|off> | text-size <px>                  (bar display icon: Display panel)
+;   menu.ahk tailscale-panel | tailscale <toggle|up|down|login|refresh|exit-node <ip|none>|switch <id>|send <peer>>
+;   menu.ahk copy <text>                                              (panels: copy an IP / a name)
 ;   menu.ahk send <keys> | run <target> [args] | url <url> | settings <ms-settings:...>
 ;   menu.ahk edit <file | glaze-config | bar-css | config | launchers | keybindings>
 ;   menu.ahk bg-set <path> [landing name] | bg-next | theme-set <name> | sync | apply | doctor   (-> winarchy CLI)
@@ -31,7 +37,7 @@ arg := A_Args.Length > 1 ? A_Args[2] : ""
 ; Keystrokes and window commands must land on the window the menu covered,
 ; so wait for the menu to finish closing first. The picker verbs send no keys: they start
 ; right away while the menu plays its apply animation (and waits for the new background).
-if !(verb ~= "^(open|log|bar-start|bg-set|theme-set|font-set|apps-refresh|catalog-refresh)$")
+if !(verb ~= "^(open|log|bar-start|bg-set|theme-set|font-set|apps-refresh|display-panel|display-state|brightness|brightness-step|scale|monitor|text-size|tailscale|tailscale-panel|copy|catalog-refresh)$")
     WinWaitClose MenuTitle, , 1
 
 switch verb {
@@ -49,6 +55,36 @@ switch verb {
     ; The bar's agent icon: the usage panel, and its refresh key (r / Enter).
     case "usage": OpenUsage()
     case "usage-refresh": OmarchyCmd("agent-usage", "-Force")
+    ; The bar's display icon (Quattro's omarchy.monitor): the Display panel and its controls.
+    ; Monitor numbers are AHK's; the panel got them from display.json.
+    case "display-panel": OpenPanel("display", "d", WriteDisplayState)
+    case "display-state": PerMonitorDpi(), WriteDisplayState(arg != "" ? Integer(arg) : MonitorUnderMouse())
+    case "brightness":
+        if A_Args.Length > 2
+            SetBrightness(Integer(arg), Integer(A_Args[3]))
+    ; Scrolling on the bar icon: the monitor that bar is on, with the brightness OSD.
+    case "brightness-step": PerMonitorDpi(), StepBrightness(MonitorUnderMouse(), Integer(arg)), Sleep(1300)
+    case "scale":
+        if A_Args.Length > 2 && !SetScale(Integer(arg), Integer(A_Args[3]))
+            Notify("Windows would not change this display's scale")
+    case "monitor":
+        if A_Args.Length > 2 && !SetMonitorEnabled(arg, A_Args[3] = "on")
+            Notify(A_Args[3] = "on" ? "Windows could not turn that display on" : "The last display that is on stays on")
+    ; A size that needs a taller bar re-applies, which restarts Zebar and so closes the
+    ; panel this came from: open it again where it was.
+    case "text-size":
+        if OmarchyCmdWait("text-size", arg)
+            Notify("Text size change failed (Update > Doctor shows why)")
+        else if !WinExist("Zebar - omarchy / display ahk_exe zebar.exe") {
+            Sleep 1500
+            OpenPanel("display", "d", WriteDisplayState, true)
+        }
+    ; The bar's Tailscale icon (Quattro's omarchy.tailscale), only there once it is installed.
+    case "tailscale-panel": OpenPanel("tailscale", "t", (*) => TailscaleRefresh(true))
+    case "tailscale": TailscaleAction(arg, A_Args.Length > 2 ? A_Args[3] : "")
+    case "copy":
+        A_Clipboard := arg
+        Osd("Copied " arg), Sleep(1300)
     case "send": Send arg
     case "run": Run(arg (A_Args.Length > 2 ? " " A_Args[3] : ""))
     case "url", "settings": Run arg
@@ -399,6 +435,32 @@ OpenUsage() {
     f.Close()
     OmarchyCmd("agent-usage", "-LimitsOnly")
     Run '"' Env("zebar") '" start-widget-preset --pack omarchy --widget-name usage --preset u' MonitorPosition(n), , "Hide"
+    if hwnd := WinWait(title, , 3)
+        try WinActivate hwnd
+}
+
+; The bar's Display and Tailscale panels, dropped under the icon they were opened from
+; (the click's x in the widget's CSS pixels goes in <name>-anchor.json, as the usage
+; panel's). `prepare(monitor)` writes the state the panel shows first; again closes it.
+; keepAnchor reopens it where it was (after a restart of the bar).
+OpenPanel(name, prefix, prepare, keepAnchor := false) {
+    title := "Zebar - omarchy / " name " ahk_exe zebar.exe"
+    if hwnd := WinExist(title) {
+        PostMessage 0x10, 0, 0, , hwnd
+        return
+    }
+    PerMonitorDpi()
+    n := MonitorUnderMouse()
+    if !keepAnchor {
+        CoordMode "Mouse", "Screen"
+        MouseGetPos &mx
+        MonitorGet n, &left
+        f := FileOpen(Env("pack") "\" name "-anchor.json", "w", "UTF-8-RAW")
+        f.Write('{"x":' Round((mx - left) * 96 / MonitorDpi(n)) '}')
+        f.Close()
+    }
+    prepare(n)
+    Run '"' Env("zebar") '" start-widget-preset --pack omarchy --widget-name ' name ' --preset ' prefix MonitorPosition(n), , "Hide"
     if hwnd := WinWait(title, , 3)
         try WinActivate hwnd
 }

@@ -183,7 +183,7 @@ function Write-GlazeConfig([int]$monitorCount) {
     if ($state.gap -ne [int]$cfg.gap) { $state.gap = [int]$cfg.gap; Save-State $state }
     # The bar's strip lives in GlazeWM's top gap (scaled per monitor like the bar itself).
     # (None while the bar is turned off: Super+Shift+Space / winarchy bar off.)
-    $gapTop = if (Test-Path (Join-Path $Generated 'bar-off')) { $gap } else { [int]$cfg.barHeight + $gap }
+    $gapTop = if (Test-Path (Join-Path $Generated 'bar-off')) { $gap } else { (Get-BarHeight $cfg) + $gap }
     $border = if ($old -match "color:\s*'(#[0-9A-Fa-f]{6})'\s*# theme:focused-border") { $Matches[1] } else {
         try { (Read-Colors (Read-State).theme).focused_border } catch { '#7aa2f7' }
     }
@@ -230,7 +230,7 @@ function Write-AhkIni($p, $cfg) {
             launchers = [int][bool]$cfg.launchers
             hideTaskbar = [int][bool]$cfg.hideTaskbar
             gap = [int]$cfg.gap
-            barHeight = [int]$cfg.barHeight
+            barHeight = Get-BarHeight $cfg
             syncAtLogin = [int][bool]$cfg.syncAtLogin
             screensaver = [int][bool]($cfg.screensaver.enabled -and $p.wt)
             screensaverIdle = [int]$cfg.screensaver.idleSeconds
@@ -261,6 +261,13 @@ function Write-AhkIni($p, $cfg) {
 }
 
 # --- Zebar pack ---------------------------------------------------------------------
+# The bar's height: barHeight, grown with the text size (Display panel) so bigger text
+# still fits. Sizes at or under the default 12px keep barHeight as it is.
+function Get-BarHeight($cfg) {
+    $px = if ($null -ne $cfg.textSize) { [Math]::Max(9, [Math]::Min(20, [int]$cfg.textSize)) } else { 12 }
+    [int][Math]::Round([int]$cfg.barHeight * [Math]::Max([double]1, $px / 12))
+}
+
 function Get-ZpackJson($p) {
     $ahk = $p.ahk
     # Only our own menu.ahk may drive the menu widget, not any script of that name. Zebar's
@@ -282,7 +289,7 @@ function Get-ZpackJson($p) {
         [ordered]@{ program = 'explorer'; argsRegex = 'ms-settings:.*' },
         $menuPrivilege
     ) @([ordered]@{
-        name = 'default'; anchor = 'top_left'; offsetX = '0px'; offsetY = '0px'; width = '100%'; height = "$([int]$cfg.barHeight)px"
+        name = 'default'; anchor = 'top_left'; offsetX = '0px'; offsetY = '0px'; width = '100%'; height = "$(Get-BarHeight $cfg)px"
         monitorSelection = [ordered]@{ type = 'all' }
         # Space is kept by GlazeWM's top gap; Zebar's appbar reservation is unreliable
         # with the taskbar hidden, and fighting Explorer over the work area flickers it.
@@ -315,11 +322,22 @@ function Get-ZpackJson($p) {
         }
     }
     $usage = & $widget 'usage' './usage.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @($usagePresets)
+    # The bar's Display and Tailscale panels (Quattro's omarchy.monitor / omarchy.tailscale):
+    # the same per-monitor presets, d0..d7 and t0..t7. Both read state files (display.json,
+    # tailscale*.json) that menu.ahk / winarchy.ahk write.
+    $panelPresets = { param($prefix) foreach ($i in 0..7) {
+            [ordered]@{
+                name = "$prefix$i"; anchor = 'top_left'; offsetX = '0px'; offsetY = '0px'; width = '100%'; height = '100%'
+                monitorSelection = [ordered]@{ type = 'index'; match = $i }
+            }
+        } }
+    $display = & $widget 'display' './display.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'd')
+    $tailscale = & $widget 'tailscale' './tailscale.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.txt', '*.ttf') @($menuPrivilege) @(& $panelPresets 't')
     [ordered]@{
         '$schema' = 'https://github.com/glzr-io/zebar/raw/v3.0.0/resources/zpack-schema.json'
         name = 'omarchy'; version = '3.0.0'; description = 'Omarchy style top bar, menu and pickers for GlazeWM (winarchy)'
         tags = @('topbar'); previewImages = @(); repositoryUrl = ''
-        widgets = @($bar, $menu, $calendar, $usage)
+        widgets = @($bar, $menu, $calendar, $usage, $display, $tailscale)
     } | ConvertTo-Json -Depth 12
 }
 
@@ -347,7 +365,7 @@ function Write-ZebarPack($p, $cfg) {
         # The background picker plays the wallpaper reveal on its monitor (lib/transition.ps1).
         "export const REVEAL = $("$($cfg.backgroundTransition -ne 'none')".ToLower());"
         # Popups under the bar (calendar) sit barHeight + gap from the top.
-        "export const BAR_HEIGHT = $([int]$cfg.barHeight);"
+        "export const BAR_HEIGHT = $(Get-BarHeight $cfg);"
         "export const GAP = $([int]$cfg.gap);"
     ) -join "`n"
     Write-Utf8 (Join-Path $Pack 'env.js') "$envJs`n"
