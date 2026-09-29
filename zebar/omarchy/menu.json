@@ -362,6 +362,14 @@
         ]
       },
       {
+        "label": "Battery Percentage",
+        "icon": "󰁹",
+        "action": [
+          "battery-percentage"
+        ],
+        "when": "laptop"
+      },
+      {
         "label": "Taskbar",
         "icon": "󰍹",
         "action": [

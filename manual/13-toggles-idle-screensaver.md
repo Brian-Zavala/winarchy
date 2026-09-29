@@ -9,6 +9,7 @@ The toggles are in _Trigger > Toggle_ in the Omarchy menu (`Super + Ctrl + O` go
 | | Screensaver |
 | `Super + Ctrl + N` | Nightlight: warmer colors for the evening |
 | `Super + Shift + Space` | The top bar |
+| | Battery percentage next to the bar's battery icon, on a laptop (or right-click the icon) |
 | `Super + Shift + Backspace` | Window gaps |
 | | Window animations (experimental) |
 | `Super + Backspace` | Window transparency |

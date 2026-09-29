@@ -356,11 +356,13 @@ function Get-ZpackJson($p) {
     $network = & $widget 'network' './network.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'n')
     $audio = & $widget 'audio' './audio.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'a')
     $bluetooth = & $widget 'bluetooth' './bluetooth.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'b')
+    # The bar's battery icon on a laptop (Quattro's omarchy.power): p0..p7, reads power.json.
+    $power = & $widget 'power' './power.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'p')
     [ordered]@{
         '$schema' = 'https://github.com/glzr-io/zebar/raw/v3.0.0/resources/zpack-schema.json'
         name = 'omarchy'; version = '3.0.0'; description = 'Omarchy style top bar, menu and pickers for GlazeWM (winarchy)'
         tags = @('topbar'); previewImages = @(); repositoryUrl = ''
-        widgets = @($bar, $menu, $calendar, $usage, $display, $tailscale, $worldclock, $network, $audio, $bluetooth)
+        widgets = @($bar, $menu, $calendar, $usage, $display, $tailscale, $worldclock, $network, $audio, $bluetooth, $power)
     } | ConvertTo-Json -Depth 12
 }
 

@@ -1,0 +1,41 @@
+/* Omarchy Quattro's Power panel. Shares the Display panel's card, hero and sections
+   (display.css); only what is its own is here. */
+
+#hero .who { flex: 1; }
+#percent { flex: none; font-size: 32px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+#mood { transition: opacity 260ms ease-in; }
+#mood.fading { opacity: 0; transition: opacity 180ms ease-out; }
+
+/* The charge as a bar: the track a faint step of the text color, the fill the text color,
+   breathing while it charges (Quattro's pulse, 1.9 s). */
+#meter { position: relative; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--fg) 12%, transparent); }
+#meter .fill {
+  position: absolute; left: 0; top: 0; bottom: 0; min-width: 8px; width: var(--p, 0%);
+  border-radius: inherit; background: var(--fg);
+  transition: width 320ms cubic-bezier(.33, 1, .68, 1);
+}
+#meter.charging .fill { animation: charge-pulse 1.9s ease-in-out infinite; }
+@keyframes charge-pulse { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) {
+  #mood, #meter .fill { transition: none; }
+  #meter.charging .fill { animation: none; }
+}
+
+/* Two columns of label / value pairs. */
+#stats { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; font-size: 12px; }
+#stats .col { display: flex; flex-direction: column; gap: 4px; }
+.pair { display: flex; justify-content: space-between; gap: 8px; white-space: nowrap; }
+.pair .label { opacity: .6; }
+.pair .val { font-variant-numeric: tabular-nums; }
+
+/* Power profiles: bordered buttons, the active one filled (Quattro's Button). */
+#profiles { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
+.profile {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--fg) 22%, transparent); border-radius: 5px;
+  font-size: 12px; color: var(--ink-2); white-space: nowrap;
+}
+.profile .glyph { font-size: 15px; line-height: 1; }
+.profile:hover, .profile.has-cursor { background: var(--hover); color: var(--fg); }
+.profile.on { background: var(--selected); border-color: var(--accent); color: var(--fg); font-weight: 700; }
+.profile.busy { opacity: .6; }

@@ -2067,7 +2067,7 @@ if Env("compose", "0") = "1" {
 #^b::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" bluetooth-panel')   ; bluetooth panel (again: close)
 #^w::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" network-panel')     ; network panel (again: close)
 #^d::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" display-panel')     ; display panel (again: close)
-#^p::OpenMenu("power")                            ; power mode (Omarchy's power profiles)
+#^p::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" power-panel')         ; power panel (desktop: power menu)
 #^!d::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" calendar')   ; calendar (the clock's)
 #^!e::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" worldclock')   ; world clock (Omarchy's Elsewhen)
 #+!SC033::Send "#n"                               ; Super+Shift+Alt+Comma: notification history
