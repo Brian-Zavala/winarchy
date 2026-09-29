@@ -26,9 +26,10 @@ Describe 'Config migration' {
         $c.captureKeys | Should -Be 'winarchy'
         $c.compose | Should -BeFalse
         $c.textSize | Should -Be 12
+        $c.hideDesktopIcons | Should -BeFalse
     }
     It 'never touches a value you set' {
-        Write-Json $ConfigFile ([ordered]@{ captureKeys = 'omarchy'; compose = $true })
+        Write-Json $ConfigFile ([ordered]@{ captureKeys = 'omarchy'; compose = $true; hideDesktopIcons = $true })
         $before = Get-Content -Raw $ConfigFile
         Invoke-ConfigMigration
         Get-Content -Raw $ConfigFile | Should -Be $before
@@ -68,6 +69,7 @@ Describe 'Install answers' {
         $cfg = Get-InstallAnswers @{ input = @{ count = 1 }; startup = $TestDrive; pictures = $TestDrive }
         $cfg.captureKeys | Should -Be 'omarchy'
         $cfg.compose | Should -BeTrue
+        $cfg.hideDesktopIcons | Should -BeTrue
     }
     It 'leaves CapsLock alone with an input method' {
         $script:FreshInstall = $true
@@ -80,6 +82,7 @@ Describe 'Install answers' {
         $cfg = Get-InstallAnswers @{ input = @{ count = 1 }; startup = $TestDrive; pictures = $TestDrive } -Restoring
         $cfg.Contains('captureKeys') | Should -BeFalse
         $cfg.Contains('compose') | Should -BeFalse
+        $cfg.Contains('hideDesktopIcons') | Should -BeFalse
     }
     AfterAll { $script:FreshInstall = $null }
 }

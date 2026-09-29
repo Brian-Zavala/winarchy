@@ -339,6 +339,10 @@ function Restore-JournalEntry($e, [string]$dir) {
             [void][Winarchy.Native]::SystemParametersInfoInt(0x11, [uint32]($e.active -eq '1'), [IntPtr]::Zero, 3)   # SPI_SETSCREENSAVEACTIVE
         }
         'minanimate' { Set-MinimizeAnimation ([int]$e.value) }
+        'deskicons' {
+            Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name HideIcons -Value ([int]$e.hidden) -Type DWord
+            Set-DesktopIconsVisible ([int]$e.hidden -eq 0)
+        }
         default { }
     }
 }

@@ -614,6 +614,48 @@ function Set-MinimizeAnimationPolicy($cfg) {
     Log 'minimize/maximize animation turned off (blockMinimize)'
 }
 
+# Show or hide the desktop icons right now, the way right-click > View > Show desktop icons
+# does: that menu item is WM_COMMAND 0x7402 to the desktop's SHELLDLL_DefView, and it only
+# toggles, so look at whether the icon list is visible first.
+function Set-DesktopIconsVisible([bool]$show) {
+    Add-Type -Namespace WinarchyDesk -Name Win -MemberDefinition @'
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string name);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string name);
+[DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+[DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+'@ -ErrorAction SilentlyContinue
+    $view = [WinarchyDesk.Win]::FindWindowEx([WinarchyDesk.Win]::FindWindow('Progman', $null), [IntPtr]::Zero, 'SHELLDLL_DefView', $null)
+    if ($view -eq [IntPtr]::Zero) {
+        $w = [IntPtr]::Zero
+        do {
+            $w = [WinarchyDesk.Win]::FindWindowEx([IntPtr]::Zero, $w, 'WorkerW', $null)
+            if ($w -ne [IntPtr]::Zero) { $view = [WinarchyDesk.Win]::FindWindowEx($w, [IntPtr]::Zero, 'SHELLDLL_DefView', $null) }
+        } while ($w -ne [IntPtr]::Zero -and $view -eq [IntPtr]::Zero)
+    }
+    if ($view -eq [IntPtr]::Zero) { return }
+    $list = [WinarchyDesk.Win]::FindWindowEx($view, [IntPtr]::Zero, 'SysListView32', $null)
+    if ($list -eq [IntPtr]::Zero -or [WinarchyDesk.Win]::IsWindowVisible($list) -eq $show) { return }
+    [void][WinarchyDesk.Win]::PostMessage($view, 0x111, [IntPtr]0x7402, [IntPtr]::Zero)
+}
+
+# hideDesktopIcons (on for a new install): Explorer's "Show desktop icons" off. What the PC
+# had is kept in the journal; turning it off here, or uninstalling, puts that back.
+function Set-DesktopIconsPolicy($cfg) {
+    $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+    $cur = [int](Get-ItemProperty $key -Name HideIcons -ErrorAction SilentlyContinue).HideIcons
+    $e = (Read-Journal).entries | Where-Object { $_.key -eq 'deskicons' } | Select-Object -First 1
+    if ($cfg.hideDesktopIcons -eq $true) {
+        if (-not $e) { [void](Add-JournalEntry @{ kind = 'deskicons'; key = 'deskicons'; hidden = $cur }) }
+        if ($cur -ne 1) { Set-ItemProperty $key -Name HideIcons -Value 1 -Type DWord }
+        Set-DesktopIconsVisible $false
+        return
+    }
+    if ($e -and $cur -ne [int]$e.hidden) {
+        Set-ItemProperty $key -Name HideIcons -Value ([int]$e.hidden) -Type DWord
+        Set-DesktopIconsVisible ([int]$e.hidden -eq 0)
+    }
+}
+
 # The Omarchy screensaver replaces Windows' own (restored on uninstall).
 function Set-WindowsScreensaver($cfg) {
     if (-not $cfg.screensaver.enabled) { return }
@@ -691,6 +733,7 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Respli
     Set-WindowsScreensaver $cfg
     try { Set-DisallowShaking $cfg } catch { Log "Aero Shake setting FAILED: $($_.Exception.Message)" }
     try { Set-MinimizeAnimationPolicy $cfg } catch { Log "minimize animation setting FAILED: $($_.Exception.Message)" }
+    try { Set-DesktopIconsPolicy $cfg } catch { Log "desktop icons setting FAILED: $($_.Exception.Message)" }
     if (-not (Test-Path (Join-Path $Pack 'font.css'))) { Write-FontCss }
     try { [void](Update-FontList) } catch { Log "font list FAILED: $($_.Exception.Message)" }
     # Terminal apps' Start entries first, so the Apps list below has them.

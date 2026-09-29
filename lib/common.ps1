@@ -130,8 +130,10 @@ function Save-UserConfig($user) {
 $ConfigMigrations = [ordered]@{
     captureKeys = 'winarchy'   # Super+Print = full screenshot, Super+Ctrl+Print = color picker
     compose     = $false       # CapsLock stays CapsLock
+    hideDesktopIcons = $false  # desktop icons stay as they were
 }
 $FreshInstallValues = [ordered]@{
+    hideDesktopIcons = $true   # a clean desktop: the wallpaper is the point
     captureKeys = 'omarchy'    # Omarchy's: Super+Print = color picker, Super+Ctrl+Print = text
     compose     = $true        # CapsLock + keys: emoji, em dash, name and email (Omarchy's xcompose)
 }

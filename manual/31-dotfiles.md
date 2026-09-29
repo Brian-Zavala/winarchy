@@ -26,6 +26,7 @@ It's JSON, so a `\` in a path is written `\\`. A file with a mistake in it is le
 | `barHeight` | `26` | Height of the top bar, in pixels at 100% scaling. It grows with `textSize` above 12 |
 | `textSize` | `12` | Text size of the bar, its panels and the terminals, in px from 9 to 20. The bar's Display panel sets it, as does `winarchy text-size` |
 | `hideTaskbar` | `true` | Hide the Windows taskbar while GlazeWM runs (it comes back if GlazeWM stops) |
+| `hideDesktopIcons` | `true` on a new install | Hide the desktop icons (Explorer's "Show desktop icons" off). An existing install keeps its icons; `false` puts back what the PC had |
 | `takeOverWinSpace` | `true` | `Super + Space` opens the Omarchy menu. `false` leaves `Win + Space` to Windows' layout switching; the menu then stays on `Super + Alt + Space`, and the launcher on `Alt + Space` |
 | `launchers` | `true` | Winarchy's app keys (`Super + Return` terminal, `Super + Shift + B` browser, ...). `false` if you use your own launcher script. Either way, a key your own Startup script binds stays yours |
 | `captureKeys` | `"winarchy"` | The `Print` key layout. `"omarchy"` (what a new install writes) is Omarchy's: `Super + Print` color picker, `Super + Ctrl + Print` text capture, `Shift + Print` full screenshot. `"winarchy"` (installs from before keep it): `Super + Print` full screenshot, `Super + Ctrl + Print` color picker, `Super + Shift + Print` text capture |

@@ -20,6 +20,7 @@ Put only the keys you want to change; everything else comes from
 | `workspaces` | `"auto"` | 10 workspaces split over your monitors left to right. Or a map of monitor position (1 = leftmost) to workspace names: `{ "1": ["1","2","3"], "2": ["4","5"] }`. The split grows when a monitor is added but never shrinks by itself (a sleeping monitor looks unplugged); `winarchy apply -MonitorsOnly -Resplit` fits it to the monitors connected now |
 | `gap` | `10` | Gap between windows and around the edges, in pixels at 100 % scaling |
 | `hideTaskbar` | `true` | Hide the Windows taskbar while GlazeWM runs (it comes back if GlazeWM stops) |
+| `hideDesktopIcons` | `true` on a new install | Hide the desktop icons (Explorer's "Show desktop icons" off). An existing install keeps its icons; `false` puts back what the PC had |
 | `takeOverWinSpace` | `true` | Super+Space = Omarchy menu, Super+Alt+Space = app launcher, Super+Ctrl(+Shift)+Space = pickers, Super+Shift+Space = bar. `false` leaves Win+Space to Windows' layout switching; the menu then stays on Super+Alt+Space and the launcher on Alt+Space |
 | `launchers` | `true` | winarchy's app keys (Super+Return terminal, Super+Shift+B browser, ...). `false` if you use your own launcher script |
 | `apps.terminal` / `browser` / `editor` / `files` | `"auto"` | Programs the launcher keys and menus open; `"auto"` detects Windows Terminal, your default browser, Neovim → VS Code → Notepad |

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A new install hides the desktop icons (`hideDesktopIcons`, Explorer's "Show desktop icons" off). Existing installs keep theirs; setting it `false` or uninstalling puts back what the PC had.
+
 ## 0.1.19 — 2026-09-29
 
 - Search the whole menu: typing in the Omarchy menu now finds everything under the menu you're in, not just the rows on screen. From the top, `clion` finds CLion in _Apps_, `tokyo` the theme, `docker` what _Install_ has; each result shows where it lives, and a closer match comes first. A confirmation such as _Undo Winarchy?_ still asks before its "Yes".
