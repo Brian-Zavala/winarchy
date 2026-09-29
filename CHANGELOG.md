@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.8 — 2026-09-29
+
 - The bar has Omarchy Quattro's Display panel. The monitor icon (next to audio) opens it: a brightness slider for the monitor you clicked on (a laptop screen, or an external monitor over DDC/CI), a text size from 9 to 20 px that sizes the bar, its panels and your terminals together (`winarchy text-size`), the monitor's Windows scale, and, with more than one monitor, a switch to turn each off or on (the last one stays on). Scrolling on the icon changes the brightness, with an OSD.
 - Tailscale, as in Quattro: it isn't installed by default. The installer offers it (default no, never in an unattended install), and _Install > Service > Tailscale_ adds it later. Once it's installed its icon sits with the system icons: solid when connected, struck through when off, with a `!` when it needs a sign-in. Right-click turns it on or off. Its panel has an on/off switch, your connections, exit nodes (Mullvad's too), and the machines on your tailnet, with copy IP/name/DNS and Taildrop.
 
