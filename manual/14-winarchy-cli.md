@@ -40,6 +40,7 @@ Everything the Omarchy menu does is also a `winarchy` command, for scripts or wh
 | Command | What it does |
 |---|---|
 | `winarchy autotile on\|off\|toggle\|status` | Hyprland-style auto-tiling |
+| `winarchy taskbar on\|off\|toggle\|status` | Hide the Windows taskbar, or bring it back |
 | `winarchy animations on\|off\|toggle\|build\|status` | Experimental window animations |
 | `winarchy game-add <name>` | Treat a program as a game |
 | `winarchy game-setup [remove]` | The helper for games that run as administrator (see [gaming](26-gaming.md)) |

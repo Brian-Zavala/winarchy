@@ -1,9 +1,5 @@
 # winarchy uninstall: replays the backup journal newest-first.
 
-# What in ~/.winarchy is the person's own doing rather than a download or a cache: kept
-# when they ask to keep their settings, and put back to work by the next install.
-$SettingsItems = 'config.json', 'state.json', 'glazewm.yaml.tpl', 'herdr.toml.tpl',
-    'keybindings-apps.txt', 'herdr-welcomed', 'branding', 'restore.json', 'tuis.json'
 # Left behind by an uninstall that kept the settings; install reads it and restores them.
 $RestoreFile = Join-Path $Data 'restore.json'
 
@@ -55,14 +51,14 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
     $entries = @($j.entries)
     [array]::Reverse($entries)
 
-    # Both questions before anything changes, so Ctrl+C still leaves the PC as it was.
+    # The question before anything changes, so Ctrl+C still leaves the PC as it was.
     $userApps = @(Get-UserApps $entries)
     $keptApps = if ($KeepApps) { $userApps } elseif ($userApps) { @(Read-KeepApps $userApps) } else { @() }
     $keptKeys = @($keptApps | ForEach-Object { $_.entry.key })
     $userKeys = @($userApps | ForEach-Object { $_.entry.key })
     Write-Host ''
-    $keepSettings = Read-YesNo 'Keep your settings (theme, background, font, config.json, your own templates) so reinstalling winarchy puts them back?' $true
-    Write-Host ''
+    # Settings are not asked about: they are a few small files, and kept they make a
+    # reinstall come back as it was. -Purge is the clean slate, and takes them too.
 
     $script:UninstallFailures = [Collections.Generic.List[string]]::new()
     $step = {
@@ -154,22 +150,18 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
         $script:JournalDir = $null; $script:JournalCache = $null
     }
 
-    if ($keepSettings) {
+    if (-not $Purge) {
         & $step "Save your settings for a reinstall ($RestoreFile)" {
             Write-Json $RestoreFile ([ordered]@{
                     savedAt = (Get-Date).ToString('s'); version = $version; theme = (Read-State).theme
                     keptApps = @($keptApps | ForEach-Object { $_.label })
                 })
         }
-    } else {
-        & $step 'Delete your settings (a reinstall starts from the defaults)' {
-            foreach ($name in $SettingsItems) { Remove-Item -LiteralPath (Join-Path $Data $name) -Recurse -Force -ErrorAction SilentlyContinue }
-        }
     }
 
     if ($Purge) {
-        $spare = @('backup') + $(if ($keepSettings) { $SettingsItems })
-        & $step "Delete downloaded themes/backgrounds$(if (-not $keepSettings) { ' and settings' }) ($Data, keeping $($spare -join ', '))" {
+        $spare = @('backup')
+        & $step "Delete your settings and the downloaded themes/backgrounds ($Data, keeping $($spare -join ', '))" {
             Get-ChildItem $Data -Force | Where-Object Name -notin $spare | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
             # A terminal that loaded winarchy's compiled helpers keeps those files open. They are
             # only a cache the next install rebuilds, so say so rather than fail the run.
@@ -187,7 +179,7 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
         Write-Host "`nKept: $Data (themes, backgrounds, backups) and $Code. 'winarchy uninstall -Purge' removes them."
     }
     if ($keptApps) { Write-Host "Kept your apps: $(@($keptApps.label) -join ', ')." }
-    if ($keepSettings) { Write-Host "Kept your settings in $Data. Reinstall any time: they are applied again automatically." }
+    if (-not $Purge) { Write-Host "Kept your settings in $Data. Reinstall any time: they are applied again automatically." }
     if ($script:UninstallFailures.Count) {
         Write-Host "Finished, but $($script:UninstallFailures.Count) step(s) failed:" -ForegroundColor Yellow
         $script:UninstallFailures | ForEach-Object { Write-Host "  - $_" -ForegroundColor Yellow }

@@ -643,3 +643,69 @@ Describe 'Gaps toggled off vs a gap of 0 in config.json' {
         Gap | Should -Be 8
     }
 }
+
+Describe 'Windows Terminal default profile' {
+    BeforeEach {
+        $script:JournalDir = Join-Path $TestDrive ([guid]::NewGuid())
+        New-Item -ItemType Directory $script:JournalDir | Out-Null
+        Set-Content (Join-Path $script:JournalDir 'journal.json') '{"entries":[]}'
+        $script:JournalCache = $null
+        $script:wtFile = Join-Path $TestDrive "wt-$([guid]::NewGuid()).json"
+        function New-Wt($default, [object[]]$list) {
+            $o = [ordered]@{ profiles = [ordered]@{ list = @($list) } }
+            if ($default) { $o.defaultProfile = $default }
+            Write-Json $script:wtFile $o
+            Read-Json $script:wtFile
+        }
+        function Undo { foreach ($e in (Read-Journal).entries) { Restore-JournalEntry $e $script:JournalDir } }
+        $wsl = '{2c4de342-38b7-51cf-b940-2309a097f518}'
+    }
+    It 'replaces Windows PowerShell with PowerShell 7, and uninstall puts it back' {
+        $wt = New-Wt $WindowsPowerShellProfile @(@{ guid = $WindowsPowerShellProfile; name = 'Windows PowerShell' })
+        Set-TerminalDefaultProfile $script:wtFile $wt
+        $wt.defaultProfile | Should -Be $PowerShellCoreProfile
+        Write-Json $script:wtFile $wt
+        Undo
+        (Read-Json $script:wtFile).defaultProfile | Should -Be $WindowsPowerShellProfile
+    }
+    It 'sets one where there was none, and uninstall takes it back out' {
+        $wt = New-Wt $null @()
+        Set-TerminalDefaultProfile $script:wtFile $wt
+        $wt.defaultProfile | Should -Be $PowerShellCoreProfile
+        Write-Json $script:wtFile $wt
+        Undo
+        (Read-Json $script:wtFile).PSObject.Properties.Name | Should -Not -Contain 'defaultProfile'
+    }
+    It 'leaves a default the person picked alone' {
+        $wt = New-Wt $wsl @()
+        Set-TerminalDefaultProfile $script:wtFile $wt
+        $wt.defaultProfile | Should -Be $wsl
+        Test-Journaled "json|$script:wtFile|defaultProfile" | Should -BeFalse
+    }
+    It 'takes the PowerShell 7 Terminal lists when that one has its own guid' {
+        $preview = '{a3a2e83a-884a-5379-baa8-16f193a13b21}'
+        $wt = New-Wt $null @(@{ guid = $preview; name = 'PowerShell 7 Preview'; source = 'Windows.Terminal.PowershellCore' })
+        Set-TerminalDefaultProfile $script:wtFile $wt
+        $wt.defaultProfile | Should -Be $preview
+    }
+    It 'leaves the default alone when PowerShell 7 is hidden in Terminal' {
+        $wt = New-Wt $WindowsPowerShellProfile @(@{ guid = $PowerShellCoreProfile; source = 'Windows.Terminal.PowershellCore'; hidden = $true })
+        Set-TerminalDefaultProfile $script:wtFile $wt
+        $wt.defaultProfile | Should -Be $WindowsPowerShellProfile
+    }
+    It 'does it once: a later apply keeps a default changed back since' {
+        $wt = New-Wt $WindowsPowerShellProfile @()
+        Set-TerminalDefaultProfile $script:wtFile $wt
+        $wt.defaultProfile = $WindowsPowerShellProfile
+        Set-TerminalDefaultProfile $script:wtFile $wt
+        $wt.defaultProfile | Should -Be $WindowsPowerShellProfile
+    }
+    It 'uninstall keeps a default changed after install' {
+        $wt = New-Wt $WindowsPowerShellProfile @()
+        Set-TerminalDefaultProfile $script:wtFile $wt
+        $wt.defaultProfile = $wsl
+        Write-Json $script:wtFile $wt
+        Undo
+        (Read-Json $script:wtFile).defaultProfile | Should -Be $wsl
+    }
+}

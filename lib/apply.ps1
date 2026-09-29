@@ -574,7 +574,30 @@ function Set-TerminalProfiles($p) {
     $list = @($wt.profiles.list | Where-Object { $_.guid -notin $ScreensaverProfile, $AboutProfile, $AgentProfile })
     foreach ($w in $want) { Save-JsonItem $file 'profiles.list' $w.name }
     $wt.profiles.list = @($list) + $want
+    if ($pwsh) { Set-TerminalDefaultProfile $file $wt }
     Write-Json $file $wt
+}
+
+# New tabs open PowerShell 7, the shell winarchy's profile and commands are set up in -
+# but only in place of the default Windows Terminal ships with (Windows PowerShell 5.1),
+# or none: WSL, cmd or anything else there was the person's own pick. Done once: whatever
+# the default is changed to afterwards stays. Uninstall puts the old default back unless
+# it was changed again since.
+$WindowsPowerShellProfile = '{61c54bbd-c2c6-5271-96e7-009a87ff44bf}'
+$PowerShellCoreProfile = '{574e775e-4f2a-5b96-ac1e-a2962a402336}'
+function Set-TerminalDefaultProfile([string]$file, $wt) {
+    if (Test-Journaled "json|$file|defaultProfile") { return }
+    $cur = $wt.defaultProfile
+    if ($cur -and $cur -ne $WindowsPowerShellProfile) { return }
+    # Windows Terminal adds PowerShell 7 to the list by itself, under the fixed guid (with
+    # more than one install, the others get their own). Not listed yet: it is added, with
+    # that guid, the next time Terminal starts. Listed but all hidden: the person hid it.
+    $core = @($wt.profiles.list | Where-Object { $_.source -eq 'Windows.Terminal.PowershellCore' })
+    $shown = @($core | Where-Object { -not $_.hidden })
+    if ($core -and -not $shown) { return }
+    $guid = if (-not $shown -or $shown.guid -contains $PowerShellCoreProfile) { $PowerShellCoreProfile } else { $shown[0].guid }
+    Save-JsonProperty $file 'defaultProfile' $guid
+    $wt | Add-Member -Force -NotePropertyName defaultProfile -NotePropertyValue $guid
 }
 
 # Omarchy's branding text (Style > Screensaver / About edit these).

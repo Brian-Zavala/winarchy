@@ -119,8 +119,8 @@ function Invoke-Sync([switch]$Offline) {
     Update-Index
 }
 
-# A theme ships with the code (default/themes), so declining or failing the download
-# still leaves one to apply. Only fills in what is missing: a downloaded copy wins.
+# A theme ships with the code (default/themes), so a failed download still leaves one
+# to apply. Only fills in what is missing: a downloaded copy wins.
 function Add-BundledThemes {
     foreach ($dir in Get-ChildItem (Join-Path $Code 'default\themes') -Directory -ErrorAction SilentlyContinue) {
         $dst = Join-Path $Themes $dir.Name

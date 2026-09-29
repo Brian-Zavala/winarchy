@@ -11,10 +11,10 @@ You need Windows 11 22H2 or newer, winget (App Installer, which ships with Windo
 ### What the installer does
 
 1. It checks the PC and installs what's missing: PowerShell 7, AutoHotkey v2, the JetBrainsMono Nerd Font, GlazeWM and Zebar (one UAC prompt), Flow Launcher, fastfetch, btop, and Python 3 for the bar's AI agent usage.
-2. It asks only the questions that depend on you: keep your own launcher script, hide the taskbar, take over `Win + Space` if you use several keyboard layouts, and install Herdr.
+2. It asks only the questions that depend on you: keep your own launcher script, take over `Win + Space` if you use several keyboard layouts, and install Herdr. It hides the Windows taskbar, since the top bar replaces it; _Trigger > Toggle > Taskbar_ brings it back.
 3. It records every setting it changes in a backup journal before changing it, so [uninstalling](47-system-snapshots.md) puts everything back.
 4. It writes the configs for your machine: any number of monitors, any scaling, laptop or desktop, and your default browser, terminal and editor.
-5. It downloads Omarchy's themes and backgrounds (about 110 MB, and it asks first), then applies Tokyo Night.
+5. It downloads Omarchy's themes and backgrounds (about 110 MB), then applies Tokyo Night.
 
 Then press `Super + Space` for the Omarchy menu and `Super + K` for every key.
 

@@ -23,7 +23,7 @@ OnError ScriptLogError
 ;   menu.ahk send <keys> | run <target> [args] | url <url> | settings <ms-settings:...>
 ;   menu.ahk edit <file | glaze-config | bar-css | config | launchers | keybindings>
 ;   menu.ahk bg-set <path> [landing name] | bg-next | theme-set <name> | sync | apply | doctor   (-> winarchy CLI)
-;   menu.ahk apply-glaze | update-check | animations <toggle> | glaze <glazewm command>
+;   menu.ahk apply-glaze | update-check | animations <toggle> | taskbar <toggle> | glaze <glazewm command>
 ;   menu.ahk wm <bar|gaps|awake|transparency|colorpicker>        (-> running winarchy.ahk)
 ;   menu.ahk bar-clear                                           (bar: transparent background on/off)
 ;   menu.ahk panel <audio|bluetooth>                             (toggle Windows' quick panel)
@@ -159,6 +159,7 @@ switch verb {
     ; A reminder going off (the scheduled task runs this): stays up long enough to be read.
     case "notify": OmarchyCmd("reminder", "refresh"), Osd(arg, 12000), Sleep(12100)
     case "animations": ToggleAnimations()
+    case "taskbar": ToggleTaskbar()
     ; Double-click on the bar (or Style > Menu Bar > Transparency): bar-state.json is what every bar polls.
     case "bar-clear": ToggleBarClear()
     case "glaze": try Run('"' Env("glazewmCli") '" command ' arg, , "Hide")
@@ -402,6 +403,18 @@ ToggleAnimations() {
     global OW
     OW := LoadOmarchyEnv()
     Notify("Window animations " (Env("animations", "0") = "1" ? "on" : "off"))
+}
+
+; Toggle > Taskbar: hideTaskbar in config.json (the CLI re-applies, restarting winarchy.ahk).
+ToggleTaskbar() {
+    Osd("Switching the taskbar…", 0)
+    if OmarchyCmdWait("taskbar", "toggle") {
+        Notify("Switching the taskbar failed (Update > Doctor shows why)")
+        return
+    }
+    global OW
+    OW := LoadOmarchyEnv()
+    Notify("Windows taskbar " (Env("hideTaskbar", "1") = "1" ? "hidden" : "shown"))
 }
 
 ; Omarchy's bar transparency: one flag in the pack, so every monitor's bar follows it and
