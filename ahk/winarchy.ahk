@@ -20,6 +20,10 @@
 ; on the line after the failure, carrying on with whatever state caused it. Errors still go
 ; to the log, which `winarchy doctor` reads back under "Recent errors".
 OnError LogError
+; Line logging and key history are debugging aids, and with timers ticking every 30 ms they
+; are pure overhead (game-helper.ahk turns them off too).
+ListLines false
+KeyHistory 0
 
 LogError(err, mode) {
     try WmLog("error: " (err is Error
@@ -61,10 +65,17 @@ HideTaskbars() {
         }
     } else
         missingSince := 0
+    ; Only a taskbar that is showing: this runs every second, and each WinHide would sleep
+    ; AutoHotkey's 100 ms window delay (the hidden ones are listed too, see ScreensaverStop).
+    SetWinDelay -1
     for cls in ["Shell_TrayWnd", "Shell_SecondaryTrayWnd"]
         for hwnd in WinGetList("ahk_class " cls)
-            WinHide hwnd
+            try if WinGetStyle(hwnd) & 0x10000000           ; WS_VISIBLE
+                WinHide hwnd
 }
+; AHK gives each function one timer: a one-shot SetTimer HideTaskbars would replace the
+; repeating one above (and with it the GlazeWM-gone safety net), so one-shots use this.
+HideTaskbarsOnce() => HideTaskbars()
 ShowTaskbars(*) {
     DetectHiddenWindows true
     for cls in ["Shell_TrayWnd", "Shell_SecondaryTrayWnd"]
@@ -224,14 +235,16 @@ SetTimer Later.Bind(() => OmarchyCmd("update-check")), -120000
 SetTimer Quiet.Bind(() => OmarchyCmd("update-check")), 21600000
 ; Bluetooth on/off for the bar icon (bluetooth.ps1 writes bluetooth.json).
 SetTimer Quiet.Bind(BluetoothStatus), 30000
-BluetoothStatus()
+; The first reads of these three wait until the startup code (and with it every key) is
+; done: apply restarts this script, and the keys should come back first.
+SetTimer BluetoothStatus, -1
 ; Tailscale for the bar icon and panel (tailscale.json + tailscale-status.json), every 30 s
 ; like Quattro's widget. Only a FileExist while Tailscale isn't installed.
 SetTimer Quiet.Bind(TailscaleRefresh), 30000
-TailscaleRefresh()
+SetTimer TailscaleRefresh, -1
 ; Network type for the bar icon (network.json), read from Windows every 10 s.
 SetTimer Quiet.Bind(NetworkRefresh), 10000
-NetworkRefresh()
+SetTimer NetworkRefresh, -1
 ; Pick up new favorite backgrounds after login settles (local only, no downloads).
 if Env("syncAtLogin", "1") = "1"
     SetTimer Later.Bind(() => OmarchyCmd("sync", "-Offline")), -90000
@@ -381,10 +394,38 @@ GlazeWmRunning() {
 
 ProcessList(name) {
     pids := []
-    for p in ComObjGet("winmgmts:").ExecQuery("Select ProcessId from Win32_Process"
-        . " where Name='" name "'")
-        pids.Push(p.ProcessId)
+    for p in ProcessSnapshot()
+        if p.name = name
+            pids.Push(p.pid)
     return pids
+}
+
+; Every process as {pid, ppid, name}, from one Toolhelp32 snapshot (a millisecond or two).
+; This used to be a WMI query, several times a second between the timers here: WMI can take
+; a good part of a second, and this script (so every key it handles, the Super release
+; included) waits on a COM call. Callers within 250 ms share one snapshot unless `fresh`.
+ProcessSnapshot(fresh := false) {
+    static cache := [], at := 0
+    if !fresh && at && A_TickCount - at < 250
+        return cache
+    list := []
+    snap := DllCall("CreateToolhelp32Snapshot", "uint", 0x2, "uint", 0, "ptr")   ; TH32CS_SNAPPROCESS
+    if snap = -1
+        return list
+    ; PROCESSENTRY32W: dwSize 0, th32ProcessID 8, th32ParentProcessID 32 (x86: 24),
+    ; szExeFile[260] 44 (x86: 36); 568 bytes (x86: 556)
+    x64 := A_PtrSize = 8
+    size := x64 ? 568 : 556, oParent := x64 ? 32 : 24, oExe := x64 ? 44 : 36
+    pe := Buffer(size, 0)
+    NumPut("uint", size, pe)
+    more := DllCall("Process32FirstW", "ptr", snap, "ptr", pe)
+    while more {
+        list.Push({pid: NumGet(pe, 8, "uint"), ppid: NumGet(pe, oParent, "uint"), name: StrGet(pe.Ptr + oExe, 260, "UTF-16")})
+        more := DllCall("Process32NextW", "ptr", snap, "ptr", pe)
+    }
+    DllCall("CloseHandle", "ptr", snap)
+    cache := list, at := A_TickCount
+    return list
 }
 
 GlazeGuard() {
@@ -449,6 +490,8 @@ SsActive := false, SsStart := 0, SsArmed := 0, SsMouse := [0, 0]
 SsConfigured := Env("screensaver", "0") = "1"
 SsEnabled := SsConfigured && !FileExist(SsFlag)
 RestoreCursors()              ; an older version hid the pointer during the screensaver
+; (It also leaves DetectHiddenWindows on for every later thread here, which BarWindows,
+; CloseBar and GameTitle count on: the settings the startup code ends with are the defaults.)
 ScreensaverStop("startup")    ; older versions left hidden screensaver windows running
 OnExit ScreensaverStop
 SetTimer ScreensaverIdle, 5000
@@ -609,11 +652,16 @@ ScreensaverStop(reason := "exit", *) {
         try PostMessage 0x10, 0, 0, , hwnd
         left++
     }
-    try {
-        for proc in ComObjGet("winmgmts:").ExecQuery("SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name='pwsh.exe' OR Name='powershell.exe'")
-            if InStr(proc.CommandLine, "\lib\screensaver.ps1")
-                ProcessClose proc.ProcessId
-    }
+    ; The leftover shells are found over WMI, which blocks this script (and so every key)
+    ; while it runs: at startup that waits until the keys are registered, and after a
+    ; screensaver you dismissed it waits until you are back at the desktop. On exit, now.
+    why := IsObject(reason) ? "exit" : reason
+    if why ~= "i)^(exit|reload|single|close|error|menu|logoff|shutdown)$"
+        ScreensaverSweep()
+    else if why = "startup"
+        SetTimer ScreensaverSweep, -1
+    else if wasActive
+        SetTimer ScreensaverSweep, -3000
     loop 20 {
         if !ProcessExist("ttfx.exe")
             break
@@ -623,6 +671,15 @@ ScreensaverStop(reason := "exit", *) {
         WmLog("screensaver: stop (" (IsObject(reason) ? "exit" : reason) ")")
     else if left
         WmLog("screensaver: closed " left " leftover window(s)")
+}
+
+; Screensaver shells a stop left running (lib\screensaver.ps1 under PowerShell).
+ScreensaverSweep() {
+    try {
+        for proc in ComObjGet("winmgmts:").ExecQuery("SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name='pwsh.exe' OR Name='powershell.exe'")
+            if InStr(proc.CommandLine, "\lib\screensaver.ps1")
+                ProcessClose proc.ProcessId
+    }
 }
 
 ToggleScreensaver() {
@@ -1058,7 +1115,7 @@ OnWindowShown(hWinEventHook, event, hwnd, idObject, idChild, *) {
     ; quickly); the 1 s poll alone left it up for a moment, so hide it again right away.
     try {
         if WinGetClass(hwnd) ~= "^(Shell_TrayWnd|Shell_SecondaryTrayWnd)$" {
-            SetTimer(HideTaskbars, -1)
+            SetTimer(HideTaskbarsOnce, -1)
             return
         }
     }
@@ -1348,8 +1405,9 @@ IsGame(hwnd) {
     } catch
         return false
     Games[hwnd] := name
-    info := GlazeWindowInfo(hwnd)          ; also used below, so read it just once
-    if home := HomeWorkspace(hwnd, info)   ; also when GlazeWM never managed it (apply rules)
+    json := GlazeQuery("workspaces")             ; one query for both lookups below
+    info := GlazeWindowInfo(hwnd, json)          ; also used below, so read it just once
+    if home := HomeWorkspace(hwnd, info, json)   ; also when GlazeWM never managed it (apply rules)
         GameHome[hwnd] := home
     admin := IsElevated(pid)
     WmLog("game: " name " (GlazeWM leaves it alone; the bar hides behind it)"
@@ -1377,33 +1435,22 @@ InGameLibrary(path) {
 }
 
 ; A launcher (Playnite) started this process, however many hops back: its games are
-; children of Playnite.FullscreenApp.exe / Playnite.DesktopApp.exe. One WMI hop per
-; ancestor, but only the first time a pid is seen (IsGame caches the result per pid).
+; children of Playnite.FullscreenApp.exe / Playnite.DesktopApp.exe. Nothing to walk while
+; Playnite isn't running; otherwise one fresh snapshot (the game may have started a moment
+; ago), and only the first time a pid is seen (IsGame caches the result per pid).
 HasPlayniteAncestor(pid) {
+    if !ProcessExist("Playnite.FullscreenApp.exe") && !ProcessExist("Playnite.DesktopApp.exe")
+        return false
+    procs := Map()
+    for p in ProcessSnapshot(true)
+        procs[p.pid] := p
     loop 6 {
-        pid := ParentPid(pid)
-        if !pid
+        if !procs.Has(pid) || !(pid := procs[pid].ppid) || !procs.Has(pid)
             return false
-        if ProcessNameByPid(pid) ~= "i)^Playnite\.(Fullscreen|Desktop)App\.exe$"
+        if procs[pid].name ~= "i)^Playnite\.(Fullscreen|Desktop)App\.exe$"
             return true
     }
     return false
-}
-
-ParentPid(pid) {
-    try {
-        for p in ComObjGet("winmgmts:").ExecQuery("SELECT ParentProcessId FROM Win32_Process WHERE ProcessId=" pid)
-            return p.ParentProcessId
-    }
-    return 0
-}
-
-ProcessNameByPid(pid) {
-    try {
-        for p in ComObjGet("winmgmts:").ExecQuery("SELECT Name FROM Win32_Process WHERE ProcessId=" pid)
-            return p.Name
-    }
-    return ""
 }
 
 ; Drops closed games (and their remembered home workspace), logging each.
@@ -1495,8 +1542,8 @@ RestoreAndActivate(hwnd) {
 ; The name of the workspace a game belongs to: the one GlazeWM had it in (info from
 ; GlazeWindowInfo), else the one shown where the window is (games the apply-time rules
 ; ignore were never managed at all). "" when neither can be told (window minimized).
-HomeWorkspace(hwnd, info := 0) {
-    list := WorkspaceList(GlazeQuery("workspaces"))
+HomeWorkspace(hwnd, info := 0, json := "") {
+    list := WorkspaceList(json != "" ? json : GlazeQuery("workspaces"))
     if info
         for w in list
             if w.id = info.workspace
@@ -1666,8 +1713,9 @@ MarkAsGame() {
     }
     if !Games.Has(hwnd) {
         Games[hwnd] := name
-        info := GlazeWindowInfo(hwnd)
-        if home := HomeWorkspace(hwnd, info)
+        json := GlazeQuery("workspaces")
+        info := GlazeWindowInfo(hwnd, json)
+        if home := HomeWorkspace(hwnd, info, json)
             GameHome[hwnd] := home
         if info
             try Run('"' GlazeCli '" command --id ' info.id ' ignore', , "Hide")
@@ -1866,8 +1914,18 @@ OnMenuCommand(wParam, *) {
 ; and again on release, right before the Win key-up this hotkey sends (held down,
 ; Win auto-repeats after the first mask, and Windows then opened Start on release).
 ; Start menu is still on Ctrl+Esc.
-~LWin::Send "{Blind}{vkE8}"
-LWin up::Send "{Blind}{vkE8}{LWin up}"
+; SetKeyDelay: while another script hooks the keyboard, Send falls back from SendInput to
+; SendEvent, which waits 10 ms after every key - and the Win key-up is held until it is sent.
+~LWin::
+{
+    SetKeyDelay -1, -1
+    Send "{Blind}{vkE8}"
+}
+LWin up::
+{
+    SetKeyDelay -1, -1
+    Send "{Blind}{vkE8}{LWin up}"
+}
 
 ; GlazeWM's close (Super+W / Super+Q) can't reach a game (GlazeWM ignores games):
 ; close it here. (Games is filled by FullscreenWatch, so this check stays instant.)
@@ -1963,6 +2021,7 @@ if Env("compose", "0") = "1" {
     info := GlazeWindowInfo(hwnd)
     if info && info.state != "tiling" && info.state != "floating"
         return  ; fullscreen / minimized
+    SetWinDelay -1                  ; the drag starts now, not 100 ms into the pointer's move
     WinActivate hwnd
     ; SC_MOVE (0xF012) starts Windows' native interactive move loop, tracking the
     ; still-held physical LButton; KeyWait blocks here until it's released and the loop ends.
@@ -2323,9 +2382,11 @@ IsCloaked(hwnd) {
 ; Pack\icons\<key>.png, so this loop only ever asks for a given exe's icon once.
 WriteWindows() {
     global Pack, BarTitle, MenuTitle, CalendarTitle
-    static last := "", requested := 0
+    static last := "", requested := 0, have := 0
     if !requested
-        requested := Map()
+        requested := Map(), have := Map()
+    ; Only visible windows can be restorable ones: no need to walk the hidden hundreds.
+    DetectHiddenWindows false
     apps := Map()          ; exe (lower) -> {exe, icon, title, minimized, focused, hwnd}
     order := []
     fg := WinExist("A")
@@ -2354,8 +2415,11 @@ WriteWindows() {
             apps[key] := entry
             order.Push(entry)
             iconPath := Pack "\icons\" iconKey ".png"
+            ; An icon once on disk stays there: no FileExist per app every second.
+            if !have.Has(iconKey) && FileExist(iconPath)
+                have[iconKey] := true
             ; (not while a game is in front: see Quiet - asked again on a later tick)
-            if !requested.Has(iconKey) && !FileExist(iconPath) && !Busy() {
+            if !have.Has(iconKey) && !requested.Has(iconKey) && !Busy() {
                 requested[iconKey] := true
                 try OmarchyCmd("winicon", WinGetProcessPath(hwnd), iconKey)
             }
@@ -2447,17 +2511,26 @@ WindowUnderCursor() {
 
 GlazeQuery(what) {
     global GlazeCli
-    tmp := A_Temp "\glazewm-" what ".json"
-    RunWait(A_ComSpec ' /c ""' GlazeCli '" query ' what ' > "' tmp '""', , "Hide")
-    try return FileRead(tmp)
-    return ""
+    static seq := 0
+    ; A file of its own per call: RunWait lets another thread run meanwhile, and two queries
+    ; writing one file could hand either caller the other's (or half of it).
+    tmp := A_Temp "\glazewm-" what "-" DllCall("GetCurrentProcessId") "-" (++seq) ".json"
+    out := ""
+    try {
+        RunWait(A_ComSpec ' /c ""' GlazeCli '" query ' what ' > "' tmp '""', , "Hide")
+        out := FileRead(tmp)
+    }
+    try FileDelete tmp
+    return out
 }
 
-; {id, state, workspace} of the GlazeWM window with this handle, or 0.
-GlazeWindowInfo(hwnd) {
+; {id, state, workspace} of the GlazeWM window with this handle, or 0. `json`: a
+; `query workspaces` the caller already has (each query is two processes).
+GlazeWindowInfo(hwnd, json := "") {
     if !hwnd
         return 0
-    json := GlazeQuery("workspaces")
+    if json = ""
+        json := GlazeQuery("workspaces")
     pos := RegExMatch(json, '"handle":' hwnd '[,}]')
     if !pos
         return 0
@@ -2577,7 +2650,7 @@ UnhookFocusMove(*) {
 ; Runs every 30 ms: the per-tick path is just MouseGetPos; the costlier checks (Busy,
 ; eligibility) only run when there is a window to hand focus to.
 FocusFollowWatch() {
-    static lastX := -1, lastY := -1, tried := 0, triedAt := 0
+    static lastX := -1, lastY := -1, tried := 0, triedAt := 0, skip := 0, skipAt := 0
     PerMonitorDpi()
     CoordMode "Mouse", "Screen"
     MouseGetPos &x, &y, &hwnd
@@ -2594,11 +2667,22 @@ FocusFollowWatch() {
     ; retry, but not on every tick.
     if hwnd = tried && A_TickCount - triedAt < 250
         return
+    ; A window focus can't follow into (the bar, the desktop, a game) is looked at once, not
+    ; again on every tick while the pointer moves across it.
+    if hwnd = skip && A_TickCount - skipAt < 500
+        return
     ; A game or fullscreen window owns its own focus; Super is held while dragging or
     ; resizing, where the pointer is carrying a window rather than choosing one.
-    if GetKeyState("LWin", "P") || !FocusFollowEligible(hwnd) || Busy()
+    if GetKeyState("LWin", "P")
+        return
+    if !FocusFollowEligible(hwnd) {
+        skip := hwnd, skipAt := A_TickCount
+        return
+    }
+    if Busy()
         return
     tried := hwnd, triedAt := A_TickCount
+    SetWinDelay -1                  ; no 100 ms nap after it: the pointer may be moving on
     try WinActivate "ahk_id " hwnd
 }
 
@@ -2633,13 +2717,14 @@ AutoTileGuard() {
     Run('"' Env("pwsh", "pwsh.exe") '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "' Env("code") '\lib\autotile-watch.ps1" -Cli "' GlazeCli '"', , "Hide")
 }
 
+; lib/autotile-watch.ps1 holds this mutex for as long as it runs. (Matching every pwsh's
+; command line over WMI, every 5 s, held up the keys while it ran.)
 AutoTileRunning() {
-    try {
-        for proc in ComObjGet("winmgmts:").ExecQuery("SELECT CommandLine FROM Win32_Process WHERE Name='pwsh.exe'")
-            if InStr(proc.CommandLine, "autotile-watch.ps1")
-                return true
-    }
-    return false
+    h := DllCall("OpenMutexW", "uint", 0x00100000, "int", 0, "str", "Global\winarchy-autotile", "ptr")  ; SYNCHRONIZE
+    if !h
+        return A_LastError = 5            ; ERROR_ACCESS_DENIED: it exists; 2 = not running
+    DllCall("CloseHandle", "ptr", h)      ; never kept: our handle would keep the name alive
+    return true
 }
 
 ; Windows the pointer may hand focus to: ordinary, restorable, not cloaked or minimized,
