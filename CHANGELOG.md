@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.26 — 2026-09-29
+
 - New Windows Terminal tabs open PowerShell 7: install and apply make it Terminal's default profile when the default was still Windows PowerShell (or unset). A default you picked yourself stays, and uninstall puts the old one back unless you changed it since.
 - Fewer install questions. The Windows taskbar is hidden without asking, and _Trigger > Toggle > Taskbar_ (`winarchy taskbar on|off|toggle`) brings it back, with the auto-hide it had before. Omarchy's themes and backgrounds (about 110 MB) download without asking; offline, `winarchy sync` fetches them later.
 - `winarchy uninstall` no longer asks whether to keep your settings: they're kept, so a reinstall comes back as it was. `-Purge` deletes them along with the downloaded themes and backgrounds.
