@@ -34,9 +34,11 @@ function Test-CatalogArp($snapshot, [string]$pattern) {
 }
 
 # winget puts portable command line tools (lazygit, fzf, ...) in its Links folder, which a
-# process started before their first install does not have on PATH yet.
+# process started before their first install does not have on PATH yet. Programs and .ps1
+# shims only: an untyped lookup that misses searches every module on the way (~45 of these
+# run per catalog refresh).
 function Test-CatalogCommand([string]$name) {
-    [bool](Get-Command $name -ErrorAction SilentlyContinue) -or
+    [bool](Get-Command $name -CommandType Application, ExternalScript -ErrorAction SilentlyContinue) -or
         (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\$name.exe"))
 }
 

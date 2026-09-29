@@ -10,14 +10,25 @@ function Get-NetshValue([string]$Text, [string]$Key) {
     ''
 }
 
-# Latency to one address in ms, or $null.
-function Get-PingMs([string]$Target) {
-    if (-not $Target) { return $null }
+# Latency in ms to each address, $null where nothing answers: all pinged at once, since
+# each can take its whole second (two Test-Connections one after the other took up to 2).
+function Get-PingMs([string[]]$Target) {
+    $n = $Target.Count
+    $pings = [object[]]::new($n); $tasks = [object[]]::new($n); $ms = [object[]]::new($n)
     try {
-        $r = Test-Connection -TargetName $Target -Count 1 -TimeoutSeconds 1 -ErrorAction Stop
-        if ($r.Status -eq 'Success') { return [int]$r.Latency }
-    } catch { }
-    $null
+        for ($i = 0; $i -lt $n; $i++) {
+            if (-not $Target[$i]) { continue }
+            try { $pings[$i] = [Net.NetworkInformation.Ping]::new(); $tasks[$i] = $pings[$i].SendPingAsync($Target[$i], 1000) } catch { }
+        }
+        for ($i = 0; $i -lt $n; $i++) {
+            if (-not $tasks[$i]) { continue }
+            try {
+                $r = $tasks[$i].GetAwaiter().GetResult()
+                if ($r.Status -eq 'Success') { $ms[$i] = [int]$r.RoundtripTime }
+            } catch { }
+        }
+    } finally { foreach ($p in $pings) { if ($p) { $p.Dispose() } } }
+    , $ms
 }
 
 function Update-NetPanelState {
@@ -45,8 +56,8 @@ function Update-NetPanelState {
         if ($static) {
             $s.dns = if ($static -match '^1\.1\.1\.1|^1\.0\.0\.1') { 'cloudflare' } elseif ($static -match '^8\.8\.') { 'google' } else { 'custom' }
         }
-        $s.routerMs = Get-PingMs $s.gateway
-        $s.internetMs = Get-PingMs '1.1.1.1'
+        $ms = Get-PingMs @($s.gateway, '1.1.1.1')
+        $s.routerMs = $ms[0]; $s.internetMs = $ms[1]
     }
 
     if ($wlan -and $s.wifiOn) {
@@ -79,11 +90,9 @@ function Update-NetPanelState {
     $s
 }
 
-# A reader never sees half a file: write beside it, then move it over.
+# A reader never sees half a file: Write-Utf8 writes beside it, then moves it over.
 function Write-JsonAtomic([string]$Path, $Object) {
-    $tmp = "$Path.tmp"
-    Write-Utf8 $tmp ($Object | ConvertTo-Json -Depth 8 -Compress)
-    Move-Item -Force $tmp $Path
+    Write-Utf8 $Path ($Object | ConvertTo-Json -Depth 8 -Compress)
 }
 
 # Panel actions: connect <ssid>, radio (toggle Wi-Fi on/off), open (Windows' own list).
@@ -114,7 +123,7 @@ $SpeedStreams = 4
 
 function Initialize-SpeedTypes {
     if ('WinarchyCounterStream' -as [type]) { return }
-    Add-Type -TypeDefinition @'
+    Add-NativeType SpeedTypes -TypeName WinarchyCounterStream -TypeDefinition @'
 using System;
 using System.IO;
 using System.Threading;

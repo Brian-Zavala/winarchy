@@ -4,6 +4,11 @@
 
 - Several Claude Code and Codex accounts, as in Omarchy's upcoming account switching. Press `+` in the agents panel to add one: it signs in in a private browser window, and your existing sign-in stays the Main account. Each account shows its own limits, with _Use_ to switch. New agent windows, Herdr panes and `claude` or `codex` typed in PowerShell then use it. _Autoswitch_ (off by default) moves to the account with the most left when one reaches 95%. Conversations, skills and settings stay shared. `winarchy agent-account` manages them from a terminal. Codex also shows its free limit resets.
 - Agents panel fixes. Keyboard focus and an open tooltip no longer vanish every 30 seconds. The panel follows the Display panel's text size. A wide tooltip no longer scrolls the card sideways or goes off its edge. Pressing refresh twice runs one refresh, and long names no longer wrap. The agents icon now shows once Claude Code or Codex is installed, before any usage, so a new install can sign in from it.
+- Snappier everywhere:
+  - **Menus and panels.** The bar's panels (audio, network, Bluetooth, display, Tailscale, power, agent usage, calendar, world clock) stay loaded after you close them, as the Omarchy menu does, so opening one again is instant instead of starting a new window. `Super + Space` and the other menu keys show the menu without starting a helper process. The menu no longer reloads the theme's stylesheets on every open.
+  - **The bar.** It picks up a theme, font or indicator change within half a second (it could take 2), and stay-awake, night light and do-not-disturb flip the moment you click them. It redraws only what changed.
+  - **Hotkeys.** They no longer stall now and then: the always-running script stopped making slow Windows (WMI) queries every second or two to check on GlazeWM, the auto-tiler and the network. Super releases and window moves skip AutoHotkey's built-in delays.
+  - **Panel actions.** Audio sliders, the app mixer and `Shift + Mute` respond faster: the audio code is compiled once instead of on every call, and bar actions load only the parts of Winarchy they need. The network panel pings the router and the internet at once, and open panels stop polling in the background once they are closed.
 
 ## 0.1.29 — 2026-09-29
 

@@ -4,7 +4,7 @@
 // (`audio ...`), which answers with audio.json.
 import * as zebar from './zebar.mjs';
 import * as env from './env.js';
-import { calm } from './motion.js';
+import { panel } from './panel.js';
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls ?? '', textContent: text ?? '' });
@@ -81,11 +81,18 @@ function render() {
 }
 
 // ---- actions
+// One volume change per frame while the slider is dragged (each one is a round trip to
+// Windows and comes back as a provider update that redraws the panel).
+let wantMaster = null, masterFrame = 0;
 function setMaster(v) {
-  const dev = out?.defaultPlaybackDevice;
-  if (!dev) return;
-  provider.setVolume(v, { deviceId: dev.deviceId });
-  if (dev.isMuted && v > 0) provider.setMute(false, { deviceId: dev.deviceId });
+  wantMaster = v;
+  masterFrame ||= requestAnimationFrame(() => {
+    masterFrame = 0;
+    const dev = out?.defaultPlaybackDevice;
+    if (!dev) return;
+    provider.setVolume(wantMaster, { deviceId: dev.deviceId });
+    if (dev.isMuted && wantMaster > 0) provider.setMute(false, { deviceId: dev.deviceId });
+  });
 }
 const toggleMute = () => {
   const dev = out?.defaultPlaybackDevice;
@@ -103,10 +110,15 @@ async function loadApps() {
 
 $('master').addEventListener('input', e => { dragging = true; fill(e.target, e.target.value); $('pct').textContent = `${e.target.value}%`; setMaster(Number(e.target.value)); });
 $('master').addEventListener('change', () => { dragging = false; });
+let wantMic = null, micFrame = 0;
 $('mic').addEventListener('input', e => {
   dragging = true; fill(e.target, e.target.value); $('micPct').textContent = `${e.target.value}%`;
-  const mic = out?.defaultRecordingDevice;
-  if (mic) provider.setVolume(Number(e.target.value), { deviceId: mic.deviceId });
+  wantMic = Number(e.target.value);
+  micFrame ||= requestAnimationFrame(() => {
+    micFrame = 0;
+    const mic = out?.defaultRecordingDevice;
+    if (mic) provider.setVolume(wantMic, { deviceId: mic.deviceId });
+  });
 });
 $('mic').addEventListener('change', () => { dragging = false; });
 $('micMute').onclick = () => { const mic = out?.defaultRecordingDevice; if (mic) provider.setMute(!mic.isMuted, { deviceId: mic.deviceId }); };
@@ -124,15 +136,8 @@ function place() {
   document.documentElement.style.setProperty('--left', `${Math.max(12, Math.min(window.innerWidth - w - 12, x - w / 2))}px`);
 }
 
-// ---- lifecycle
-let closing = false;
-function close() {
-  if (closing) return;
-  closing = true;
-  document.body.classList.remove('shown');
-  setTimeout(() => Promise.resolve(zebar.currentWidget().window.tauri.close()).catch(() => {}), calm.matches ? 0 : 110);
-}
-document.addEventListener('mousedown', e => { if (!$('panel').contains(e.target)) close(); });
+// ---- lifecycle (panel.js: the window hides on close and is shown again next time)
+const close = () => p.close();
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) return;   // the slider's own
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
@@ -145,14 +150,18 @@ window.addEventListener('keydown', e => {
   e.preventDefault();
 });
 
-document.documentElement.style.setProperty('--top', `${(env.BAR_HEIGHT ?? 26) + (env.GAP ?? 10)}px`);
-const anchor = await getJson('audio-anchor.json');
-anchorX = Number.isFinite(anchor?.x) ? anchor.x : null;
-provider.onOutput(o => { out = o; render(); });
-act('audio', 'sessions').then(loadApps);
-setInterval(() => { if (!dragging) act('audio', 'sessions').then(loadApps); }, 5000);
-
-const shown = () => requestAnimationFrame(() => document.body.classList.add('shown'));
-if (document.hasFocus()) shown();
-else { window.addEventListener('focus', shown, { once: true }); setTimeout(shown, 300); }
-setTimeout(() => window.addEventListener('blur', close), 400);
+// The provider stays subscribed while the panel is hidden; drawing waits for the next open.
+provider.onOutput(o => { out = o; if (p.open) render(); });
+const refreshApps = async () => { if (!dragging) await act('audio', 'sessions').then(loadApps); };
+const p = panel({
+  name: 'audio',
+  async open({ anchor }) {
+    anchorX = Number.isFinite(anchor.x) ? anchor.x : null;
+    dragging = false;
+    out = provider.output ?? out;
+    await loadApps();            // the list from last time, at once
+    refreshApps();               // and a fresh one behind it
+  },
+  onHidden() { dragging = false; },
+});
+p.every(5000, refreshApps);

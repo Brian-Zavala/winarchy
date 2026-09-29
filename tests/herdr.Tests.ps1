@@ -3,7 +3,7 @@
 BeforeAll {
     $Verb = 'test'
     $root = Split-Path -Parent $PSScriptRoot
-    foreach ($f in 'common', 'detect', 'render', 'journal', 'agents', 'herdr') { . "$root\lib\$f.ps1" }
+    foreach ($f in 'common', 'detect', 'render', 'journal', 'agents', 'accounts', 'herdr') { . "$root\lib\$f.ps1" }
     $Code = $root
     # Log lines from tests go to a scratch log, never the real one.
     $LogFile = Join-Path $TestDrive 'winarchy.log'

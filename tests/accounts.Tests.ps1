@@ -3,7 +3,7 @@
 BeforeAll {
     $Verb = 'test'
     $root = Split-Path -Parent $PSScriptRoot
-    foreach ($f in 'common', 'detect', 'agents') { . "$root\lib\$f.ps1" }
+    foreach ($f in 'common', 'detect', 'agents', 'accounts') { . "$root\lib\$f.ps1" }
     $Code = $root
     $LogFile = Join-Path $TestDrive 'winarchy.log'
     $savedProfile = $env:USERPROFILE

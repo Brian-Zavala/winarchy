@@ -149,6 +149,7 @@ function Test-AgentInstalled([string]$name) {
 # The agent's exe: from PATH, or where npm and Claude's native installer put it. AHK and
 # the bar keep the PATH they started with, so an agent installed since is not on it yet.
 function Find-AgentExe([string]$cmd) {
+    # Programs and .ps1 shims (npm's): an untyped lookup that misses searches every module.
     $c = Get-Command $cmd -CommandType Application, ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($c) { return $c.Source }
     foreach ($f in @(
@@ -222,7 +223,7 @@ function Get-AgentCommand([string]$name, [string]$Prompt) {
         $flags = if ($a.promptReplacesArgs) { $extra } else { $flags + $extra }
     }
     # By name when PATH has it (what a person reads in the window), else by full path.
-    $exe = if (Get-Command $a.cmd -ErrorAction SilentlyContinue) { $a.cmd } else { (Find-AgentExe $a.cmd) ?? $a.cmd }
+    $exe = if (Get-Command $a.cmd -CommandType Application, ExternalScript -ErrorAction SilentlyContinue) { $a.cmd } else { (Find-AgentExe $a.cmd) ?? $a.cmd }
     @($exe) + $flags
 }
 
@@ -488,6 +489,3 @@ function Write-AgentUsageFile($cfg) {
     }) 12
     $ordered
 }
-
-# Several accounts per provider (winarchy agent-account).
-. "$PSScriptRoot\accounts.ps1"

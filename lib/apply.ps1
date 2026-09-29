@@ -321,14 +321,15 @@ function Get-ZpackJson($p) {
     }
     $menu = & $widget 'menu' './menu.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf', '*.txt', 'thumbs/**/*') @($menuPrivilege) @($menuPresets)
     # The clock's calendar: the same per-monitor presets (c0..c7), transparent, and a click
-    # outside the panel closes it.
+    # outside the panel closes it. Every panel reads status.json (zebar/omarchy/style.js: a
+    # theme change while it was hidden), so *.json is in each one's files.
     $calPresets = foreach ($i in 0..7) {
         [ordered]@{
             name = "c$i"; anchor = 'top_left'; offsetX = '0px'; offsetY = '0px'; width = '100%'; height = '100%'
             monitorSelection = [ordered]@{ type = 'index'; match = $i }
         }
     }
-    $calendar = & $widget 'calendar' './calendar.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.ttf') @($menuPrivilege) @($calPresets)
+    $calendar = & $widget 'calendar' './calendar.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @($calPresets)
     # The bar's agent usage panel: the calendar's per-monitor presets (u0..u7). Unlike the
     # calendar it reads data files (agents.json, usage-anchor.json), so *.json is included.
     $usagePresets = foreach ($i in 0..7) {
@@ -350,7 +351,7 @@ function Get-ZpackJson($p) {
     $display = & $widget 'display' './display.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'd')
     $tailscale = & $widget 'tailscale' './tailscale.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.txt', '*.ttf') @($menuPrivilege) @(& $panelPresets 't')
     # The world clock (Omarchy's omarchy.elsewhen): w0..w7. It keeps its cities in localStorage.
-    $worldclock = & $widget 'worldclock' './worldclock.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.ttf') @($menuPrivilege) @(& $panelPresets 'w')
+    $worldclock = & $widget 'worldclock' './worldclock.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'w')
     # The bar's Network, Audio and Bluetooth panels (Quattro's omarchy.network / audio /
     # bluetooth): n0..n7, a0..a7, b0..b7. They read state files that winarchy writes.
     $network = & $widget 'network' './network.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'n')
@@ -668,24 +669,24 @@ function Set-MinimizeAnimationPolicy($cfg) {
 # does: that menu item is WM_COMMAND 0x7402 to the desktop's SHELLDLL_DefView, and it only
 # toggles, so look at whether the icon list is visible first.
 function Set-DesktopIconsVisible([bool]$show) {
-    Add-Type -Namespace WinarchyDesk -Name Win -MemberDefinition @'
+    Add-NativeType Desk @'
 [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string name);
 [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string name);
 [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
 [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
-'@ -ErrorAction SilentlyContinue
-    $view = [WinarchyDesk.Win]::FindWindowEx([WinarchyDesk.Win]::FindWindow('Progman', $null), [IntPtr]::Zero, 'SHELLDLL_DefView', $null)
+'@
+    $view = [Winarchy.Desk]::FindWindowEx([Winarchy.Desk]::FindWindow('Progman', $null), [IntPtr]::Zero, 'SHELLDLL_DefView', $null)
     if ($view -eq [IntPtr]::Zero) {
         $w = [IntPtr]::Zero
         do {
-            $w = [WinarchyDesk.Win]::FindWindowEx([IntPtr]::Zero, $w, 'WorkerW', $null)
-            if ($w -ne [IntPtr]::Zero) { $view = [WinarchyDesk.Win]::FindWindowEx($w, [IntPtr]::Zero, 'SHELLDLL_DefView', $null) }
+            $w = [Winarchy.Desk]::FindWindowEx([IntPtr]::Zero, $w, 'WorkerW', $null)
+            if ($w -ne [IntPtr]::Zero) { $view = [Winarchy.Desk]::FindWindowEx($w, [IntPtr]::Zero, 'SHELLDLL_DefView', $null) }
         } while ($w -ne [IntPtr]::Zero -and $view -eq [IntPtr]::Zero)
     }
     if ($view -eq [IntPtr]::Zero) { return }
-    $list = [WinarchyDesk.Win]::FindWindowEx($view, [IntPtr]::Zero, 'SysListView32', $null)
-    if ($list -eq [IntPtr]::Zero -or [WinarchyDesk.Win]::IsWindowVisible($list) -eq $show) { return }
-    [void][WinarchyDesk.Win]::PostMessage($view, 0x111, [IntPtr]0x7402, [IntPtr]::Zero)
+    $list = [Winarchy.Desk]::FindWindowEx($view, [IntPtr]::Zero, 'SysListView32', $null)
+    if ($list -eq [IntPtr]::Zero -or [Winarchy.Desk]::IsWindowVisible($list) -eq $show) { return }
+    [void][Winarchy.Desk]::PostMessage($view, 0x111, [IntPtr]0x7402, [IntPtr]::Zero)
 }
 
 # hideDesktopIcons (on for a new install): Explorer's "Show desktop icons" off. What the PC

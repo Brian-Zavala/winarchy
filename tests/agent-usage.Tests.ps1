@@ -12,7 +12,7 @@ BeforeDiscovery {
 BeforeAll {
     $Verb = 'test'
     $root = Split-Path -Parent $PSScriptRoot
-    foreach ($f in 'common', 'detect', 'render', 'themes', 'journal', 'apply', 'agents') { . "$root\lib\$f.ps1" }
+    foreach ($f in 'common', 'detect', 'render', 'themes', 'journal', 'apply', 'agents', 'accounts') { . "$root\lib\$f.ps1" }
     $Code = $root
     # Log lines from tests go to a scratch log, never the real one.
     $LogFile = Join-Path $TestDrive 'winarchy.log'
@@ -217,7 +217,7 @@ Describe 'Bar and panel wiring' {
     It 'puts the agent icon in #post and polls agents.json' {
         $bar = Get-Content -Raw (Join-Path $Code 'zebar\omarchy\bar.html')
         $bar | Should -Match '(?s)id="post".*id="agents".*</div>'
-        $bar | Should -Match "'agents\.json'\]\.map\(get\)"
+        $bar | Should -Match "'agents\.json': renderAgents"
         $bar | Should -Match "\`$\('agents'\)\.onclick = \(\) => act\('usage'\)"
     }
     It 'registers the usage panel with the data files it reads' {
