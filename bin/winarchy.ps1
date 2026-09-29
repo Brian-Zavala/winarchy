@@ -50,6 +50,8 @@
                                           this for the focused window, then applies it)
   winarchy weather | update-check      refresh the bar's weather / update indicator
   winarchy bar [on|off|toggle]         the top bar (Super+Shift+Space); off stays off
+  winarchy taskbar [on|off|toggle|status]
+                                          hide the Windows taskbar (on after install)
   winarchy animations [on|off|toggle|setup|build|allow|status]
                                           window animations (experimental GlazeWM build);
                                           setup: tools + build + Defender exclusion + on;
@@ -161,6 +163,7 @@ switch ($Verb) {
     'update-check' { Invoke-UpdateCheck }
     'animations' { Invoke-Animations $Arg }
     'autotile' { Invoke-AutoTile $Arg }
+    'taskbar' { Invoke-Taskbar $Arg }
     'bar' {
         # The running winarchy.ahk owns the bar (Omarchy: Super+Shift+Space).
         $wm = @{ '' = 'bar'; 'toggle' = 'bar'; 'on' = 'bar-on'; 'off' = 'bar-off' }[[string]$Arg]

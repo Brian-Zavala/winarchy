@@ -478,7 +478,8 @@ function Get-InstallAnswers($p, [switch]$Restoring) {
         Write-Ok "Found your own launcher script ($personal)."
         $cfg.launchers = -not (Read-YesNo 'Keep using it instead of winarchy''s app keys?' $true)
     }
-    if (& $ask 'hideTaskbar') { $cfg.hideTaskbar = Read-YesNo 'Hide the Windows taskbar (the top bar replaces it)?' $true }
+    # The taskbar is not asked about: Omarchy has only the top bar, the taskbar comes back
+    # whenever GlazeWM stops, and Toggle > Taskbar (winarchy taskbar) brings it back for good.
     # A new install gets Omarchy's capture keys and CapsLock compose; a config from before
     # keeps what it had (Invoke-ConfigMigration writes that when apply runs).
     if ($script:FreshInstall) {
@@ -492,23 +493,41 @@ function Get-InstallAnswers($p, [switch]$Restoring) {
     $cfg
 }
 
-function Set-TaskbarAutoHide {
+# Auto-hide is byte 8 of StuckRects3 (3 = on). $state puts back another value: the one the
+# journal saved, when hiding the taskbar is turned off again.
+function Set-TaskbarAutoHide([int]$state = 3) {
     $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3'
     $cur = (Get-ItemProperty $key -ErrorAction SilentlyContinue).Settings
     if (-not $cur) { return }
     if (-not (Test-Journaled 'taskbar')) {
         [void](Add-JournalEntry @{ kind = 'taskbar'; key = 'taskbar'; autoHide = ($cur[8] -eq 3); stuckRects3 = [Convert]::ToBase64String($cur) })
     }
-    if ($cur[8] -eq 3) { return }
-    $cur[8] = 3
+    if ($cur[8] -eq $state) { return }
+    $cur[8] = $state
     Set-ItemProperty $key -Name Settings -Value $cur
     $mm = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\MMStuckRects3'
     if (Test-Path $mm) {
-        foreach ($n in (Get-Item $mm).Property) { $v = (Get-ItemProperty $mm).$n; $v[8] = 3; Set-ItemProperty $mm -Name $n -Value $v }
+        foreach ($n in (Get-Item $mm).Property) { $v = (Get-ItemProperty $mm).$n; $v[8] = $state; Set-ItemProperty $mm -Name $n -Value $v }
     }
     Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
     if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
+}
+
+# Toggle > Taskbar (winarchy taskbar on|off|toggle|status): hideTaskbar in config.json.
+# Off shows the taskbar again, with the auto-hide it had before winarchy.
+function Invoke-Taskbar([string]$action) {
+    switch ($action) {
+        'on' { Set-ConfigValue 'hideTaskbar' $true; Set-TaskbarAutoHide; Use-Lock { Invoke-Apply } }
+        'off' {
+            Set-ConfigValue 'hideTaskbar' $false
+            $e = @((Read-Journal).entries | Where-Object { $_.key -eq 'taskbar' })[0]
+            if ($e) { Set-TaskbarAutoHide ([Convert]::FromBase64String($e.stuckRects3)[8]) }
+            Use-Lock { Invoke-Apply }
+        }
+        'toggle' { Invoke-Taskbar $(if ((Get-Config).hideTaskbar) { 'off' } else { 'on' }) }
+        default { "taskbar: $(if ((Get-Config).hideTaskbar) { 'hidden' } else { 'shown' })" }
+    }
 }
 
 function Add-CliToPath {
@@ -568,19 +587,20 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     }
     Save-Dir (Join-Path $env:USERPROFILE '.glzr')
 
-    # Asked first, so the download runs while winget installs the apps: it needs none of
-    # them, and on most connections it is done before they are. After Save-Dir: its
-    # thumbnails go under ~/.glzr, which the journal must see as it was before.
+    # Started first, so the download runs while winget installs the apps: it needs none of
+    # them, and on most connections it is done before they are. Not asked: the theme and
+    # background pickers are empty without them; offline, sync carries on with what it has
+    # and "winarchy sync" fetches them later. After Save-Dir: its thumbnails go under
+    # ~/.glzr, which the journal must see as it was before.
     Write-Step 'Omarchy themes and backgrounds'
     $downloaded = @(Get-ChildItem $Themes -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName 'colors.toml') }).Count -gt 1
     $themeDownload = $null
-    $themeOnline = $false
-    if ($restoring -and $downloaded) { Write-Ok 'Already downloaded (kept from before).' }
-    elseif (Read-YesNo 'Download Omarchy''s 22 themes and ~100 backgrounds (about 110 MB)? They download while the apps install.' $true) {
-        $themeOnline = $true
+    $themeOnline = -not ($restoring -and $downloaded)
+    if (-not $themeOnline) { Write-Ok 'Already downloaded (kept from before).' }
+    else {
         $themeDownload = Start-ThemeDownload
-        if ($themeDownload) { Write-Ok 'Downloading in the background.' }
-    } else { Write-Ok 'Skipped: run "winarchy sync" any time.' }
+        Write-Ok "Downloading Omarchy's 22 themes and ~100 backgrounds (about 110 MB)$(if ($themeDownload) { ' in the background, while the apps install' })."
+    }
 
     Install-Dependencies
     Install-HerdrStep

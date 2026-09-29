@@ -71,6 +71,11 @@ ShowTaskbars(*) {
         for hwnd in WinGetList("ahk_class " cls)
             WinShow hwnd
 }
+; Turned off (Toggle > Taskbar): show them now. Apply restarts this script with a
+; force-stop, which skips OnExit and would leave them hidden. A timer, so it runs in
+; its own thread: DetectHiddenWindows does not become every thread's default.
+if Env("hideTaskbar", "1") != "1"
+    SetTimer ShowTaskbars, -1
 HideTaskbars()
 SetTimer HideTaskbars, 1000
 OnExit ShowTaskbars
