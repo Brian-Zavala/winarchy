@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.30 — 2026-09-29
+
 - Snappier everywhere:
   - **Menus and panels.** The bar's panels (audio, network, Bluetooth, display, Tailscale, power, agent usage, calendar, world clock) stay loaded after you close them, as the Omarchy menu does, so opening one again is instant instead of starting a new window. `Super + Space` and the other menu keys show the menu without starting a helper process. The menu no longer reloads the theme's stylesheets on every open.
   - **The bar.** It picks up a theme, font or indicator change within half a second (it could take 2), and stay-awake, night light and do-not-disturb flip the moment you click them. It redraws only what changed.
