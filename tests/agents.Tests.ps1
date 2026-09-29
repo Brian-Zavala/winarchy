@@ -40,8 +40,8 @@ Describe 'Start-AgentTerminal' {
         }
     }
     It 'escapes ; so Windows Terminal does not split it into a second tab' {
-        Start-AgentTerminal @('x;y')
-        Should -Invoke Start-Process -ParameterFilter { @(Split-CommandLine $ArgumentList)[-1] -eq "'x\;y'" }
+        Start-AgentTerminal @('claude', 'x;y')
+        Should -Invoke Start-Process -ParameterFilter { @(Split-CommandLine $ArgumentList)[-1] -eq "claude 'x\;y'" }
     }
     It 'starts it in the folder it is given' {
         Start-AgentTerminal @('claude') -Dir 'C:\Users\me\.winarchy\themes'

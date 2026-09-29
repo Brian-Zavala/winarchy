@@ -171,11 +171,18 @@ function Update-AgentList {
     $agents
 }
 
-# Omarchy picks no agent for you, and neither do we: with nothing set the menu leaves
-# every entry unchecked and the launch keybinding opens the chooser.
+# Omarchy picks no agent for you; Winarchy picks Claude Code once it is installed, so the
+# agent key, the Herdr layouts and the agents panel's tiles work from the start. Any agent
+# you pick replaces it. With nothing picked and no Claude Code, the menu leaves every
+# entry unchecked and the launch keybinding opens the chooser.
+$AutoAgent = 'claude'
+
 function Get-DefaultAgent {
     $name = (Get-Config).apps.agent
-    if ($name -eq 'auto') { $name = $null }
+    if (-not $name -or $name -eq 'auto') {
+        if (Test-AgentInstalled $AutoAgent) { return $AutoAgent }
+        return $null
+    }
     Resolve-AgentName $name
 }
 

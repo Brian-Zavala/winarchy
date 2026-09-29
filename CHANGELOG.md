@@ -3,6 +3,7 @@
 ## Unreleased
 
 - The bar's agent panel follows Omarchy's new agents panel. It shows every subscription at once, with tokens today across all of them. Each limit has a meter and the time left until it resets. _Use_ switches the default agent, and _Sign in_ fixes an expired Claude Code sign-in. Three _Make something_ tiles, _Theme_, _Plugin_ and _App_, start your default agent to build one with you (`winarchy agent-make`). A plugin is a Zebar widget pack of your own, and it now follows theme and font changes. Tokens by day and by model are one click away on each subscription. Prompts sent to an agent (`winarchy agent -Prompt`) now reach it exactly as written, even with quotes or `$` in them.
+- Claude Code is the default coding agent once it's installed, so the agent key, the Herdr layouts and the new tiles work without picking one first. Choosing another under _Setup > Defaults > Agent_ (or `winarchy default-agent`) still replaces it.
 
 ## 0.1.23 — 2026-09-29
 

@@ -189,8 +189,8 @@ function Write-Status($s, [switch]$BumpTheme) {
     $ver = if ($BumpTheme -or -not $old) { [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() } else { $old.themeVersion }
     # The effective font (the default when none was picked), so the font picker can mark it.
     $font = if (Get-Command Get-FontFamily -ErrorAction SilentlyContinue) { Get-FontFamily } else { $s.font }
-    # The current defaults, so Setup > Defaults can tick the one in use. Empty when
-    # nothing is picked: Omarchy chooses no agent for you and leaves the list unchecked.
+    # The current defaults, so Setup > Defaults can tick the one in use. Empty when no
+    # agent is picked and Claude Code (the default) isn't installed.
     $agent = if (Get-Command Get-DefaultAgent -ErrorAction SilentlyContinue) { Get-DefaultAgent } else { $null }
     Write-Json $path ([ordered]@{
         theme = $s.theme; background = $s.background; font = $font; agent = $agent; themeVersion = $ver

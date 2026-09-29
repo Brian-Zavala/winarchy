@@ -362,8 +362,9 @@ function currentItems(r = route, q = $('search').value.trim()) {
     return q ? rows.filter(k => !k.section && matches(`${k.keys} ${k.label}`, q)) : rows;
   }
   if (r === 'agent') {
-    // Omarchy picks no agent for you, so nothing is ticked until one is chosen. One that
-    // isn't installed still shows: picking it says how to install it.
+    // Claude Code is ticked once installed, unless another was chosen (lib/agents.ps1);
+    // before that nothing is. One that isn't installed still shows: picking it says how
+    // to install it.
     return (defaults?.agents ?? []).filter(a => matches(a.label, q)).map(a => ({
       label: a.installed ? a.label : `${a.label}  (not installed)`,
       icon: a.icon, current: a.current, action: ['default-agent', a.key],

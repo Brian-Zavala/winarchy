@@ -19,6 +19,7 @@ meaning. `default/upstream.json` records the upstream commit last reviewed.
 | Reminders, share, transcode, agent, Herdr keys, fullscreen desktop, laptop display / mirror, media keys | the same keys (`ahk/winarchy.ahk`) |
 | Power profiles (Super + Ctrl + P) | _Setup > Power_: Windows' power modes |
 | Media module in the bar | the bar's media module (Zebar's media provider) |
+| No default coding agent until you pick one | Claude Code, once it is installed; picking another replaces it (`apps.agent`) |
 | Agents panel: every subscription's limits, tokens today, Use / sign in, _Make something_ (theme, plugin, app) | the bar's agent panel (`zebar/omarchy/usage.*`); _Plugin_ makes a Zebar widget pack, which follows the theme and font; the tiles' prompts point at `agents/make/*.md` instead of Omarchy's skill |
 
 Every one of these keys yields to a key your own AutoHotkey script in the Startup folder
