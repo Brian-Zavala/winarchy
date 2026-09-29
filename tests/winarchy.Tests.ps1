@@ -455,6 +455,128 @@ Describe 'AutoHotkey settings ini' {
         Write-AhkIni @{} (BaseCfg @{ openOnHoveredMonitor = $false })
         IniText | Should -Match 'openOnHoveredMonitor=0'
     }
+    It 'takes the private-window switch from apps.browser when it overrides the default' {
+        $Generated = Join-Path $TestDrive ([guid]::NewGuid())
+        Write-AhkIni @{ browser = 'C:\c\chrome.exe'; browserPrivate = '--incognito' } (BaseCfg @{ apps = @{ browser = 'C:\ff\firefox.exe' } })
+        IniText | Should -Match 'browser=C:\\ff\\firefox\.exe'
+        IniText | Should -Match 'browserPrivate=-private-window'
+        $Generated = Join-Path $TestDrive ([guid]::NewGuid())
+        Write-AhkIni @{ browser = 'C:\e\msedge.exe'; browserPrivate = '--inprivate' } (BaseCfg @{})
+        IniText | Should -Match 'browserPrivate=--inprivate'
+    }
+}
+
+Describe 'User paths' {
+    BeforeAll { $script:realProfile = $env:USERPROFILE }
+    AfterEach { $env:USERPROFILE = $script:realProfile }
+    It 'finds ~\Pictures where Windows keeps it (OneDrive moves it)' {
+        $env:USERPROFILE = Join-Path $TestDrive 'profile-empty'
+        Mock Get-KnownUserFolder { 'D:\OneDrive\Pictures' } -ParameterFilter { $name -eq 'Pictures' }
+        Expand-UserPath '~\Pictures\Wallpapers' | Should -Be 'D:\OneDrive\Pictures\Wallpapers'
+    }
+    It 'asks Windows for the real folder' {
+        $env:USERPROFILE = $script:realProfile
+        Get-KnownUserFolder 'Pictures' | Should -Be ([Environment]::GetFolderPath('MyPictures'))
+    }
+    It 'keeps a literal folder that exists' {
+        $env:USERPROFILE = Join-Path $TestDrive 'profile-full'
+        New-Item -ItemType Directory -Force "$env:USERPROFILE\Pictures\Wallpapers" | Out-Null
+        Expand-UserPath '~\Pictures\Wallpapers' | Should -Be "$env:USERPROFILE\Pictures\Wallpapers"
+    }
+    It 'leaves other ~ paths alone' {
+        $env:USERPROFILE = Join-Path $TestDrive 'profile-empty'
+        Expand-UserPath '~\Art' | Should -Be "$env:USERPROFILE\Art"
+    }
+}
+
+Describe 'Omarchy apps'' theme file' {
+    BeforeAll { $script:realProfile = $env:USERPROFILE; $script:realXdg = $env:XDG_STATE_HOME }
+    AfterEach { $env:USERPROFILE = $script:realProfile; $env:XDG_STATE_HOME = $script:realXdg }
+    It 'puts the theme''s colors.toml where Omawrite, Omacalc, Omacut and Hype read it, journalled' {
+        $env:USERPROFILE = Join-Path $TestDrive 'profile'
+        $env:XDG_STATE_HOME = Join-Path $TestDrive 'xdg'
+        $Themes = Join-Path $TestDrive 'themes'
+        New-Item -ItemType Directory -Force (Join-Path $Themes 'nord') | Out-Null
+        Set-Content (Join-Path $Themes 'nord\colors.toml') 'accent = "#88c0d0"'
+        Mock Save-File {}
+        Set-OmarchyStateTheme 'nord'
+        Get-Content -Raw "$env:USERPROFILE\.local\state\omarchy\current\theme\colors.toml" | Should -Match '88c0d0'
+        Get-Content -Raw "$env:XDG_STATE_HOME\omarchy\current\theme\colors.toml" | Should -Match '88c0d0'
+        Should -Invoke Save-File -Times 2
+    }
+    It 'writes nothing for a theme without colors' {
+        $env:USERPROFILE = Join-Path $TestDrive 'profile2'
+        $Themes = Join-Path $TestDrive 'nothemes'
+        Set-OmarchyStateTheme 'missing'
+        Test-Path "$env:USERPROFILE\.local" | Should -BeFalse
+    }
+}
+
+Describe 'Bundled theme' {
+    It 'ships a complete Omarchy colors.toml' {
+        $c = Get-Content -Raw (Join-Path $root 'default\themes\tokyo-night\colors.toml')
+        foreach ($k in 'mode', 'accent', 'background', 'foreground', 'red', 'bright_magenta', 'selection') { $c | Should -Match "(?m)^$k = " }
+    }
+    It 'fills an empty themes folder, and never replaces a downloaded copy' {
+        $Themes = Join-Path $TestDrive ([guid]::NewGuid())
+        Mock Log {}
+        Add-BundledThemes
+        Test-Path (Join-Path $Themes 'tokyo-night\colors.toml') | Should -BeTrue
+        Set-Content (Join-Path $Themes 'tokyo-night\colors.toml') 'downloaded'
+        Add-BundledThemes
+        Get-Content (Join-Path $Themes 'tokyo-night\colors.toml') | Should -Be 'downloaded'
+    }
+}
+
+Describe 'Zebar client download' {
+    It 'saves the esm.sh bundle as it is' {
+        $d = Join-Path $TestDrive ([guid]::NewGuid()); New-Item -ItemType Directory $d | Out-Null
+        Save-ZebarClient '3.0.3' $d { param($u) 'export{a as createProvider};' }
+        Get-Content -Raw "$d\zebar.mjs" | Should -Match 'createProvider'
+        @(Get-ChildItem $d -Filter 'zebar-dep-*').Count | Should -Be 0
+    }
+    It 'falls back to jsDelivr and points every import at a local copy' {
+        $d = Join-Path $TestDrive ([guid]::NewGuid()); New-Item -ItemType Directory $d | Out-Null
+        $site = @{
+            'https://cdn.jsdelivr.net/npm/zebar@3.0.3/+esm' = 'import{z}from"/npm/zod@3.24.2/+esm";import{invoke}from"/npm/@tauri-apps/api@2.0.2/core/+esm";export{L as createProvider};'
+            'https://cdn.jsdelivr.net/npm/zod@3.24.2/+esm' = 'export const z=1;'
+            'https://cdn.jsdelivr.net/npm/@tauri-apps/api@2.0.2/core/+esm' = 'import"/npm/zod@3.24.2/+esm";export const invoke=1;'
+        }
+        Save-ZebarClient '3.0.3' $d { param($u) if ($u -like '*esm.sh*') { throw 'blocked' }; $site[$u] ?? (throw "404 $u") }
+        $main = Get-Content -Raw "$d\zebar.mjs"
+        $main | Should -Match '"\./zebar-dep-zod_3\.24\.2\.mjs"'
+        $main | Should -Match '"\./zebar-dep-_tauri-apps_api_2\.0\.2_core\.mjs"'
+        Get-Content -Raw "$d\zebar-dep-_tauri-apps_api_2.0.2_core.mjs" | Should -Match '"\./zebar-dep-zod_3\.24\.2\.mjs"'
+        (Get-ChildItem $d -Filter *.mjs | Get-Content -Raw) -join '' | Should -Not -Match '"/npm/'
+    }
+    It 'writes nothing, and throws for apply to log, when neither site answers' {
+        $d = Join-Path $TestDrive ([guid]::NewGuid()); New-Item -ItemType Directory $d | Out-Null
+        { Save-ZebarClient '3.0.3' $d { param($u) throw 'offline' } } | Should -Throw
+        @(Get-ChildItem $d).Count | Should -Be 0
+    }
+    It 'never lets a failed download stop apply' {
+        $src = Get-Content -Raw (Join-Path $root 'lib\apply.ps1')
+        $src | Should -Match 'try \{ Save-ZebarClient [^\r\n]+\}\s+catch \{ Log '
+    }
+}
+
+Describe 'Default browser' {
+    BeforeAll { $script:base = 'TestRegistry:\https' }
+    It 'reads the ProgId subkey of UserChoiceLatest before the stale UserChoice' {
+        New-Item "$script:base\UserChoice" -Force | New-ItemProperty -Name ProgId -Value 'MSEdgeHTM' | Out-Null
+        New-Item "$script:base\UserChoiceLatest\ProgId" -Force | New-ItemProperty -Name ProgId -Value 'ChromeHTML' | Out-Null
+        Get-DefaultBrowserProgId $script:base | Should -Be 'ChromeHTML'
+    }
+    It 'falls back to UserChoice on builds without UserChoiceLatest' {
+        Remove-Item "$script:base\UserChoiceLatest" -Recurse -Force
+        Get-DefaultBrowserProgId $script:base | Should -Be 'MSEdgeHTM'
+    }
+    It 'maps browsers to their private-window switch' {
+        Get-BrowserPrivateFlag 'C:\x\firefox.exe' | Should -Be '-private-window'
+        Get-BrowserPrivateFlag 'C:\x\msedge.exe' | Should -Be '--inprivate'
+        Get-BrowserPrivateFlag 'C:\x\brave.exe' | Should -Be '--incognito'
+        Get-BrowserPrivateFlag '' | Should -Be '--incognito'
+    }
 }
 
 Describe 'Theme set order' {
@@ -472,6 +594,7 @@ Describe 'Theme set order' {
         }
         Mock Write-Status { $script:order.Add("status:$([bool]$BumpTheme)") }
         Mock Set-Background { $script:order.Add('background') }
+        Mock Set-OmarchyStateTheme {}
         Invoke-ThemeSet 't'
         $script:order -join ' ' | Should -Be 'bar status:True background slow'
     }

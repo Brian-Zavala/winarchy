@@ -153,7 +153,7 @@ switch verb {
     case "share": OmarchyCmd("share")
     case "web-app": RunInTerminal("Web app", CliInTerminal("web-app", arg, A_Args.Length > 2 ? A_Args[3] : ""))
     ; A reminder going off (the scheduled task runs this): stays up long enough to be read.
-    case "notify": Osd(arg, 12000), Sleep(12100)
+    case "notify": OmarchyCmd("reminder", "refresh"), Osd(arg, 12000), Sleep(12100)
     case "animations": ToggleAnimations()
     ; Double-click on the bar (or Style > Menu Bar > Transparency): bar-state.json is what every bar polls.
     case "bar-clear": ToggleBarClear()
@@ -178,6 +178,8 @@ switch verb {
     case "restart": RestartPart(arg)
     ; Update > Config: back to winarchy's own template (yours is kept as .bak).
     case "config-reset": ResetConfig(arg)
+    ; Setup > Power / Super+Ctrl+P (Omarchy's power profiles): Windows' power mode.
+    case "power-mode": SetPowerMode(arg)
     ; Trigger > Hardware (Omarchy's omarchy-hyprland-monitor-internal[-mirror]).
     case "display": ToggleDisplay(arg)
     case "shutdown": Run "shutdown.exe /s /t 0", , "Hide"
@@ -255,6 +257,23 @@ ResetConfig(which) {
 
 ; Laptop Display: off while another monitor is on, back on otherwise. Mirror Display:
 ; duplicate the laptop screen on the other one, and back to extended the next time.
+; Windows' power mode (Settings > Power > Power mode), which works on top of the Balanced
+; plan: Omarchy's power-saver / balanced / performance profiles.
+SetPowerMode(mode) {
+    static ids := Map("saver", "{961CC777-2547-4F9D-8174-7D86181B8A7A}"
+        , "balanced", "{00000000-0000-0000-0000-000000000000}"
+        , "performance", "{DED574B5-45A0-4F42-8737-46345C09C238}")
+    if !ids.Has(mode)
+        return
+    guid := Buffer(16, 0)
+    DllCall("ole32\CLSIDFromString", "str", ids[mode], "ptr", guid)
+    ok := false
+    try ok := DllCall("powrprof\PowerSetActiveOverlayScheme", "ptr", guid, "uint") = 0
+    names := Map("saver", "Power saver", "balanced", "Balanced", "performance", "Performance")
+    Osd(ok ? "Power: " names[mode] : "Windows would not change the power mode (Settings > Power has it)", 1500)
+    Sleep 1600
+}
+
 ToggleDisplay(what) {
     flag := Env("data") "\generated\display-mirror"
     if what = "mirror" {
@@ -297,12 +316,12 @@ GlazeTemplate() {
 }
 
 ; Your copy of winarchy's app keys (made on first edit; saving reloads it). It gets
-; env.ahk through AutoHotkey's /include switch, so it has no #Include of the code folder.
+; lib\launch.ahk through AutoHotkey's /include switch, so it has no #Include of the code folder.
 UserLaunchers() {
     file := Env("data") "\launchers.ahk"
     if !FileExist(file) {
         src := Env("code") "\ahk\launchers.ahk"
-        text := RegExReplace(FileRead(src, "UTF-8"), "m)^#Include lib\env\.ahk\R")
+        text := RegExReplace(FileRead(src, "UTF-8"), "m)^#Include lib\\(env|launch)\.ahk\R")
         f := FileOpen(file, "w", "UTF-8-RAW")
         f.Write(text)
         f.Close()
@@ -311,7 +330,7 @@ UserLaunchers() {
         SetTitleMatchMode 2
         if hwnd := WinExist(src " ahk_class AutoHotkey")
             PostMessage 0x10, 0, 0, , hwnd
-        Run '"' A_AhkPath '" /include "' A_ScriptDir '\lib\env.ahk" "' file '"'
+        Run '"' A_AhkPath '" /include "' A_ScriptDir '\lib\launch.ahk" "' file '"'
     }
     return file
 }

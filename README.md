@@ -55,6 +55,7 @@ Like Omarchy, it lives in [`manual/`](manual/). If a chapter is missing, it's be
 - [TUIs](manual/21-tuis.md)
 - [Browsers](manual/23-browsers.md)
 - [Commercial Apps & Services](manual/24-commercial-apps-services.md)
+- [Web Apps](manual/25-web-apps.md)
 - [Gaming](manual/26-gaming.md)
 - [Other Packages](manual/29-other-packages.md)
 

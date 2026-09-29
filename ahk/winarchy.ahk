@@ -4,6 +4,7 @@
 #Include lib\osd.ahk
 #Include lib\tailscale.ahk
 #Include lib\network.ahk
+#Include lib\compose.ahk
 
 ; Omarchy extras that GlazeWM can't do itself: the bar's screen space, menus,
 ; toggles, panels, capture, drag, clipboard and utility keys.
@@ -244,14 +245,15 @@ Later(fn) {
 }
 ; Project app launchers (Super+Return terminal, ...) unless you use your own.
 ; Your copy (%USERPROFILE%\.winarchy\launchers.ahk, made by Setup > Keybindings) wins;
-; it gets env.ahk through /include, so it needs no #Include of the code folder.
+; it gets lib\launch.ahk (env.ahk and the launcher helpers) through /include, so it needs
+; no #Include of the code folder.
 if Env("launchers", "1") = "1"
     StartLaunchers()
 
 StartLaunchers() {
     user := Env("data") "\launchers.ahk"
     try Run(FileExist(user)
-        ? '"' A_AhkPath '" /include "' A_ScriptDir '\lib\env.ahk" "' user '"'
+        ? '"' A_AhkPath '" /include "' A_ScriptDir '\lib\launch.ahk" "' user '"'
         : '"' A_AhkPath '" "' A_ScriptDir '\launchers.ahk"')
 }
 
@@ -294,6 +296,35 @@ WatchEdits() {
         else
             Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" ' action)   ; shows the result
     }
+}
+
+; Your own scripts in the Startup folder: when one is saved, added or removed, winarchy
+; keys-refresh re-reads the keys they bind, and winarchy's scripts leave those to you
+; (BindUnlessUser). Only a list of names and times: the files are never touched.
+SetTimer WatchStartupKeys, 3000
+
+WatchStartupKeys() {
+    static seen := "", pending := "", since := 0
+    sig := ""
+    loop files A_Startup "\*.*" {
+        if A_LoopFileExt = "ahk" || A_LoopFileExt = "lnk"
+            sig .= A_LoopFileName ":" A_LoopFileTimeModified "|"
+    }
+    if seen = "" && since = 0 {         ; first look: this is how it was at start
+        seen := sig, pending := sig, since := 1
+        return
+    }
+    if sig = seen
+        return
+    if sig != pending {                 ; still being written: wait until it settles
+        pending := sig, since := A_TickCount
+        return
+    }
+    if A_TickCount - since < 1500
+        return
+    seen := sig
+    WmLog("Startup scripts changed: keys-refresh")
+    OmarchyCmd("keys-refresh")
 }
 
 ; The file Setup > Keybindings opens: your own launcher script, or your copy of ours.
@@ -697,7 +728,11 @@ CaptureText() {
     try FileDelete flag
     FileAppend "", flag
     seq := DllCall("GetClipboardSequenceNumber")
-    Send "#+s"
+    ; Snipping Tool's region snip by its URI rather than by sending Win+Shift+S, which a
+    ; script of yours may have taken for something else.
+    try Run "ms-screenclip:"
+    catch
+        Send "#+s"
     start := A_TickCount
     got := false
     while A_TickCount - start < 30000 {
@@ -1875,10 +1910,31 @@ if BlockMinimize {
 #+Backspace::ToggleGaps()             ; window gaps
 #^i::ToggleAwake()                    ; stay awake
 
-; Capture (Win+PrtScn stays Windows' save-to-Screenshots)
+; Capture. Print is Windows' own region snip, Alt+Print records (both layouts).
+;   "captureKeys": "omarchy" (new installs, Omarchy's keys): Super+Print picks a color,
+;     Super+Ctrl+Print copies the text in a region, Shift+Print is Windows' full screenshot
+;     saved to Pictures\Screenshots (what Super+Print does on Windows).
+;   "winarchy" (installs from before): Super+Print stays Windows' save-to-Screenshots,
+;     Super+Ctrl+Print picks a color, Super+Shift+Print copies text.
 !PrintScreen::Send "#+r"              ; screen recording (Snipping Tool)
-#^PrintScreen::SetTimer(ColorPicker, -10)
-#+PrintScreen::SetTimer(CaptureText, -10)   ; text capture (OCR) -> clipboard
+if Env("captureKeys", "winarchy") = "omarchy" {
+    BindUnlessUser("#PrintScreen", (*) => SetTimer(ColorPicker, -10))
+    BindUnlessUser("#^PrintScreen", (*) => SetTimer(CaptureText, -10))
+    BindUnlessUser("+PrintScreen", (*) => Send("#{PrintScreen}"))
+} else {
+    BindUnlessUser("#^PrintScreen", (*) => SetTimer(ColorPicker, -10))
+    BindUnlessUser("#+PrintScreen", (*) => SetTimer(CaptureText, -10))   ; text capture (OCR) -> clipboard
+}
+
+; CapsLock compose (lib\compose.ahk): emoji, em dash, name and email. Never over a game
+; or a fullscreen app, where CapsLock stays CapsLock; both Shifts toggle Caps Lock.
+if Env("compose", "0") = "1" {
+    HotIf (*) => !Busy()
+    BindUnlessUser("CapsLock", Compose)
+    HotIf
+    Hotkey "~LShift", ComposeShift
+    Hotkey "~RShift", ComposeShift
+}
 
 ; Super + left drag: move the window from anywhere inside it.
 ; The window follows the mouse; on release drop.ps1 re-tiles a tiled window
@@ -1987,7 +2043,7 @@ if BlockMinimize {
 #^l::DllCall("LockWorkStation")
 
 ; Omarchy utility panels -> closest Windows equivalents
-#^q::Run "calc.exe"                               ; calculator
+#^q::RunPortOr("omacalc", "calc.exe")             ; calculator: Omacalc once installed (Install > Omarchy Apps)
 #^g::MarkAsGame()                                 ; manual fallback: none of IsGame's checks caught it
 #^t::Activity()                                   ; activity (btop; Task Manager if missing)
 #^n::ToggleNightlight()                           ; nightlight
@@ -1998,8 +2054,8 @@ if BlockMinimize {
 #^a::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" audio-panel')       ; audio panel (again: close)
 #^b::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" bluetooth-panel')   ; bluetooth panel (again: close)
 #^w::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" network-panel')     ; network panel (again: close)
-#^d::Run "ms-settings:display"                    ; display
-#^p::Run "ms-settings:powersleep"                 ; power
+#^d::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" display-panel')     ; display panel (again: close)
+#^p::OpenMenu("power")                            ; power mode (Omarchy's power profiles)
 #^!d::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" calendar')   ; calendar (the clock's)
 #^!e::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" worldclock')   ; world clock (Omarchy's Elsewhen)
 #+!SC033::Send "#n"                               ; Super+Shift+Alt+Comma: notification history
@@ -2009,6 +2065,61 @@ if BlockMinimize {
 ; Super + Shift + Return: browser (Omarchy v4); + Alt + B: private window
 #+Enter::OpenBrowser()
 #+!b::OpenBrowser(true)
+
+; More of Omarchy's keys (default/hypr/bindings/utilities.lua, media.lua). Keys a script of
+; your own in the Startup folder has stay yours (BindUnlessUser).
+BindUnlessUser("#^r", (*) => MenuCmd("reminder"))                 ; set a reminder
+BindUnlessUser("#^!r", (*) => MenuCmd("reminder", "show"))        ; show reminders
+BindUnlessUser("#^+r", (*) => MenuCmd("reminder", "clear"))       ; clear reminders
+BindUnlessUser("#^s", (*) => MenuCmd("share"))                    ; share (LocalSend)
+BindUnlessUser("#^SC034", (*) => MenuCmd("transcode"))            ; Super+Ctrl+Period: transcode
+BindUnlessUser("#^+a", (*) => MenuCmd("agent"))                   ; coding agent (asks which, if none is set)
+BindUnlessUser("#^k", (*) => OpenMenu("herdr-keys"))              ; Herdr keybindings
+BindUnlessUser("#^!f", (*) => ToggleFullscreenDesktop())          ; bar and gaps off together
+BindUnlessUser("#^Delete", (*) => MenuCmd("display", "internal")) ; laptop screen off / on
+BindUnlessUser("#^!Delete", (*) => MenuCmd("display", "mirror"))  ; mirror the screens / extend
+; Media: Alt + volume keys step 1%, Alt + Play skips ahead, Alt + Shift + Play goes back,
+; Shift + Mute switches the playback device. Over a game they still work, just without an OSD.
+BindUnlessUser("!Volume_Up", (*) => StepVolume(1))
+BindUnlessUser("!Volume_Down", (*) => StepVolume(-1))
+BindUnlessUser("!Media_Play_Pause", (*) => Send("{Media_Next}"))
+BindUnlessUser("!+Media_Play_Pause", (*) => Send("{Media_Prev}"))
+BindUnlessUser("+Volume_Mute", (*) => SetTimer(NextAudioOutput, -10))
+
+; One of Omarchy's own apps, built for Windows (lib/ports.ps1), else Windows' own.
+RunPortOr(name, fallback) {
+    exe := EnvGet("LOCALAPPDATA") "\Programs\Winarchy\oma\" name "\" name ".exe"
+    try Run(FileExist(exe) ? '"' exe '"' : fallback)
+}
+
+MenuCmd(verb, arg := "") {
+    Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" ' verb (arg != "" ? " " arg : ""))
+}
+
+StepVolume(delta) {
+    SoundSetVolume (delta > 0 ? "+" : "") delta
+    if !Busy()
+        Osd("Volume " Round(SoundGetVolume()) "%")
+}
+
+NextAudioOutput() {
+    out := Env("data") "\generated\audio-output.txt"
+    try FileDelete out
+    OmarchyCmdWait("audio", "next-output")
+    name := ""
+    try name := Trim(FileRead(out, "UTF-8"))
+    if !Busy()
+        Osd(name != "" ? "Sound: " name : "No other playback device")
+}
+
+; Omarchy's full screen desktop: no bar and no gaps, and back to both.
+ToggleFullscreenDesktop() {
+    global BarEnabled
+    full := !BarEnabled && !GapsOn()
+    ToggleBar(full ? "on" : "off")
+    ApplyGaps(full, full)
+    Osd("Full screen desktop " (full ? "off" : "on"))
+}
 
 OpenBrowser(private := false) {
     exe := Env("browser")

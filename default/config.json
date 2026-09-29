@@ -9,6 +9,8 @@
   "hideTaskbar": true,
   "takeOverWinSpace": true,
   "launchers": true,
+  "captureKeys": "winarchy",
+  "compose": false,
   "apps": {
     "terminal": "auto",
     "browser": "auto",

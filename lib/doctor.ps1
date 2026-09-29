@@ -68,6 +68,20 @@ function Invoke-Doctor([switch]$Fix) {
         if ($admin) { & $check "admin game helper: $($admin.Count) game(s) run as administrator" $false 'winarchy game-setup (one admin prompt), so Super+W and the bar can close them' }
     }
 
+    # Your own Startup scripts' keys: winarchy's leave those to you (lib/keys.ps1). Only
+    # information: a key you took is not a problem.
+    $uk = $p.userHotkeys
+    if (@($uk.files).Count) {
+        Write-Host "`nKeys"
+        foreach ($f in @($uk.files)) { Write-Host "  --    your script: $f" -ForegroundColor DarkGray }
+        $names = @($uk.keys | ForEach-Object { ConvertTo-KeyText $_ })
+        & $check "$($names.Count) key(s) left to your scripts$(if ($names) { ": $($names -join ', ')" })" $true ''
+        if ($uk.dynamic) { Write-Host "  --    $($uk.dynamic) Hotkey() call(s) with a variable name: those keys can't be known without running the script, so winarchy's stay bound" -ForegroundColor DarkGray }
+        if ($cfg.launchers -and (Test-Path (Join-Path $p.startup 'launchers.ahk'))) {
+            Write-Host '  --    Startup\launchers.ahk and winarchy''s launchers both run: yours keeps its keys, winarchy''s fill in the rest ("launchers": false in config.json turns winarchy''s off)' -ForegroundColor DarkGray
+        }
+    }
+
     Write-Host "`nGenerated files"
     foreach ($f in @(
             @((Join-Path $Generated 'winarchy.ini'), 'AutoHotkey settings'),

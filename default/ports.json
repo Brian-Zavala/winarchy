@@ -1,0 +1,10 @@
+{
+  "_help": "Omarchy's own apps built for Windows (.github/workflows/ports.yml), one self-contained x64 zip each. Filled in by hand from a ports workflow run's output (url and sha256), so an install never downloads something this file has not pinned. An app appears in Install > Omarchy Apps once it has a url.",
+  "apps": [
+    { "key": "omawrite", "label": "Omawrite", "source": "omacom-io/omawrite", "tag": "v0.5.0", "version": "0.5.0", "url": null, "sha256": null, "note": "Omarchy's writing app. Super + Shift + W." },
+    { "key": "omacalc", "label": "Omacalc", "source": "omacom-io/omacalc", "tag": "v0.2.2", "version": "0.2.2", "url": null, "sha256": null, "note": "Omarchy's calculator. Super + Ctrl + Q." },
+    { "key": "omacut", "label": "Omacut", "source": "omacom-io/omacut", "tag": "v0.4.0", "version": "0.4.0", "url": null, "sha256": null, "note": "Omarchy's video trimmer. It uses FFmpeg (Install > Windows > FFmpeg)." },
+    { "key": "hype", "label": "Hype (presentations)", "source": "omacom/hype", "tag": "v0.4.3", "version": "0.4.3", "url": null, "sha256": null, "note": "Omarchy's presentation app. Video export uses FFmpeg (Install > Windows > FFmpeg)." },
+    { "key": "aether", "label": "Aether (theme maker)", "source": "omacom-io/aether", "tag": "main", "version": "0", "url": null, "sha256": null, "note": "Makes a theme from a picture; winarchy theme <name> applies it." }
+  ]
+}

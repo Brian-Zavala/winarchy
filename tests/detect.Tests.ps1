@@ -2,7 +2,7 @@
 BeforeAll {
     $Verb = 'test'
     $root = Split-Path -Parent $PSScriptRoot
-    foreach ($f in 'common', 'detect', 'animations') { . "$root\lib\$f.ps1" }
+    foreach ($f in 'common', 'detect', 'keys', 'animations') { . "$root\lib\$f.ps1" }
     $Code = $root
     # Log lines from tests go to a scratch log, never the real one.
     $LogFile = Join-Path $TestDrive 'winarchy.log'
@@ -16,6 +16,7 @@ Describe 'Update-Paths' {
         try {
             Mock Find-Program { $null }
             Mock Get-MonitorLayout { @() }
+            Mock Get-UserHotkeys { [ordered]@{ keys = @(); files = @(); dynamic = 0 } }
             $p = Update-Paths
             $p.glazewmOfficial | Should -BeNullOrEmpty
             $p.glazewmCliOfficial | Should -BeNullOrEmpty

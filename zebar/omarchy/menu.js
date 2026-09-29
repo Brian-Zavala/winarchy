@@ -406,8 +406,8 @@ function currentItems() {
       .filter(g => (removing ? g.items.some(i => i.installed) : true))
       .filter(g => matches(g.label, q))
       .map(g => ({ label: g.label, icon: g.icon, route: `${route}-${g.key}` }));
-    // Omarchy's Web App entry: a Start menu shortcut to a site in its own window.
-    const web = { label: 'Web App', icon: '\u{F059F}', action: removing ? ['web-app', 'remove'] : ['web-app'] };
+    // Omarchy's Web App entry for any other site (the presets are the Web Apps group).
+    const web = { label: 'Custom Web App', icon: '\u{F059F}', action: removing ? ['web-app', 'remove'] : ['web-app'] };
     return matches(web.label, q) ? [...groups, web] : groups;
   }
   if (route.startsWith('install-') || route.startsWith('remove-')) {

@@ -3,8 +3,12 @@
 It deliberately makes the client's life hard in the ways a real server can:
 notifications without an id interleaved with replies, a reply that arrives late
 (to exercise the timeout loop), and output flushed line by line.
+
+FAKE_CODEX_ACCOUNT_HANGS: account/read never answers, as Codex 0.158's can.
+FAKE_CODEX_NO_PLAN: the rate limits leave planType out, so account/read names it.
 """
 import json
+import os
 import sys
 import time
 
@@ -27,12 +31,17 @@ for raw in sys.stdin:
     elif method == "initialized":
         continue  # a notification: no reply
     elif method == "account/read":
-        time.sleep(0.6)  # late, but inside the 4 s deadline
+        if os.environ.get("FAKE_CODEX_ACCOUNT_HANGS"):
+            continue
         send({"method": "account/updated", "params": {}})
         send({"id": mid, "result": {"account": {"type": "chatgpt", "planType": "plus"}}})
     elif method == "account/rateLimits/read":
-        send({"id": mid, "result": {"rateLimits": {
+        time.sleep(0.6)  # late, but inside the deadline
+        limits = {
             "planType": "pro",
             "primary": {"usedPercent": 42, "windowDurationMins": 300, "resetsAt": 1790000000},
             "secondary": {"usedPercent": 7.5, "windowDurationMins": 10080, "resetsAt": 1790500000},
-        }}})
+        }
+        if os.environ.get("FAKE_CODEX_NO_PLAN"):
+            del limits["planType"]
+        send({"id": mid, "result": {"rateLimits": limits}})

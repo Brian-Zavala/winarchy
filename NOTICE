@@ -7,7 +7,9 @@ winarchy includes or is derived from:
     (templates/herdr.toml.tpl, from config/herdr/config.toml) and layouts (lib/herdr.ps1, from
     default/bash/fns/herdr); the coding-agent launch flags (lib/agents.ps1, from
     bin/omarchy-agent); and the agent usage collectors lib/agents/usage-*.py, ported from
-    bin/omarchy-agent-usage-* with Windows changes marked "winarchy:". Theme files
+    bin/omarchy-agent-usage-* with Windows changes marked "winarchy:"; and the Tokyo Night
+    theme's colors.toml, neovim.lua and vscode.json (default/themes/tokyo-night, from
+    themes/tokyo-night), so a theme applies even without the download. Other theme files
     (colors.toml, neovim.lua, vscode.json, btop.theme, ...), templates and backgrounds are
     downloaded from the Omarchy repository at install time and are not part of this
     repository. Background artwork remains the property of its respective artists.
@@ -15,7 +17,8 @@ winarchy includes or is derived from:
 Installed separately (not bundled), each under its own license:
 
 - GlazeWM and Zebar (https://github.com/glzr-io), GPL-3.0 - installed with winget. The Zebar
-  client library (zebar.mjs) is downloaded at install time from the npm package.
+  client library (zebar.mjs) is downloaded at install time from the npm package (esm.sh's
+  bundle, or jsDelivr's build and its dependencies when esm.sh is unreachable).
   The optional window-animation build (`winarchy animations build`) is compiled on the user's
   PC from the GPL-3.0 source of glzr-io/glazewm pull request #1392 (florensm/glazewm, pinned
   commit); no binaries are distributed.

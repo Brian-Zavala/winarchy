@@ -12,6 +12,8 @@ From left to right:
 | Workspaces | Go to that workspace | |
 | Indicators | Turn it off | |
 | The clock, centered | The calendar (`Super + Ctrl + Alt + D`) | The next date format; middle-click opens the world clock (`Super + Ctrl + Alt + E`) |
+| What's playing, when something is | Play / pause | Next track; middle-click goes back |
+| A bell and a time, when a reminder is set | All your reminders (`Super + Ctrl + Alt + R`) | |
 | Weather | The weather details | |
 | Updates, when there are any | Update everything | |
 | The chevron | Running windows and the tray | |

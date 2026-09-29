@@ -1,0 +1,21 @@
+{
+  "_help": "Omarchy's web apps (default/hypr/bindings/applications.lua and install/packaging/webapps.sh), same URLs. key: the catalog key (Install > Web Apps); hotkey: AutoHotkey syntax, bound by ahk/launchers.ahk unless your own Startup script has it; focus: bring an open one back instead of opening another; title: how that open window's title reads (the site's own name), for one opened some other way.",
+  "apps": [
+    { "key": "hey", "label": "HEY", "url": "https://app.hey.com", "hotkey": "#+e", "title": "HEY" },
+    { "key": "hey-calendar", "label": "HEY Calendar", "url": "https://app.hey.com/calendar/weeks/", "hotkey": "#+c", "title": "HEY" },
+    { "key": "hey-compose", "label": "HEY Compose", "url": "https://app.hey.com/messages/new?display=standalone&new_window=true", "hotkey": "#+!e", "install": false },
+    { "key": "basecamp", "label": "Basecamp", "url": "https://launchpad.37signals.com", "title": "Basecamp" },
+    { "key": "chatgpt-web", "label": "ChatGPT", "url": "https://chatgpt.com", "hotkey": "#+a", "title": "ChatGPT" },
+    { "key": "grok", "label": "Grok", "url": "https://grok.com", "hotkey": "#+!a", "title": "Grok" },
+    { "key": "whatsapp", "label": "WhatsApp", "url": "https://web.whatsapp.com/", "hotkey": "#+!g", "focus": true, "title": "WhatsApp" },
+    { "key": "google-messages", "label": "Google Messages", "url": "https://messages.google.com/web/conversations", "hotkey": "#+^g", "focus": true, "title": "Messages" },
+    { "key": "google-photos", "label": "Google Photos", "url": "https://photos.google.com/", "hotkey": "#+p", "focus": true, "title": "Google Photos" },
+    { "key": "google-maps", "label": "Google Maps", "url": "https://maps.google.com/", "focus": true, "title": "Google Maps" },
+    { "key": "google-contacts", "label": "Google Contacts", "url": "https://contacts.google.com/", "title": "Google Contacts" },
+    { "key": "x", "label": "X", "url": "https://x.com/", "hotkey": "#+x", "title": "X" },
+    { "key": "x-post", "label": "X Post", "url": "https://x.com/compose/post", "hotkey": "#+!x", "install": false },
+    { "key": "youtube", "label": "YouTube", "url": "https://youtube.com/", "hotkey": "#+y", "title": "YouTube" },
+    { "key": "zoom", "label": "Zoom", "url": "https://app.zoom.us/wc/home", "title": "Zoom" },
+    { "key": "discord", "label": "Discord", "url": "https://discord.com/channels/@me", "title": "Discord" }
+  ]
+}

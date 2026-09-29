@@ -43,10 +43,21 @@ function Find-Python {
         } catch {}
     }
     foreach ($c in @(Get-Command python.exe, python3.exe -CommandType Application -All -ErrorAction SilentlyContinue)) {
-        if ($c.Source -like '*\WindowsApps\*') { continue }   # the Store stub
+        # WindowsApps holds both the Store stub and a real Store (or Install Manager)
+        # Python under the same alias name, so ask it rather than go by the path.
+        if ($c.Source -like '*\WindowsApps\*' -and -not (Test-RealPython $c.Source)) { continue }
         return $c.Source
     }
     $null
+}
+
+# The stub, given arguments, prints a hint and exits 9009 without opening the Store.
+function Test-RealPython([string]$exe) {
+    try {
+        # No Select-Object -First here: stopping the pipeline early loses the exit code.
+        $out = @(& $exe -c 'import sys; print(sys.version_info[0])' 2>$null)
+        $LASTEXITCODE -eq 0 -and "$($out[0])".Trim() -eq '3'
+    } catch { $false }
 }
 
 function Find-Pwsh {
@@ -67,13 +78,20 @@ function Find-TerminalSettings {
     )
 }
 
+# The https handler's ProgId. Current builds keep the live choice in a ProgId subkey
+# of UserChoiceLatest (its own values are only a hash), and leave the older UserChoice
+# behind with whatever was chosen before, so the subkey comes first.
+function Get-DefaultBrowserProgId([string]$base = 'HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https') {
+    foreach ($k in 'UserChoiceLatest\ProgId', 'UserChoiceLatest', 'UserChoice') {
+        $v = (Get-ItemProperty (Join-Path $base $k) -ErrorAction SilentlyContinue).ProgId
+        if ($v) { return $v }
+    }
+    $null
+}
+
 # Default browser from the https handler, with its private-window flag.
 function Find-Browser {
-    $progId = $null
-    foreach ($k in 'UserChoiceLatest', 'UserChoice') {
-        $v = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\$k" -ErrorAction SilentlyContinue).ProgId
-        if ($v) { $progId = $v; break }
-    }
+    $progId = Get-DefaultBrowserProgId
     $exe = $null
     if ($progId) {
         $cmd = (Get-ItemProperty "Registry::HKEY_CLASSES_ROOT\$progId\shell\open\command" -ErrorAction SilentlyContinue).'(default)'
@@ -83,14 +101,19 @@ function Find-Browser {
         $exe = Find-First @("$env:ProgramFiles\Google\Chrome\Application\chrome.exe", "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe")
     }
     $name = if ($exe) { [IO.Path]::GetFileNameWithoutExtension($exe).ToLower() } else { '' }
-    $private = switch -Regex ($name) {
+    @{ exe = $exe; name = $name; private = (Get-BrowserPrivateFlag $exe); progId = $progId }
+}
+
+# A browser's private-window switch, from its exe name.
+function Get-BrowserPrivateFlag([string]$exe) {
+    $name = if ($exe) { [IO.Path]::GetFileNameWithoutExtension($exe).ToLower() } else { '' }
+    switch -Regex ($name) {
         '^(chrome|brave|vivaldi|chromium|thorium)$' { '--incognito' }
         '^msedge$' { '--inprivate' }
         '^(firefox|librewolf|waterfox|zen)$' { '-private-window' }
         '^opera' { '--private' }
         default { '--incognito' }
     }
-    @{ exe = $exe; name = $name; private = $private; progId = $progId }
 }
 
 # Flow Launcher's own hotkey ("Alt + Space") as an AutoHotkey Send string ("!{Space}").
@@ -182,6 +205,8 @@ function Update-Paths {
         screenshots    = Get-KnownFolder 'b7bede81-df94-4682-a7d8-57a52620b86f'
         pictures       = [Environment]::GetFolderPath('MyPictures')
         startup        = [Environment]::GetFolderPath('Startup')
+        # The keys your own Startup scripts bind: winarchy's leave them to you (lib/keys.ps1).
+        userHotkeys    = Get-UserHotkeys
         clock24        = $culture.DateTimeFormat.ShortTimePattern -cmatch 'H'
         metric         = [Globalization.RegionInfo]::CurrentRegion.IsMetric
         monitors       = @(Get-MonitorLayout)

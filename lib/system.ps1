@@ -89,25 +89,45 @@ function New-WinarchyReminder([string]$When, [string]$Message) {
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
     Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Settings $settings -Description $Message -Force | Out-Null
     Write-Host "Reminder set for $($at.ToString('ddd HH:mm')): $Message"
+    Update-ReminderFile
 }
 
+# Every reminder still to come. One that has gone off is a task with no next run: it is
+# removed here, so they don't pile up in Task Scheduler.
 function Get-WinarchyReminders {
     Get-ScheduledTask -TaskName "$ReminderPrefix*" -ErrorAction SilentlyContinue | ForEach-Object {
         $info = $_ | Get-ScheduledTaskInfo
+        if (-not $info.NextRunTime -or $info.NextRunTime -lt (Get-Date)) {
+            if ($info.LastRunTime -and $info.LastRunTime.Year -gt 2000) { Unregister-ScheduledTask -TaskName $_.TaskName -Confirm:$false -ErrorAction SilentlyContinue }
+            return
+        }
         [pscustomobject]@{ name = $_.TaskName; at = $info.NextRunTime; message = $_.Description }
     } | Sort-Object at
 }
 
+# reminders.json for the bar's bell: the next one and how many there are. It lives in the
+# pack beside the other state files, and only ever comes from here (never from the code).
+function Update-ReminderFile {
+    $all = @(Get-WinarchyReminders)
+    $next = $all | Select-Object -First 1
+    Write-Json (Join-Path $Pack 'reminders.json') ([ordered]@{
+            count = $all.Count
+            next = $(if ($next) { [ordered]@{ at = $next.at.ToString('o'); message = $next.message } })
+        })
+}
+
 function Show-WinarchyReminders {
     $all = @(Get-WinarchyReminders)
+    Update-ReminderFile
     if (-not $all) { Write-Host 'No reminders.'; return }
     foreach ($r in $all) { Write-Host ("{0:ddd HH:mm}  {1}" -f $r.at, $r.message) }
 }
 
 function Clear-WinarchyReminders {
-    $all = @(Get-WinarchyReminders)
-    foreach ($r in $all) { Unregister-ScheduledTask -TaskName $r.name -Confirm:$false }
+    $all = @(Get-ScheduledTask -TaskName "$ReminderPrefix*" -ErrorAction SilentlyContinue)
+    foreach ($r in $all) { Unregister-ScheduledTask -TaskName $r.TaskName -Confirm:$false }
     Write-Host "Cleared $($all.Count) reminder$(if ($all.Count -ne 1) { 's' })."
+    Update-ReminderFile
 }
 
 # --- Trigger > Speed Test ----------------------------------------------------------------
@@ -142,21 +162,86 @@ function Invoke-SpeedTest([string]$Kind) {
 
 # --- Trigger > Transcode -----------------------------------------------------------------
 
-function Invoke-Transcode([string]$Format, [string]$Path) {
+# Omarchy's omarchy-transcode: a picture to jpg / png at high, medium or low size, a video to
+# mp4 / gif at 4k, 1080p or 720p, saved beside it as <name>-<size>.<format> and copied to
+# the clipboard as a file. The same sizes and encoder settings; pictures go through
+# ImageMagick as there when it is installed, else through FFmpeg.
+$TranscodePictureExt = 'jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'avif', 'bmp', 'tif', 'tiff'
+$TranscodeVideoExt = 'mp4', 'mov', 'm4v', 'mkv', 'webm', 'avi'
+
+function Get-TranscodeType([string]$Path) {
+    $ext = [IO.Path]::GetExtension($Path).TrimStart('.').ToLower()
+    if ($TranscodeVideoExt -contains $ext) { 'video' } elseif ($TranscodePictureExt -contains $ext) { 'picture' } else { $null }
+}
+
+function Get-TranscodeOutput([string]$Path, [string]$Format, [string]$Resolution) {
+    Join-Path ([IO.Path]::GetDirectoryName($Path)) "$([IO.Path]::GetFileNameWithoutExtension($Path))-$Resolution.$Format"
+}
+
+# The program and its arguments for one transcode (no shell in between: paths may have spaces).
+function Get-TranscodeCommand([string]$Type, [string]$In, [string]$Format, [string]$Resolution, [string]$Out, [bool]$Magick) {
+    if ($Type -eq 'picture') {
+        $width = @{ high = 3160; medium = 2160; low = 1080 }[$Resolution]
+        if (-not $width) { throw "picture sizes are high, medium or low (not '$Resolution')" }
+        if ($Format -notin 'jpg', 'png') { throw "pictures become jpg or png (not '$Format')" }
+        if ($Magick) {
+            $opts = if ($Format -eq 'jpg') { @('-quality', '85', '-strip') }
+                else { @('-strip', '-define', 'png:compression-filter=5', '-define', 'png:compression-level=9', '-define', 'png:compression-strategy=1', '-define', 'png:exclude-chunk=all') }
+            return @{ exe = 'magick'; args = @($In, '-resize', "${width}x>") + $opts + @($Out) }
+        }
+        # FFmpeg's equivalent of "${width}x>": narrower pictures keep their size.
+        $q = if ($Format -eq 'jpg') { @('-q:v', '3') } else { @('-compression_level', '9') }
+        return @{ exe = 'ffmpeg'; args = @('-y', '-i', $In, '-vf', "scale='min($width,iw)':-2", '-frames:v', '1') + $q + @($Out) }
+    }
+    $height = @{ '4k' = 2160; '1080p' = 1080; '720p' = 720 }[$Resolution]
+    if (-not $height) { throw "video sizes are 4k, 1080p or 720p (not '$Resolution')" }
+    $scale = "scale=-2:$height"
+    switch ($Format) {
+        'mp4' {
+            $codec = if ($Resolution -eq '4k') { @('-c:v', 'libx265', '-preset', 'slow', '-crf', '24') } else { @('-c:v', 'libx264', '-preset', 'fast', '-crf', '23') }
+            @{ exe = 'ffmpeg'; args = @('-y', '-i', $In, '-vf', $scale) + $codec + @('-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', $Out) }
+        }
+        'gif' { @{ exe = 'ffmpeg'; args = @('-y', '-i', $In, '-vf', "fps=10,${scale}:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse", $Out) } }
+        default { throw "videos become mp4 or gif (not '$Format')" }
+    }
+}
+
+# A numbered pick, Omarchy's omarchy-menu-select in a terminal.
+function Read-Choice([string]$Title, [string[]]$Options) {
+    Write-Host $Title
+    for ($i = 0; $i -lt $Options.Count; $i++) { Write-Host "  $($i + 1)  $($Options[$i])" }
+    $a = Read-Host 'Number'
+    if ($a -match '^\d+$' -and [int]$a -ge 1 -and [int]$a -le $Options.Count) { return $Options[[int]$a - 1] }
+    throw 'nothing picked'
+}
+
+function Invoke-Transcode([string]$Path, [string]$Format, [string]$Resolution) {
     if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
         Write-Host 'ffmpeg is not installed: installing it (winget)...'
         winget install -e --id Gyan.FFmpeg --accept-package-agreements --accept-source-agreements
         $env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine')
         if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { throw 'ffmpeg is installed but not on PATH yet: open a new terminal and run this again' }
     }
-    if (-not $Format) { $Format = Read-Host 'Convert to (mp4, webm, mp3, png, jpg)' }
-    if (-not $Path) { $Path = (Read-Host 'File to convert (drag it in here)').Trim('"', ' ') }
-    if (-not (Test-Path -LiteralPath $Path)) { throw "no such file: $Path" }
-    $out = [IO.Path]::ChangeExtension($Path, $Format.TrimStart('.'))
-    if ($out -eq $Path) { throw 'that file is already in that format' }
-    & ffmpeg -y -i $Path $out
-    if ($LASTEXITCODE) { throw "ffmpeg failed (exit $LASTEXITCODE)" }
-    Write-Host "Wrote $out"
+    if (-not $Path) {
+        # The newest pictures and videos in Pictures and Videos, like Omarchy's picker.
+        $dirs = @([Environment]::GetFolderPath('MyPictures'), [Environment]::GetFolderPath('MyVideos')) | Where-Object { $_ -and (Test-Path $_) }
+        $recent = @(Get-ChildItem $dirs -File -Recurse -Depth 2 -ErrorAction SilentlyContinue |
+                Where-Object { Get-TranscodeType $_.FullName } | Sort-Object LastWriteTime -Descending | Select-Object -First 15)
+        for ($i = 0; $i -lt $recent.Count; $i++) { Write-Host "  $($i + 1)  $($recent[$i].Name)" }
+        $a = (Read-Host "$(if ($recent) { 'Number, or ' })drag a picture or video in here").Trim('"', ' ')
+        $Path = if ($a -match '^\d+$' -and [int]$a -ge 1 -and [int]$a -le $recent.Count) { $recent[[int]$a - 1].FullName } else { $a }
+    }
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { throw "no such file: $Path" }
+    $type = Get-TranscodeType $Path
+    if (-not $type) { throw "not a picture or video: $Path" }
+    if (-not $Format) { $Format = Read-Choice 'Format' $(if ($type -eq 'picture') { 'jpg', 'png' } else { 'mp4', 'gif' }) }
+    if (-not $Resolution) { $Resolution = Read-Choice 'Size' $(if ($type -eq 'picture') { 'high', 'medium', 'low' } else { '4k', '1080p', '720p' }) }
+    $out = Get-TranscodeOutput $Path $Format $Resolution
+    $cmd = Get-TranscodeCommand $type $Path $Format $Resolution $out ([bool](Get-Command magick -ErrorAction SilentlyContinue))
+    & $cmd.exe @($cmd.args)
+    if ($LASTEXITCODE) { throw "$($cmd.exe) failed (exit $LASTEXITCODE)" }
+    Set-Clipboard -Path $out
+    Write-Host "Saved $out and copied it to the clipboard."
 }
 
 # --- Trigger > Share (LocalSend) ---------------------------------------------------------
@@ -168,36 +253,5 @@ function Start-Share {
     winget install -e --id LocalSend.LocalSend --accept-package-agreements --accept-source-agreements
 }
 
-# --- Install > Web App -------------------------------------------------------------------
-# Omarchy's web apps are Chromium --app windows with a launcher entry: a Start Menu
-# shortcut to Edge in app mode is the same thing here.
-
-function Get-WebAppDir { Join-Path ([Environment]::GetFolderPath('Programs')) 'Winarchy Web Apps' }
-
-function New-WebApp([string]$Name, [string]$Url) {
-    if (-not $Name) { $Name = Read-Host 'Name' }
-    if (-not $Url) { $Url = Read-Host 'URL' }
-    if ($Url -notmatch '^https?://') { $Url = "https://$Url" }
-    if (-not $Name) { throw 'a web app needs a name' }
-    $browser = (Get-Command msedge -ErrorAction SilentlyContinue)?.Source
-    if (-not $browser) { $browser = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe" }
-    $dir = Get-WebAppDir
-    New-Item -ItemType Directory -Force $dir | Out-Null
-    $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $dir "$Name.lnk"))
-    $lnk.TargetPath = $browser
-    $lnk.Arguments = "--app=$Url"
-    $lnk.Save()
-    Write-Host "Web app '$Name' is in the Start menu (Apps)."
-}
-
-function Remove-WebApp([string]$Name) {
-    $dir = Get-WebAppDir
-    if (-not $Name) {
-        $apps = @(Get-ChildItem $dir -Filter *.lnk -ErrorAction SilentlyContinue | ForEach-Object { $_.BaseName })
-        if (-not $apps) { Write-Host 'No web apps.'; return }
-        $apps | ForEach-Object { Write-Host "  $_" }
-        $Name = Read-Host 'Remove which one'
-    }
-    Remove-Item -LiteralPath (Join-Path $dir "$Name.lnk") -Force
-    Write-Host "Removed web app '$Name'."
-}
+# Install > Web App lives in lib/webapps.ps1 (presets, keys, shortcuts with their own
+# AppUserModelID).

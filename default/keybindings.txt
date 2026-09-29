@@ -65,11 +65,7 @@ GAMES   (automatic: Windows' Game Bar, Steam/Epic/Xbox/GOG/EA/Ubisoft's own fold
   "gameMode": false             In config.json: turn all of this off
 
 CAPTURE   (no PrtScn key on your laptop? Super + Ctrl + C opens the Capture menu)
-  Print                         Screenshot (region, Snipping Tool)
-  Super + Print                 Full screenshot saved to Pictures\Screenshots
-  Alt + Print                   Screen recording (Snipping Tool)
-  Super + Shift + Print         Text capture: snip a region, its text is copied (OCR)
-  Super + Ctrl + Print          Color picker (click copies #rrggbb)
+{{ capture }}
 
 UTILITIES
   Super + C / V / X / A         Copy / paste / cut / select all
@@ -84,13 +80,28 @@ UTILITIES
   Super + Ctrl + A              Audio panel (output device + volumes; again: close)
   Super + Ctrl + B              Bluetooth panel (devices, on/off; again: close)
   Super + Ctrl + W              Network settings
-  Super + Ctrl + D / P          Display / power settings
+  Super + Ctrl + D              Display panel (brightness, scale, text size; again: close)
+  Super + Ctrl + P              Power settings
   Super + Ctrl + Alt + T / B / W  Show time / battery / weather
   Super + Ctrl + Alt + D        Calendar
   Super + Ctrl + Alt + E        World clock
   Super + Shift + Alt + ,       Notification history
   Super + Ctrl + Z              Zoom in (+ Alt: reset)
   Super + Ctrl + L              Lock  (Win + L also locks)
+  Super + Ctrl + R              Set a reminder (+ Alt: show them, + Shift: clear them)
+  Super + Ctrl + S              Share files (LocalSend)
+  Super + Ctrl + .              Transcode a picture or video
+  Super + Shift + Ctrl + A      Coding agent
+  Super + Ctrl + K              Herdr keybindings
+  Super + Ctrl + Alt + F        Full screen desktop (no bar, no gaps; again: back)
+  Super + Ctrl + Delete         Laptop screen off / on (with a monitor plugged in)
+  Super + Ctrl + Alt + Delete   Mirror the screens / extend them again
+  Alt + Volume Up / Down        Volume in 1% steps
+  Alt + Play                    Next track   (+ Shift: previous)
+  Shift + Mute                  Next playback device
+  CapsLock, then keys           Compose: m s 😄, m y 👍, m h ❤️ ...; Space Space —;
+                                Space N / Space E your name / email ("compose" in config.json)
+  Left Shift + Right Shift      Caps Lock (while CapsLock composes)
 
 SYSTEM
   Bar logo: left / right click  Omarchy menu / terminal

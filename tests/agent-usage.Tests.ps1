@@ -61,8 +61,20 @@ Describe 'Python' {
     It 'finds nothing rather than the stub when the stub is all there is' {
         Mock Find-First { $null }
         Mock Find-Program { $null }
+        Mock Test-RealPython { $false }
         Mock Get-Command { @([pscustomobject]@{ Source = 'C:\Users\x\AppData\Local\Microsoft\WindowsApps\python.exe' }) } -ParameterFilter { $Name -contains 'python.exe' }
         Find-Python | Should -BeNullOrEmpty
+    }
+    It 'keeps a real Store Python, which lives under the same alias as the stub' {
+        Mock Find-First { $null }
+        Mock Find-Program { $null }
+        Mock Test-RealPython { $true }
+        Mock Get-Command { @([pscustomobject]@{ Source = 'C:\Users\x\AppData\Local\Microsoft\WindowsApps\python.exe' }) } -ParameterFilter { $Name -contains 'python.exe' }
+        Find-Python | Should -Be 'C:\Users\x\AppData\Local\Microsoft\WindowsApps\python.exe'
+    }
+    It 'tells the stub from a real Python by running it' {
+        Test-RealPython 'C:\nowhere\python.exe' | Should -BeFalse
+        if ($script:python) { Test-RealPython $script:python | Should -BeTrue }
     }
 }
 
@@ -134,6 +146,31 @@ print(repr(r.readline(5)), repr(r.readline(0.1)), repr(r.readline(5)), repr(r.re
         $r.limits[0].label | Should -Be '5h window'
         [double]$r.limits[0].percent | Should -Be 0.42
         $r.limits[1].label | Should -Be 'Weekly (7-day)'
+    }
+
+    It 'codex: an account/read that never answers costs nothing when the limits name the plan' {
+        $fake = Join-Path $root 'tests\fixtures\fake-codex'
+        $t = [Diagnostics.Stopwatch]::StartNew()
+        $r = Invoke-Collector 'codex' @{ CODEX_HOME = (Join-Path $TestDrive 'codex-hang'); PATH = "$fake;$env:PATH"; FAKE_CODEX_ACCOUNT_HANGS = '1' }
+        $t.Elapsed.TotalSeconds | Should -BeLessThan 4
+        $r.tierLabel | Should -Be 'pro'
+        $r.usageStatusText | Should -BeNullOrEmpty
+        @($r.limits).Count | Should -Be 2
+    }
+
+    It 'codex: account/read names the plan only when the limits leave it out' {
+        $fake = Join-Path $root 'tests\fixtures\fake-codex'
+        $r = Invoke-Collector 'codex' @{ CODEX_HOME = (Join-Path $TestDrive 'codex-noplan'); PATH = "$fake;$env:PATH"; FAKE_CODEX_NO_PLAN = '1' }
+        $r.tierLabel | Should -Be 'plus'
+        @($r.limits).Count | Should -Be 2
+    }
+
+    It 'codex: neither answer naming a plan still keeps the limits' {
+        $fake = Join-Path $root 'tests\fixtures\fake-codex'
+        $r = Invoke-Collector 'codex' @{ CODEX_HOME = (Join-Path $TestDrive 'codex-neither'); PATH = "$fake;$env:PATH"; FAKE_CODEX_NO_PLAN = '1'; FAKE_CODEX_ACCOUNT_HANGS = '1' }
+        $r.tierLabel | Should -BeNullOrEmpty
+        $r.usageStatusText | Should -BeNullOrEmpty
+        @($r.limits).Count | Should -Be 2
     }
 
     It 'codex: with no Codex at all it reports that instead of failing' {

@@ -2,7 +2,7 @@
 
 ### Text extraction
 
-`Super + Shift + Print` lets you snip a region of the screen, and the text in it is copied to your clipboard, ready to paste. It works on anything: a screenshot of code, a photo of a document, a video frame. It's also on _Trigger > Capture > Text_ in the Omarchy menu.
+`Super + Ctrl + Print` (`Super + Shift + Print` on installs from before this version; see [screenshots](12-screenshots-recording.md)) lets you snip a region of the screen, and the text in it is copied to your clipboard, ready to paste. It works on anything: a screenshot of code, a photo of a document, a video frame. It's also on _Trigger > Capture > Text_ in the Omarchy menu.
 
 The text is read by Windows' own text recognition, so nothing leaves your PC.
 

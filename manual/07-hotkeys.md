@@ -56,10 +56,15 @@ Winarchy is keyboard-first, with Omarchy's keys wherever Windows allows them. `S
 | `Super + Shift + /` | 1Password |
 | `Super + Shift + O` | Obsidian |
 | `Super + Shift + G` | Signal |
-| `Super + Shift + Y` | YouTube |
+| `Super + Shift + D` | lazydocker |
+| `Super + Shift + Alt + M` | Cliamp (music in the terminal) |
+| `Super + Shift + W` | Omawrite |
 | `Super + Ctrl + Return` | Herdr: open or re-attach your session |
+| `Super + Shift + E` / `C` / `A` / `Y` / `X` / `P` | Web apps: HEY, HEY Calendar, ChatGPT, YouTube, X, Google Photos (see [web apps](25-web-apps.md) for all of them) |
 
 These are in your own copy of the launcher script, which _Setup > Keybindings_ opens. See [dotfiles](31-dotfiles.md).
+
+A key that an AutoHotkey script of your own in the Startup folder already binds stays yours: Winarchy's keys leave it alone, and `Super + K` marks it "(your script)". Save a change to your script and Winarchy picks it up within a few seconds. `winarchy doctor` lists the keys it left to you.
 
 ### Universal clipboard
 
@@ -74,11 +79,13 @@ These are in your own copy of the launcher script, which _Setup > Keybindings_ o
 | Hotkey | Function |
 |---|---|
 | `Print` | Screenshot of a region |
-| `Super + Print` | Screenshot of everything, saved to `Pictures\Screenshots` |
 | `Alt + Print` | Screen recording |
-| `Super + Shift + Print` | Text capture: the text in a region is copied |
-| `Super + Ctrl + Print` | Color picker: the color under the click is copied |
+| `Super + Print` | Color picker: the color under the click is copied |
+| `Super + Ctrl + Print` | Text capture: the text in a region is copied |
+| `Shift + Print` | Screenshot of everything, saved to `Pictures\Screenshots` |
 | `Shift + F9` or `Super + Ctrl + X` | Dictation: talk and it types, again to stop |
+
+These are Omarchy's, and what a new install gets. An install from before this version keeps its own: `Super + Print` saves the whole screen, `Super + Ctrl + Print` is the color picker and `Super + Shift + Print` the text capture. `"captureKeys"` in your settings switches between the two (see [dotfiles](31-dotfiles.md)).
 
 No `Print` key on your laptop? `Super + Ctrl + C` opens the capture menu.
 
@@ -111,11 +118,32 @@ No `Print` key on your laptop? `Super + Ctrl + C` opens the capture menu.
 | `Super + Ctrl + A` | Audio panel: master volume, output, microphone and per-app volumes |
 | `Super + Ctrl + B` | Bluetooth panel: radio switch and paired devices |
 | `Super + Ctrl + W` | Network panel: speed test, DNS and Wi-Fi |
-| `Super + Ctrl + D` / `Super + Ctrl + P` | Display / power settings |
+| `Super + Ctrl + D` | Display panel: brightness, scale and text size |
+| `Super + Ctrl + P` | Power settings |
 | `Super + Ctrl + T` | Activity (btop) |
-| `Super + Ctrl + Q` | Calculator |
+| `Super + Ctrl + Q` | Calculator (Omacalc once it's installed) |
 | `Super + Ctrl + Z` | Zoom in (add `Alt` to reset) |
 | `Super + Ctrl + L` | Lock |
+| `Super + Ctrl + Delete` | Laptop screen off / on, with a monitor plugged in |
+| `Super + Ctrl + Alt + Delete` | Mirror the screens / extend them again |
+| `Alt + Volume Up` / `Alt + Volume Down` | Volume in 1% steps |
+| `Alt + Play` / `Alt + Shift + Play` | Next / previous track |
+| `Shift + Mute` | Switch to the next playback device |
+
+### Utilities
+
+| Hotkey | Function |
+|---|---|
+| `Super + Ctrl + R` | Set a reminder (add `Alt` to show them, `Shift` to clear them) |
+| `Super + Ctrl + S` | Share files (LocalSend) |
+| `Super + Ctrl + .` | Transcode a picture or video |
+| `Super + Shift + Ctrl + A` | Start your coding agent |
+| `Super + Ctrl + K` | Herdr keybindings |
+| `Super + Ctrl + Alt + F` | Full screen desktop: no bar and no gaps, again to bring them back |
+| `CapsLock`, then keys | Compose: `m s` 😄, `m y` 👍, `m h` ❤️ and the rest of Omarchy's, `Space Space` an em dash, `Space n` / `Space e` your name / email |
+| `Left Shift + Right Shift` | Caps Lock, while `CapsLock` composes |
+
+Compose is on for new installs (`"compose"` in your settings; see [dotfiles](31-dotfiles.md)).
 | `Ctrl + Esc` | The Windows Start menu |
 | `Super + Shift + Alt + R` | Reload GlazeWM's config |
 | `Super + Shift + Alt + P` | Pause / resume GlazeWM |
@@ -135,4 +163,6 @@ See [gaming](26-gaming.md).
 
 ### Windows limits
 
-A few of Omarchy's keys have no Windows equivalent. Window grouping and the scrolling layout don't exist in GlazeWM, `Super + L` belongs to Windows' lock, `Ctrl + Alt + Del` is reserved by Windows, and `Alt + Tab` is left to Windows so games stay reachable.
+A few of Omarchy's keys have no Windows equivalent. Window grouping and the scrolling layout don't exist in GlazeWM, `Super + L` belongs to Windows' lock, `Ctrl + Alt + Del` is reserved by Windows, and `Alt + Tab` is left to Windows so games stay reachable. `Super + Shift + S` stays Windows' region screenshot rather than Google Maps. Windows can't dismiss a notification from a key, so `Super + ,` and its variants have nothing to do.
+
+While a window that runs as administrator is in front, Windows keeps Winarchy's AutoHotkey keys from it, so the menus, launchers and utilities above don't work over it. GlazeWM's own keys (workspaces, focus, moving windows) still do. See [gaming](26-gaming.md) for games that run as administrator.

@@ -44,12 +44,27 @@ function Read-Json([string]$path, [switch]$AsHashtable) {
 }
 function Write-Json([string]$path, $obj, [int]$Depth = 32) { Write-Utf8 $path ($obj | ConvertTo-Json -Depth $Depth) }
 
-# ~ and %VARS% in user-supplied paths.
+# ~ and %VARS% in user-supplied paths. ~\Pictures (Videos, Documents, Music, Desktop)
+# means that folder wherever Windows keeps it: OneDrive often moves it out of the profile,
+# and install makes Pictures\Wallpapers in the real one. A literal folder that exists wins.
 function Expand-UserPath([string]$p) {
     if (-not $p) { return $p }
     $p = [Environment]::ExpandEnvironmentVariables($p)
-    if ($p -match '^~[\\/]?') { $p = Join-Path $env:USERPROFILE ($p -replace '^~[\\/]?', '') }
+    if ($p -match '^~[\\/]?') {
+        $rest = $p -replace '^~[\\/]?', ''
+        $p = Join-Path $env:USERPROFILE $rest
+        if ($rest -match '^(Pictures|Videos|Documents|Music|Desktop)(?:[\\/](.*))?$' -and -not (Test-Path -LiteralPath $p)) {
+            $sub = $Matches[2]
+            $known = Get-KnownUserFolder $Matches[1]
+            if ($known) { $p = if ($sub) { [IO.Path]::Combine($known, $sub) } else { $known } }
+        }
+    }
     $p
+}
+
+function Get-KnownUserFolder([string]$name) {
+    $special = @{ Pictures = 'MyPictures'; Videos = 'MyVideos'; Documents = 'MyDocuments'; Music = 'MyMusic'; Desktop = 'DesktopDirectory' }[$name]
+    if ($special) { [Environment]::GetFolderPath($special) }
 }
 
 # --- config (user settings) ------------------------------------------------------
@@ -98,9 +113,38 @@ function Set-ConfigValue([string]$path, $value) {
         $node = $node[$part]
     }
     $node[$parts[-1]] = $value
+    Save-UserConfig $user
+}
+
+function Save-UserConfig($user) {
     Write-Json $ConfigFile $user 8
     New-Item -ItemType Directory -Force $Generated | Out-Null
     Write-Utf8 (Join-Path $Generated 'config.selfwrite') (Get-Item $ConfigFile).LastWriteTime.ToString('yyyyMMddHHmmss')
+}
+
+# Settings that changed what a new install gets. A config.json from before one of them
+# keeps what that PC had: the value here is written into it, once (winarchy apply runs
+# this first; update ends in an apply). A new install writes the new value instead
+# ($FreshInstallValues, Get-InstallAnswers). Only a missing key is written, so a value
+# you set yourself is never touched.
+$ConfigMigrations = [ordered]@{
+    captureKeys = 'winarchy'   # Super+Print = full screenshot, Super+Ctrl+Print = color picker
+    compose     = $false       # CapsLock stays CapsLock
+}
+$FreshInstallValues = [ordered]@{
+    captureKeys = 'omarchy'    # Omarchy's: Super+Print = color picker, Super+Ctrl+Print = text
+    compose     = $true        # CapsLock + keys: emoji, em dash, name and email (Omarchy's xcompose)
+}
+
+function Invoke-ConfigMigration {
+    # A file that does not parse is left alone: apply and doctor say what is wrong with it.
+    $user = try { Read-UserConfig } catch { return }
+    if (-not $user) { return }
+    $added = @($ConfigMigrations.Keys | Where-Object { -not $user.Contains($_) })
+    if (-not $added) { return }
+    foreach ($k in $added) { $user[$k] = $ConfigMigrations[$k] }
+    Save-UserConfig $user
+    Log "config: $($added -join ', ') written with what this PC had so far (manual/31-dotfiles.md)"
 }
 
 # --- state (what winarchy last applied) ----------------------------------------

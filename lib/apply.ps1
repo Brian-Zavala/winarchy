@@ -202,6 +202,13 @@ function Write-GlazeConfig([int]$monitorCount) {
     $true
 }
 
+# Your name and email from git, for compose's CapsLock Space N / Space E (Omarchy fills
+# them in from its first-run setup). Nothing when git or the setting is missing.
+function Get-GitIdentity([string]$key) {
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return '' }
+    try { "$(git config --global --get $key 2>$null)".Trim() -replace '[\r\n]', '' } catch { '' }
+}
+
 # --- AutoHotkey settings (UTF-16 so IniRead handles any user name) ------------------
 function Write-AhkIni($p, $cfg) {
     $editor = switch ($cfg.apps.editor) {
@@ -220,7 +227,7 @@ function Write-AhkIni($p, $cfg) {
             ahk = $p.ahk; pwsh = $p.pwsh; powershell = $p.powershell
             glazewm = $p.glazewm; glazewmCli = $p.glazewmCli; zebar = $p.zebar; flow = $p.flow
             terminal = $terminal; wt = $p.wt; editor = $editor; files = $files
-            browser = $browser; browserPrivate = $p.browserPrivate
+            browser = $browser; browserPrivate = $(if ($cfg.apps.browser -eq 'auto') { $p.browserPrivate } else { Get-BrowserPrivateFlag $browser })
             btop = $(if ($p.btopDir) { Join-Path $p.btopDir 'btop4win.exe' })
             herdr = $p.herdr
         }
@@ -249,6 +256,14 @@ function Write-AhkIni($p, $cfg) {
             openOnHoveredMonitor = [int]($cfg.openOnHoveredMonitor -ne $false)
             focusFollowsCursor = [int]($cfg.focusFollowsCursor -ne $false)
             autoTiling = [int]($cfg.autoTiling.enabled -ne $false)
+            # Keys your own Startup scripts have (lib/keys.ps1): BindUnlessUser leaves them be.
+            userKeys = (@($p.userHotkeys.keys) | Where-Object { $_ }) -join '|'
+            captureKeys = $(if ($cfg.captureKeys -eq 'omarchy') { 'omarchy' } else { 'winarchy' })
+            # CapsLock compose (ahk/lib/compose.ahk); never with an input method, whose
+            # CapsLock switches modes.
+            compose = [int]([bool]$cfg.compose -and -not $p.input.ime)
+            composeName = Get-GitIdentity 'user.name'
+            composeEmail = Get-GitIdentity 'user.email'
         }
     }
     $text = foreach ($section in $ini.Keys) {
@@ -350,10 +365,33 @@ function Get-ZpackJson($p) {
 }
 
 # The APPS section of the keybindings viewer follows whichever launchers are active.
-function Get-KeybindingsText($cfg) {
-    $txt = Get-Content -Raw (Join-Path $Code 'default\keybindings.txt')
+# The Print keys as "captureKeys" lays them out (ahk/winarchy.ahk, Capture).
+function Get-CaptureKeysText($cfg) {
+    $common = @(
+        '  Print                         Screenshot (region, Snipping Tool)'
+        '  Alt + Print                   Screen recording (Snipping Tool)'
+    )
+    $layout = if ($cfg.captureKeys -eq 'omarchy') {
+        '  Super + Print                 Color picker (click copies #rrggbb)'
+        '  Super + Ctrl + Print          Text capture: snip a region, its text is copied (OCR)'
+        '  Shift + Print                 Full screenshot saved to Pictures\Screenshots'
+    } else {
+        '  Super + Print                 Full screenshot saved to Pictures\Screenshots'
+        '  Super + Ctrl + Print          Color picker (click copies #rrggbb)'
+        '  Super + Shift + Print         Text capture: snip a region, its text is copied (OCR)'
+    }
+    (@($common) + @($layout)) -join "`n"
+}
+
+# Keys your own Startup scripts have are marked "(your script)": winarchy leaves those to
+# you. Your own apps list (keybindings-apps.txt, when launchers is off) is yours already.
+function Get-KeybindingsText($cfg, $p) {
+    $userKeys = @($p.userHotkeys.keys | Where-Object { $_ })
+    $txt = (Get-Content -Raw (Join-Path $Code 'default\keybindings.txt')).Replace('{{ capture }}', (Get-CaptureKeysText $cfg).TrimEnd())
+    $txt = Add-YieldMarks $txt $userKeys
     $appsFile = Join-Path $Data 'keybindings-apps.txt'
-    $section = if (-not $cfg.launchers -and (Test-Path $appsFile)) { Get-Content -Raw $appsFile } else { Get-Content -Raw (Join-Path $Code 'default\keybindings-apps.txt') }
+    $section = if (-not $cfg.launchers -and (Test-Path $appsFile)) { Get-Content -Raw $appsFile }
+        else { Add-YieldMarks (Get-Content -Raw (Join-Path $Code 'default\keybindings-apps.txt')) $userKeys }
     $txt.Replace('{{ apps }}', $section.TrimEnd())
 }
 
@@ -377,18 +415,18 @@ function Write-ZebarPack($p, $cfg) {
         "export const GAP = $([int]$cfg.gap);"
     ) -join "`n"
     Write-Utf8 (Join-Path $Pack 'env.js') "$envJs`n"
-    Write-Utf8 (Join-Path $Pack 'keybindings.txt') (Get-KeybindingsText $cfg)
+    Write-Utf8 (Join-Path $Pack 'keybindings.txt') (Get-KeybindingsText $cfg $p)
     # Your own bar/menu CSS overrides survive updates.
     $user = Join-Path $Pack 'user.css'
     if (-not (Test-Path $user)) { Write-Utf8 $user "/* Your bar + menu CSS overrides (kept by winarchy apply/update). */`n" }
     # Zebar's client library is GPL-3.0, so it is fetched (pinned) rather than shipped;
-    # it is saved locally so the bar never needs the network at login.
+    # it is saved locally so the bar never needs the network at login. A failed download
+    # never stops apply (install would end before themes or the daemon): the next apply
+    # tries again, and doctor names it meanwhile.
     $mjs = Join-Path $Pack 'zebar.mjs'
     if (-not (Test-Path $mjs)) {
-        $url = "https://esm.sh/zebar@$($cfg.zebarClientVersion)/es2022/zebar.bundle.mjs"
-        Log "downloading Zebar client $url"
-        Invoke-WebRequest $url -OutFile "$mjs.part" -TimeoutSec 60
-        Move-Item -Force "$mjs.part" $mjs
+        try { Save-ZebarClient $cfg.zebarClientVersion $Pack }
+        catch { Log "Zebar client FAILED: $($_.Exception.Message) (the bar needs it; winarchy apply tries again)" }
     }
     $settings = Join-Path $env:USERPROFILE '.glzr\zebar\settings.json'
     $want = [ordered]@{
@@ -400,6 +438,55 @@ function Write-ZebarPack($p, $cfg) {
         Save-File $settings
         Write-Json $settings $want
     }
+}
+
+# Fetches Zebar's client as $dir\zebar.mjs. esm.sh serves it as one self-contained file.
+# If esm.sh is down or blocked, jsDelivr's build is used instead: that one imports its
+# dependencies from "/npm/..." on jsDelivr, so each is saved beside it and the imports are
+# pointed at the local copies. Nothing is written until all of it is here.
+function Save-ZebarClient([string]$version, [string]$dir, [scriptblock]$fetch = { param($u) Get-WebText $u }) {
+    $mjs = Join-Path $dir 'zebar.mjs'
+    $bundle = "https://esm.sh/zebar@$version/es2022/zebar.bundle.mjs"
+    try {
+        Log "downloading Zebar client $bundle"
+        $text = & $fetch $bundle
+        if ($text -notmatch '\bcreateProvider\b') { throw 'not the Zebar client' }
+        Write-Utf8 $mjs $text
+        return
+    } catch { Log "esm.sh: $($_.Exception.Message); trying jsDelivr" }
+
+    $files = [ordered]@{}   # local name -> text
+    $queue = [Collections.Generic.Queue[string]]::new()
+    $root = "/npm/zebar@$version/+esm"
+    $queue.Enqueue($root)
+    $seen = @{ $root = $true }
+    while ($queue.Count) {
+        $path = $queue.Dequeue()
+        if ($files.Count -gt 40) { throw 'jsDelivr: too many dependencies' }
+        $text = & $fetch "https://cdn.jsdelivr.net$path"
+        foreach ($m in [regex]::Matches($text, '"(/npm/[^"]+)"')) {
+            $dep = $m.Groups[1].Value
+            if (-not $seen[$dep]) { $seen[$dep] = $true; $queue.Enqueue($dep) }
+        }
+        $files[$path] = $text
+    }
+    if ($files[$root] -notmatch '\bcreateProvider\b') { throw 'jsDelivr: not the Zebar client' }
+    # Top level, beside zebar.mjs, so the widgets' includeFiles ('*.mjs') already cover them.
+    $local = { param($p) 'zebar-dep-' + ($p -replace '^/npm/', '' -replace '/\+esm$', '' -replace '[^A-Za-z0-9.-]', '_') + '.mjs' }
+    $relink = { param($text) [regex]::Replace($text, '"(/npm/[^"]+)"', { param($m) '"./' + (& $local $m.Groups[1].Value) + '"' }) }
+    # zebar.mjs goes last: it is what apply and doctor check for, so a half-saved set is retried.
+    foreach ($path in @($files.Keys | Where-Object { $_ -ne $root })) {
+        Write-Utf8 (Join-Path $dir (& $local $path)) (& $relink $files[$path])
+    }
+    Write-Utf8 $mjs (& $relink $files[$root])
+}
+
+function Get-WebText([string]$url) {
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) ("winarchy-" + [guid]::NewGuid() + '.part')
+    try {
+        Invoke-WebRequest $url -OutFile $tmp -TimeoutSec 60 -ErrorAction Stop
+        [IO.File]::ReadAllText($tmp, [Text.UTF8Encoding]::new($false))
+    } finally { Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue }
 }
 
 # --- autostart ----------------------------------------------------------------------
@@ -579,6 +666,7 @@ function Restart-Bar($p) {
 }
 
 function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Resplit) {
+    Invoke-ConfigMigration
     $p = Update-Paths
     $cfg = Get-Config
     $old = if (Test-Path $GlazeConfig) { Get-Content -Raw $GlazeConfig } else { '' }
@@ -596,6 +684,7 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Respli
     Switch-GlazeWM $p
     Initialize-Branding
     Write-AhkIni $p $cfg
+    try { Write-WebAppIni $p } catch { Log "web app keys FAILED: $($_.Exception.Message)" }
     Write-ZebarPack $p $cfg
     Set-Autostart $p $cfg
     try { Set-TerminalProfiles $p } catch { Log "terminal profiles FAILED: $($_.Exception.Message)" }
@@ -604,6 +693,8 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Respli
     try { Set-MinimizeAnimationPolicy $cfg } catch { Log "minimize animation setting FAILED: $($_.Exception.Message)" }
     if (-not (Test-Path (Join-Path $Pack 'font.css'))) { Write-FontCss }
     try { [void](Update-FontList) } catch { Log "font list FAILED: $($_.Exception.Message)" }
+    # Terminal apps' Start entries first, so the Apps list below has them.
+    try { Sync-TuiShortcuts } catch { Log "terminal app shortcuts FAILED: $($_.Exception.Message)" }
     try { [void](Update-AppList) } catch { Log "app list FAILED: $($_.Exception.Message)" }
     try { [void](Update-Catalog) } catch { Log "catalog FAILED: $($_.Exception.Message)" }
     try { [void](Update-AgentList) } catch { Log "agent list FAILED: $($_.Exception.Message)" }
@@ -618,6 +709,8 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Respli
     if (-not (Test-Path (Join-Path $Pack 'theme.css'))) {
         try { Set-BarTheme (Read-Colors (Read-State).theme) } catch { Log "no theme yet: $($_.Exception.Message)" }
     }
+    # So an install from before Omarchy's apps came to Windows has the file they read too.
+    try { Set-OmarchyStateTheme (Read-State).theme } catch { Log "Omarchy apps' theme FAILED: $($_.Exception.Message)" }
     Write-Status (Read-State)
     if (-not $NoRestart) {
         Restart-Bar $p

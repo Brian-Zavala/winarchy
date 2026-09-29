@@ -27,6 +27,8 @@
   winarchy apps                        rebuild the menu's Apps list from what Windows has installed
   winarchy catalog                     rebuild the menu's Install/Remove lists (and show them)
   winarchy install-app <key>           install one catalog item (the menu's Install section)
+  winarchy ports [list|update]         Omarchy's own apps built for Windows (Omawrite, Omacalc, ...)
+  winarchy shell [on|off|status]       Omarchy's shell setup in PowerShell (starship, zoxide, eza, fzf, aliases)
   winarchy remove-app <key>            remove one again (the menu's Remove section)
   winarchy herdr [status|install|layout|square|multi|swarm|config|reload|keys|shortcuts|link|welcome]
                                           Herdr (Omarchy's tmux replacement) and its agent
@@ -54,6 +56,8 @@
                                           Hyprland-style auto-tiling (dwindle emulation)
   winarchy config                      open your settings file
   winarchy keys                        print the keybindings
+  winarchy keys-refresh                re-read the keys your own Startup scripts bind (winarchy
+                                          leaves those to them; runs by itself when one is saved)
   winarchy status | version | help
 
   Your settings: %USERPROFILE%\.winarchy\config.json   Log: %USERPROFILE%\.winarchy\logs
@@ -81,6 +85,7 @@ param(
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\lib\common.ps1"
 . "$PSScriptRoot\..\lib\detect.ps1"
+. "$PSScriptRoot\..\lib\keys.ps1"
 . "$PSScriptRoot\..\lib\render.ps1"
 . "$PSScriptRoot\..\lib\themes.ps1"
 . "$PSScriptRoot\..\lib\targets.ps1"
@@ -91,9 +96,12 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\lib\doctor.ps1"
 . "$PSScriptRoot\..\lib\extras.ps1"
 . "$PSScriptRoot\..\lib\apps.ps1"
+. "$PSScriptRoot\..\lib\webapps.ps1"
+. "$PSScriptRoot\..\lib\ports.ps1"
 . "$PSScriptRoot\..\lib\catalog.ps1"
 . "$PSScriptRoot\..\lib\agents.ps1"
 . "$PSScriptRoot\..\lib\herdr.ps1"
+. "$PSScriptRoot\..\lib\shell.ps1"
 . "$PSScriptRoot\..\lib\tailscale.ps1"
 . "$PSScriptRoot\..\lib\winicons.ps1"
 . "$PSScriptRoot\..\lib\animations.ps1"
@@ -178,6 +186,10 @@ switch ($Verb) {
         if (-not $Arg) { throw 'usage: winarchy remove-app <key>   (winarchy catalog lists them)' }
         Use-Lock { Uninstall-CatalogItem $Arg }
     }
+    # Omarchy's shell setup in your PowerShell profile (lib/shell.ps1).
+    'shell' { Invoke-Shell $Arg }
+    # Omarchy's own apps built for Windows (lib/ports.ps1); update runs `ports update`.
+    'ports' { Use-Lock { Invoke-Ports $Arg } }
     # Herdr and the agent layouts built on it. The layout verbs are meant to be run from
     # inside a Herdr pane (hdl / hds / hdlm / hsl do exactly that).
     'herdr' { Invoke-Herdr $Arg $Arg2 $Arg3 }
@@ -222,6 +234,8 @@ switch ($Verb) {
         switch ($Arg) {
             'show' { Show-WinarchyReminders }
             'clear' { Clear-WinarchyReminders }
+            # After one goes off (menu.ahk notify): the bar's bell moves on to the next.
+            'refresh' { Update-ReminderFile }
             default { New-WinarchyReminder $Arg $Arg2 }
         }
     }
@@ -231,10 +245,13 @@ switch ($Verb) {
     'speedtest-run' { Invoke-SpeedRun }
     'wifi' { Invoke-WifiAction $Arg $Arg2 }
     'audio' { Invoke-AudioAction $Arg $Arg2 $Arg3 }
-    'transcode' { Invoke-Transcode $Arg $Arg2 }
+    # Omarchy's order: winarchy transcode [file] [format] [size]; it asks for what is missing.
+    'transcode' { Invoke-Transcode $Arg $Arg2 $Arg3 }
     'share' { Start-Share }
     'web-app' { if ($Arg -eq 'remove') { Remove-WebApp $Arg2 } else { New-WebApp $Arg $Arg2 } }
     'keys' { (Get-Content (Join-Path $Pack 'keybindings.txt') -ErrorAction SilentlyContinue) ?? (Get-Content (Join-Path $Code 'default\keybindings.txt')) }
+    # winarchy.ahk runs this when a script in the Startup folder changes (lib/keys.ps1).
+    'keys-refresh' { Use-Lock { Invoke-KeysRefresh } }
     'status' { $s = Read-State; "theme: $($s.theme)"; "background: $($s.background)"; "font: $(Get-FontFamily)" }
     'version' { "winarchy $version" }
     default { Get-Help $PSCommandPath -Detailed | Out-String | Write-Host }

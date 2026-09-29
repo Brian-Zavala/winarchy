@@ -1,0 +1,153 @@
+name: ports
+# Omarchy's own apps built for Windows (lib/ports.ps1): run by hand for one app. It builds
+# the tag default/ports.json pins, with any patches in ports/patches/<app>, and publishes
+# one self-contained x64 zip as a release. Its SHA-256 is printed in the run's summary:
+# put the url and the hash into default/ports.json by hand, so no install ever fetches
+# something the code has not pinned.
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'omawrite, omacalc, omacut, hype or aether'
+        required: true
+      rev:
+        description: 'Build revision for this version (1, 2, ...)'
+        default: '1'
+permissions:
+  contents: write
+
+jobs:
+  pin:
+    runs-on: windows-latest
+    outputs:
+      source: ${{ steps.pin.outputs.source }}
+      tag: ${{ steps.pin.outputs.tag }}
+      version: ${{ steps.pin.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: pin
+        shell: pwsh
+        env:
+          APP: ${{ inputs.app }}
+        run: |
+          $a = (Get-Content -Raw default/ports.json | ConvertFrom-Json).apps | Where-Object key -eq $env:APP
+          if (-not $a) { Write-Error "no app '$env:APP' in default/ports.json"; exit 1 }
+          "source=$($a.source)" >> $env:GITHUB_OUTPUT
+          "tag=$($a.tag)" >> $env:GITHUB_OUTPUT
+          "version=$($a.version)" >> $env:GITHUB_OUTPUT
+
+  qt:
+    needs: pin
+    if: inputs.app != 'aether'
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    env:
+      APP: ${{ inputs.app }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git zip
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-declarative
+            mingw-w64-ucrt-x86_64-qt6-multimedia
+            mingw-w64-ucrt-x86_64-qt6-svg
+            mingw-w64-ucrt-x86_64-qt6-tools
+            mingw-w64-ucrt-x86_64-libwebp
+            mingw-w64-ucrt-x86_64-zlib
+      - name: Source
+        run: |
+          git clone --depth 1 --branch '${{ needs.pin.outputs.tag }}' 'https://github.com/${{ needs.pin.outputs.source }}.git' src
+          for p in ports/patches/$APP/*.patch; do
+            [ -f "$p" ] && git -C src apply --verbose "../$p"
+          done
+      - name: Build
+        run: |
+          cd src
+          qmake6 CONFIG+=release
+          mingw32-make -j4
+      - name: Upstream tests
+        continue-on-error: true
+        run: |
+          cd src/tests 2>/dev/null || exit 0
+          for pro in *.pro; do
+            [ -f "$pro" ] || continue
+            d="build-${pro%.pro}"; mkdir -p "$d" && (cd "$d" && qmake6 "../$pro" && mingw32-make -j4 && (./release/*.exe || ./*.exe))
+          done
+      - name: Collect the app and everything it loads
+        run: |
+          mkdir -p dist
+          exe=$(ls src/release/$APP.exe src/$APP.exe 2>/dev/null | head -1)
+          cp "$exe" dist/
+          windeployqt6 --release --qmldir src/src --no-translations --dir dist "dist/$APP.exe"
+          # windeployqt leaves out MinGW's own runtime and third-party DLLs: follow every
+          # exe and dll until nothing new from the MSYS2 prefix turns up.
+          for pass in 1 2 3 4; do
+            find dist -name '*.exe' -o -name '*.dll' | while read -r f; do
+              ldd "$f" | awk '$3 ~ /\/ucrt64\// { print $3 }'
+            done | sort -u | while read -r dll; do
+              [ -f "dist/$(basename "$dll")" ] || cp "$dll" dist/
+            done
+          done
+          [ -d src/fonts ] && cp -r src/fonts dist/
+          cp src/LICENSE dist/LICENSE.txt
+          cd dist && zip -qr "../$APP-${{ needs.pin.outputs.version }}-win-x64.zip" .
+      - name: Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.pin.outputs.version }}
+          REV: ${{ inputs.rev }}
+        run: |
+          $zip = "$env:APP-$env:VERSION-win-x64.zip"
+          $tag = "port-$env:APP-v$env:VERSION-$env:REV"
+          gh release create $tag $zip --title "$env:APP $env:VERSION for Windows ($env:REV)" --notes "Built from ${{ needs.pin.outputs.source }} ${{ needs.pin.outputs.tag }} by the ports workflow. Not signed." --prerelease
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          "url: https://github.com/${{ github.repository }}/releases/download/$tag/$zip`nsha256: $hash" | Tee-Object -Append $env:GITHUB_STEP_SUMMARY
+
+  aether:
+    needs: pin
+    if: inputs.app == 'aether'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: Source
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch '${{ needs.pin.outputs.tag }}' 'https://github.com/${{ needs.pin.outputs.source }}.git' src
+          foreach ($p in Get-ChildItem ports/patches/aether/*.patch -ErrorAction SilentlyContinue) { git -C src apply --verbose $p.FullName; if ($LASTEXITCODE) { exit 1 } }
+          "commit: $(git -C src rev-parse HEAD)" | Tee-Object -Append $env:GITHUB_STEP_SUMMARY
+      - name: Build
+        shell: pwsh
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@latest
+          cd src
+          & "$(go env GOPATH)\bin\wails.exe" build -platform windows/amd64 -o aether.exe
+          if ($LASTEXITCODE) { exit 1 }
+      - name: Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.pin.outputs.version }}
+          REV: ${{ inputs.rev }}
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item src/build/bin/aether.exe dist/
+          $zip = "aether-$env:VERSION-win-x64.zip"
+          Compress-Archive dist/* $zip
+          $tag = "port-aether-v$env:VERSION-$env:REV"
+          gh release create $tag $zip --title "Aether $env:VERSION for Windows ($env:REV)" --notes "Built from ${{ needs.pin.outputs.source }} by the ports workflow. Not signed." --prerelease
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          "url: https://github.com/${{ github.repository }}/releases/download/$tag/$zip`nsha256: $hash" | Tee-Object -Append $env:GITHUB_STEP_SUMMARY

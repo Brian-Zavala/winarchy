@@ -25,6 +25,10 @@ BeforeAll {
     function Stop-Process {}
     function winget { $script:WingetCalls.Add(($args -join ' ')) }
     function Restore-JournalEntry($e, $dir) { $script:Restored.Add("$($e.kind)|$($e.id)$($e.dir)") }
+    # Real reminders on this PC are the person's: the tests see only these.
+    function Get-ScheduledTask { @($script:FakeTasks) }
+    function Unregister-ScheduledTask { process { $script:Unregistered.Add($_.TaskName) } }
+    $script:FakeTasks = @()
 
     function New-TestJournal([object[]]$entries) {
         $script:JournalDir = Join-Path $TestDrive ([guid]::NewGuid())
@@ -58,6 +62,8 @@ Describe 'Uninstall keeps what the person chooses' {
 BeforeEach {
     $script:WingetCalls = [Collections.Generic.List[string]]::new()
     $script:Restored = [Collections.Generic.List[string]]::new()
+    $script:Unregistered = [Collections.Generic.List[string]]::new()
+    $script:FakeTasks = @()
     $env:WINARCHY_YES = $null
     # An earlier -Yes run leaves this set, and Read-YesNo would stop asking.
     $script:AssumeYes = $false
@@ -107,6 +113,18 @@ Describe 'Uninstall' {
         $script:WingetCalls -join ';' | Should -Not -Match 'Valve\.Steam'
         $script:Restored | Should -Not -Contain 'herdr|'
     }
+    It 'takes out the reminders still set, which would fail once winarchy is gone' {
+        New-TestData; New-TestJournal $journal
+        $script:FakeTasks = @([pscustomobject]@{ TaskName = 'winarchy-reminder-1' }, [pscustomobject]@{ TaskName = 'winarchy-reminder-2' })
+        Invoke-Uninstall -Yes 6>$null
+        @($script:Unregistered) | Should -Be @('winarchy-reminder-1', 'winarchy-reminder-2')
+    }
+    It 'removes web apps with the other apps you chose to remove' {
+        New-TestData; New-TestJournal (@($journal) + @(@{ kind = 'webapp'; key = 'webapp|hey'; label = 'HEY'; path = 'C:\nowhere\HEY.lnk' }))
+        Mock Read-Host { 'n' }
+        Invoke-Uninstall 6>$null
+        $script:Restored | Should -Contain 'webapp|'
+    }
     It '-Purge with settings kept leaves only the backups and the settings' {
         New-TestData; New-TestJournal $journal
         function Start-Process {}
@@ -139,6 +157,19 @@ Describe 'Reinstall answers' {
         $cfg = Get-InstallAnswers $p -Restoring 6>$null
         $cfg.hideTaskbar | Should -BeFalse
         Should -Invoke Read-Host -Times 1 -Exactly
+    }
+    It 'stops on a config.json that does not parse, rather than replace it' {
+        New-TestData
+        Set-Content $ConfigFile '{ "backgroundDirs": ["C:\Art"] }'
+        Mock Read-Host { 'y' }
+        $p = @{ input = @{ count = 1 }; startup = $TestDrive; pictures = $TestDrive }
+        { Get-InstallAnswers $p -Restoring 6>$null } | Should -Throw '*not valid JSON*'
+        Get-Content -Raw $ConfigFile | Should -Match 'C:\\Art'
+    }
+    It 'treats a config.json copied in before install like a restore' {
+        $src = Get-Content -Raw (Join-Path $root 'lib\setup.ps1')
+        $src | Should -Match '\$restoring = -not \$script:FreshInstall'
+        $src | Should -Match '\$null = Read-UserConfig'
     }
 }
 }

@@ -29,6 +29,8 @@
       <span id="clock" title="Click: calendar · Right-click: date format · Middle-click: world clock"></span>
       <div class="side">
         <div class="post" id="post">
+          <span class="module hidden" id="media"></span>
+          <span class="module hidden" id="reminder"></span>
           <span class="module" id="elsewhen" title="World clock (Super+Ctrl+Alt+E)"></span>
           <span class="module hidden" id="weather"></span>
           <span class="module update hidden" id="update"></span>
@@ -89,6 +91,9 @@
         monitor: '\u{F0379}',       // Quattro's display widget: monitor, or monitor-multiple
         monitors: '\u{F037A}',
         appFallback: '\u{F0F1D}',   // generic app-window glyph, used when no icon is cached yet
+        reminder: '\u{F009A}',      // bell (a reminder is set)
+        playing: '\u{F03E4}',       // pause: what a click does while it plays
+        paused: '\u{F040A}',        // play
       };
       // Omarchy: "dddd HH:mm", alternate "d MMMM 'W'ww yyyy" (12-hour here by request).
       const CLOCK_FORMATS = [CLOCK_24H ? 'EEEE HH:mm' : 'EEEE h:mm a', "d MMMM 'W'WW yyyy"];
@@ -101,6 +106,8 @@
         cpu: { type: 'cpu', refreshInterval: 5000 },
         battery: { type: 'battery', refreshInterval: 30000 },
         systray: { type: 'systray' },
+        // What is playing (Windows' media sessions: Spotify, a browser tab, ...).
+        media: { type: 'media' },
       });
 
       const $ = id => document.getElementById(id);
@@ -132,6 +139,7 @@
       $('game').oncontextmenu = e => { e.preventDefault(); act('wm', 'game-close'); };
       $('weather').onclick = () => act('wm', 'weather');
       $('update').onclick = () => act('upgrade');
+      $('reminder').onclick = () => act('reminder', 'show');
       $('agents').onclick = () => act('usage');
       $('agents').oncontextmenu = e => { e.preventDefault(); act('agent'); };
       // Display (Quattro's omarchy.monitor): click = the panel, scroll = brightness 5 a step
@@ -347,6 +355,35 @@
         ].join('\n')).join('\n') + '\nClick: usage · Right-click: start agent';
       }
 
+      // Omarchy's media module: what is playing, left of the clock. Click: play / pause,
+      // right click: next track, middle click: previous. Gone when nothing is playing.
+      function renderMedia(media) {
+        const el = $('media');
+        const s = media?.session;
+        el.classList.toggle('hidden', !s?.title);
+        if (!s?.title) return;
+        const text = s.artist ? `${s.artist} - ${s.title}` : s.title;
+        el.textContent = `${s.isPlaying ? ICONS.playing : ICONS.paused} ${text.length > 40 ? text.slice(0, 39) + '…' : text}`;
+        el.title = `${text}\nClick: ${s.isPlaying ? 'pause' : 'play'} · Right-click: next · Middle-click: previous`;
+      }
+      $('media').onclick = () => providers.outputMap.media?.togglePlayPause().catch(() => {});
+      $('media').oncontextmenu = e => { e.preventDefault(); providers.outputMap.media?.next().catch(() => {}); };
+      $('media').onauxclick = e => { if (e.button === 1) { e.preventDefault(); providers.outputMap.media?.previous().catch(() => {}); } };
+
+      // reminders.json (winarchy reminder): the next one, as a bell and its time. Gone once
+      // it is due; the reminder's own OSD takes over from there.
+      function renderReminder(r) {
+        const el = $('reminder');
+        const at = r?.next?.at ? new Date(r.next.at) : null;
+        const show = at && at > new Date();
+        el.classList.toggle('hidden', !show);
+        if (!show) return;
+        const time = at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: !CLOCK_24H });
+        el.textContent = `${ICONS.reminder} ${time}`;
+        const more = (r.count ?? 1) > 1 ? `\n${r.count - 1} more after it` : '';
+        el.title = `${r.next.message}${more}\nClick: all reminders · Super+Ctrl+R: set one`;
+      }
+
       function renderBluetooth(bt) {
         const el = $('bluetooth');
         el.classList.toggle('hidden', !bt?.present);
@@ -412,6 +449,7 @@
         renderAudio(o.audio);
         renderCpu(o.cpu);
         renderBattery(o.battery);
+        renderMedia(o.media);
       }
 
       // Double-click on empty bar space toggles the transparent bar (as in Omarchy); a
@@ -541,6 +579,8 @@
         // Double-click transparency (bar-state.json is written by `menu.ahk bar-clear`).
         const barState = await get('bar-state.json');
         document.documentElement.classList.toggle('clear', !!barState?.clear);
+        // Written by `winarchy reminder` (lib/system.ps1) into the pack, never shipped in it.
+        renderReminder(await get('reminders.json'));
         const ts = await get('tailscale.json');
         const link = await get('network.json');
         if (JSON.stringify(link) !== JSON.stringify(netLink)) { netLink = link; renderNetwork(providers.outputMap.network); }

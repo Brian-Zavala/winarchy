@@ -23,6 +23,76 @@ Env(key, default := "") {
     return OW.Has(key) && OW[key] != "" ? OW[key] : default
 }
 
+; --- Keys your own scripts have ------------------------------------------------------
+; winarchy apply lists the hotkeys your own Startup scripts bind (lib/keys.ps1, "userKeys"):
+; winarchy's keys leave those to you, instead of both firing or whichever started last
+; winning. BindUnlessUser binds a key only when no script of yours has it.
+BindUnlessUser(hk, fn, opts := "") {
+    if UserKeys().Has(KeyId(hk))
+        return false
+    Hotkey hk, fn, opts
+    return true
+}
+
+UserKeys() {
+    static keys := 0
+    if !keys {
+        keys := Map()
+        keys.CaseSense := false
+        for k in StrSplit(Env("userKeys"), "|")
+            if k != ""
+                keys[k] := true
+    }
+    return keys
+}
+
+; A hotkey in the one form lib/keys.ps1 (ConvertTo-KeyId) writes: modifiers in the order
+; # ^ ! +, then the key, punctuation as its scan code ("#+/" = "#+SC035" = "#+sc035").
+KeyId(hk) {
+    hk := RegExReplace(Trim(hk), "i)\s+up$")
+    static mods := Map("lwin", "#", "rwin", "#", "ctrl", "^", "control", "^", "lctrl", "^", "rctrl", "^"
+        , "lcontrol", "^", "rcontrol", "^", "alt", "!", "lalt", "!", "ralt", "!", "shift", "+", "lshift", "+", "rshift", "+")
+    if RegExMatch(hk, "^(.+?)\s+&\s+(.+)$", &m) {
+        prefix := LTrim(Trim(m[1]), "~*$")
+        if mods.Has(StrLower(prefix))
+            return mods[StrLower(prefix)] KeyIdName(Trim(m[2]))
+        return "combo:" KeyIdName(prefix) "&" KeyIdName(Trim(m[2]))
+    }
+    have := ""
+    while StrLen(hk) > 1 && InStr("#^!+<>*~$", c := SubStr(hk, 1, 1)) {
+        if InStr("#^!+", c)
+            have .= c
+        hk := SubStr(hk, 2)
+    }
+    out := ""
+    for c in ["#", "^", "!", "+"]
+        if InStr(have, c)
+            out .= c
+    return out KeyIdName(hk)
+}
+
+KeyIdName(k) {
+    static alias := Map("return", "enter", "esc", "escape", "bs", "backspace", "del", "delete", "ins", "insert")
+    if StrLen(k) = 1 {
+        if k ~= "^[A-Za-z0-9]$"
+            return StrLower(k)
+        vk := DllCall("VkKeyScanW", "ushort", Ord(k), "short") & 0xFF
+        if vk = 0xFF
+            return k
+        sc := DllCall("MapVirtualKeyW", "uint", vk, "uint", 0, "uint")
+        return sc ? Format("sc{:03x}", sc) : Format("vk{:02x}", vk)
+    }
+    if RegExMatch(k, "i)^sc([0-9a-f]+)$", &m)
+        return Format("sc{:03x}", Integer("0x" m[1]))
+    if RegExMatch(k, "i)^vk([0-9a-f]{2})(?:sc[0-9a-f]+)?$", &m) {
+        vk := Integer("0x" m[1])
+        sc := DllCall("MapVirtualKeyW", "uint", vk, "uint", 0, "uint")
+        return sc ? Format("sc{:03x}", sc) : Format("vk{:02x}", vk)
+    }
+    k := StrLower(k)
+    return alias.Has(k) ? alias[k] : k
+}
+
 ; Run a winarchy CLI verb hidden (bin\winarchy.ps1 under PowerShell 7).
 OmarchyCmd(args*) {
     try Run OmarchyCmdLine(args*), , "Hide"

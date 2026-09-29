@@ -712,16 +712,50 @@
       {
         "label": "Power",
         "icon": "",
-        "action": [
-          "settings",
-          "ms-settings:powersleep"
-        ]
+        "route": "power"
       },
       {
         "label": "Admin Games",
         "icon": "󰊗",
         "action": [
           "game-setup"
+        ]
+      }
+    ]
+  },
+  "power": {
+    "title": "Power",
+    "items": [
+      {
+        "label": "Power Saver",
+        "icon": "󰌪",
+        "action": [
+          "power-mode",
+          "saver"
+        ]
+      },
+      {
+        "label": "Balanced",
+        "icon": "󰮅",
+        "action": [
+          "power-mode",
+          "balanced"
+        ]
+      },
+      {
+        "label": "Performance",
+        "icon": "󰓅",
+        "action": [
+          "power-mode",
+          "performance"
+        ]
+      },
+      {
+        "label": "Power & Battery Settings",
+        "icon": "",
+        "action": [
+          "settings",
+          "ms-settings:powersleep"
         ]
       }
     ]

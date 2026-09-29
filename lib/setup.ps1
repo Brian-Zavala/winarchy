@@ -363,9 +363,10 @@ function Install-Dependencies {
 }
 
 # The few questions whose answer depends on the person, not the machine. Restoring the
-# settings an earlier uninstall kept, only what they never answered is asked.
+# settings an earlier uninstall kept, or a config.json copied in first, only what they
+# never answered is asked.
 function Get-InstallAnswers($p, [switch]$Restoring) {
-    $cfg = Read-Json $ConfigFile -AsHashtable
+    $cfg = Read-UserConfig
     if (-not $cfg) { $cfg = [ordered]@{} }
     $ask = { param([string]$key) -not ($Restoring -and $cfg.Contains($key)) }
     Write-Step $(if ($Restoring) { 'Your choices (kept from before; only new ones are asked)' } else { 'A few choices (Enter = recommended)' })
@@ -380,6 +381,13 @@ function Get-InstallAnswers($p, [switch]$Restoring) {
         $cfg.launchers = -not (Read-YesNo 'Keep using it instead of winarchy''s app keys?' $true)
     }
     if (& $ask 'hideTaskbar') { $cfg.hideTaskbar = Read-YesNo 'Hide the Windows taskbar (the top bar replaces it)?' $true }
+    # A new install gets Omarchy's capture keys and CapsLock compose; a config from before
+    # keeps what it had (Invoke-ConfigMigration writes that when apply runs).
+    if ($script:FreshInstall) {
+        foreach ($k in $FreshInstallValues.Keys) { if (-not $cfg.Contains($k)) { $cfg[$k] = $FreshInstallValues[$k] } }
+        # With an input method (Japanese, Chinese, Korean) CapsLock switches modes: leave it.
+        if ($p.input.ime) { $cfg.compose = $false }
+    }
     $wall = Join-Path $p.pictures 'Wallpapers'
     Write-Ok "Your own backgrounds go in $wall (shown as 'Mine' in the picker)."
     New-Item -ItemType Directory -Force $wall | Out-Null
@@ -443,11 +451,18 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     New-Item -ItemType Directory -Force $Data | Out-Null
     Test-Preflight
     if ($Adopt) { return Invoke-Adopt }
-    # An earlier uninstall kept the person's settings: this install puts them back.
+    # An earlier uninstall kept the person's settings: this install puts them back. A
+    # config.json put there by hand first (copied from another PC) counts the same: what
+    # it already answers is not asked again. One that does not parse stops here, before
+    # anything is installed, rather than be replaced by the answers.
     $restoreFile = Join-Path $Data 'restore.json'
-    $restoring = (Test-Path $restoreFile) -and (Test-Path $ConfigFile)
-    if ($restoring) {
+    $null = Read-UserConfig
+    $script:FreshInstall = -not (Test-Path $ConfigFile)
+    $restoring = -not $script:FreshInstall
+    if ($restoring -and (Test-Path $restoreFile)) {
         Write-Step "Welcome back: restoring your saved settings (theme $((Read-State).theme), background, font, config.json)"
+    } elseif ($restoring) {
+        Write-Step "Using the config.json already in $Data"
     }
 
     if (-not (Test-Journaled 'runkeys')) {
@@ -483,7 +498,7 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     Start-Everything $p
     # Last, so a slow or failed build can't hold up the rest: the official GlazeWM already runs.
     Invoke-AnimationOffer
-    if ($restoring) { Remove-Item $restoreFile -Force -ErrorAction SilentlyContinue; Write-Done 'Your settings are back.' }
+    if ($restoring -and (Test-Path $restoreFile)) { Remove-Item $restoreFile -Force -ErrorAction SilentlyContinue; Write-Done 'Your settings are back.' }
     Write-UiFinish
     Write-Unfinished
 }
@@ -570,7 +585,9 @@ function Invoke-Update {
         $omarchy = $pending | Where-Object name -eq 'Omarchy themes' | Select-Object -First 1
         if ($omarchy) {
             $s = Read-State; $s.omarchyTag = $omarchy.to; Save-State $s
-            Use-Lock { Invoke-Sync }
+            # A fresh process too: what gets mirrored (Get-SyncTarget) follows the new code.
+            & $p.pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Code 'bin\winarchy.ps1') sync
+            if ($LASTEXITCODE) { Add-Unfinished 'Omarchy themes not fully updated; winarchy sync tries again' }
         } else { Write-Ok 'up to date' }
 
         # Herdr came from its own installer, so winget cannot upgrade it: it has an updater
@@ -578,6 +595,14 @@ function Invoke-Update {
         if (Test-HerdrInstalled) {
             Write-Step 'Herdr'
             try { & (Get-HerdrExe) update 2>&1 | Out-Host } catch { Write-Ok "herdr update failed: $($_.Exception.Message)" }
+        }
+
+        # Omarchy's own apps: a newer pinned build in the code just pulled (a fresh process
+        # reads the new default/ports.json with the new code).
+        if (Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\Winarchy\oma') -Directory -ErrorAction SilentlyContinue) {
+            Write-Step 'Omarchy apps'
+            & $p.pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Code 'bin\winarchy.ps1') ports update
+            if ($LASTEXITCODE) { Add-Unfinished 'Omarchy apps not updated (see above); winarchy ports update tries again' }
         }
 
         Write-Step 'Apps'

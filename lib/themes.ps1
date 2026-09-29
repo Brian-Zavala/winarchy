@@ -98,13 +98,31 @@ function Invoke-Sync([switch]$Offline) {
             Log "downloaded $n new file(s)$(if ($n) { ' in {0:N1} s' -f $sw.Elapsed.TotalSeconds })"
         } catch { Log "offline or GitHub unavailable, using local files ($($_.Exception.Message))" }
     }
+    Add-BundledThemes
+    # The logo and about text come with the first sync, after install's first apply.
+    Initialize-Branding
     Update-Index
+}
+
+# A theme ships with the code (default/themes), so declining or failing the download
+# still leaves one to apply. Only fills in what is missing: a downloaded copy wins.
+function Add-BundledThemes {
+    foreach ($dir in Get-ChildItem (Join-Path $Code 'default\themes') -Directory -ErrorAction SilentlyContinue) {
+        $dst = Join-Path $Themes $dir.Name
+        if (Test-Path (Join-Path $dst 'colors.toml')) { continue }
+        New-Item -ItemType Directory -Force $dst | Out-Null
+        foreach ($f in Get-ChildItem $dir.FullName -File) {
+            if (-not (Test-Path (Join-Path $dst $f.Name))) { Copy-Item $f.FullName $dst }
+        }
+        Log "theme $($dir.Name): the copy bundled with winarchy"
+    }
 }
 
 # index.json feeds the theme and background pickers. Each theme carries its bar palette,
 # so the theme picker can morph into a theme before it is applied.
 function Update-Index {
-    New-Item -ItemType Directory -Force $Thumbs | Out-Null
+    # Install's first apply comes before the first sync: nothing is there yet.
+    New-Item -ItemType Directory -Force $Themes, $Thumbs | Out-Null
     # Theme previews are the picker's big cover-flow cards, so they are twice the width of the
     # wallpaper thumbs. The width is in the folder name: Update-Thumb only compares timestamps.
     Remove-Item (Join-Path $Thumbs '_themes') -Recurse -Force -ErrorAction SilentlyContinue
@@ -368,6 +386,27 @@ function Set-WindowsAccent($c) {
     Send-SettingChange
 }
 
+# Omarchy's own apps (Omawrite, Omacalc, Omacut, Hype; lib/ports.ps1) read the theme from
+# ~/.local/state/omarchy/current/theme/colors.toml and follow it as it changes, the way they
+# do on Omarchy. Hype honours XDG_STATE_HOME, so a set one gets the file too. Journalled
+# like theme.name: uninstall takes them out again.
+function Get-OmarchyStateColorFiles {
+    $files = @(Join-Path $env:USERPROFILE '.local\state\omarchy\current\theme\colors.toml')
+    if ($env:XDG_STATE_HOME) { $files += Join-Path $env:XDG_STATE_HOME 'omarchy\current\theme\colors.toml' }
+    $files | Select-Object -Unique
+}
+
+function Set-OmarchyStateTheme([string]$theme) {
+    $src = Join-Path $Themes "$theme\colors.toml"
+    if (-not (Test-Path -LiteralPath $src)) { return }
+    $text = Get-Content -Raw -LiteralPath $src
+    foreach ($f in Get-OmarchyStateColorFiles) {
+        if ((Test-Path -LiteralPath $f) -and (Get-Content -Raw -LiteralPath $f) -eq $text) { continue }
+        Save-File $f
+        Write-Utf8 $f $text
+    }
+}
+
 # Neovim configs that follow Omarchy's convention (lua/plugins/theme.lua + theme.name).
 function Set-NeovimTheme([string]$theme, $c) {
     $p = Get-Paths
@@ -416,6 +455,7 @@ function Invoke-ThemeSet([string]$theme) {
     $state = Read-State
     $state.theme = $theme
     Save-State $state
+    try { Set-OmarchyStateTheme $theme } catch { Log "theme $theme -> Omarchy apps FAILED: $($_.Exception.Message)" }
     $targets = Get-ThemeTargets
     $apply = {
         param([bool]$fast)

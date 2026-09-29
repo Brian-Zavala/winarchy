@@ -209,6 +209,7 @@ function Restore-PartOwnedFile($e, [string]$dir) {
     }
     if ($leaf -in 'profile.ps1', 'Microsoft.PowerShell_profile.ps1') {
         Remove-HerdrProfile $path
+        if (Get-Command Remove-ShellProfile -ErrorAction SilentlyContinue) { Remove-ShellProfile $path }
     } elseif ($path -like '*\.vscode\extensions\extensions.json') {
         Write-Json $path @(@(Read-Json $path) | Where-Object { $_ -and $_.identifier.id -ne 'local.omarchy-theme' }) 12
     } elseif ($path -like '*\FlowLauncher\Settings\Settings.json' -and $e.existed -and $e.copy) {
@@ -321,6 +322,10 @@ function Restore-JournalEntry($e, [string]$dir) {
         # Herdr came from its own installer, not winget, so uninstalling it is our job.
         # The envpath entry recorded beside this one takes its PATH entry back out.
         'herdr' { Remove-HerdrFiles $e.bin $e.packages }
+        # A web app's Start menu shortcut and icon (lib/webapps.ps1).
+        'webapp' { Remove-WebAppFiles $e }
+        # One of Omarchy's own apps, built for Windows (lib/ports.ps1).
+        'port' { Remove-PortFiles $e }
         'browsertask' { Disable-BrowserPolicy }
         'gametask' { Disable-GameHelper }
         'defender' {

@@ -22,6 +22,8 @@ public class WinarchyAudio {
     [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     interface IMMDevice {
         [PreserveSig] int Activate(ref Guid iid, int ctx, IntPtr p, [MarshalAs(UnmanagedType.IUnknown)] out object o);
+        [PreserveSig] int OpenPropertyStore(int access, out IntPtr store);
+        [PreserveSig] int GetId([MarshalAs(UnmanagedType.LPWStr)] out string id);
     }
     [ComImport, Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     interface IAudioSessionManager2 {
@@ -120,6 +122,14 @@ public class WinarchyAudio {
         return hit;
     }
 
+    // The default playback device's endpoint id ("{0.0.0.00000000}.{guid}"), or null.
+    public static string DefaultId() {
+        var en = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
+        IMMDevice dev; string id;
+        if (en.GetDefaultAudioEndpoint(0, 1, out dev) != 0 || dev.GetId(out id) != 0) return null;
+        return id;
+    }
+
     // Make an endpoint the default for every role (what the Sound settings' "Set as default" does).
     public static void SetDefault(string id) {
         var pc = (IPolicyConfig)new PolicyConfigCom();
@@ -140,6 +150,31 @@ function Update-AudioState {
     Write-JsonAtomic (Join-Path $Pack 'audio.json') ([ordered]@{ sessions = $sessions; at = (Get-Date).ToString('s') })
 }
 
+# The playback devices that are plugged in and on, as endpoint ids with their names, in a
+# fixed order. Windows keeps them under MMDevices; DeviceState 1 = active.
+function Get-AudioOutputs {
+    $root = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render'
+    @(Get-ChildItem $root -ErrorAction SilentlyContinue | ForEach-Object {
+            if ((Get-ItemProperty $_.PSPath -Name DeviceState -ErrorAction SilentlyContinue).DeviceState -ne 1) { return }
+            # PKEY_Device_DeviceDesc ("Speakers") and PKEY_DeviceInterface_FriendlyName ("Realtek Audio").
+            $props = Get-ItemProperty (Join-Path $_.PSPath 'Properties') -ErrorAction SilentlyContinue
+            $desc = $props.'{a45c254e-df1c-4efd-8020-67d146a850e0},2'
+            $iface = $props.'{b3f8fa53-0004-438e-9003-51a46e139bfc},6'
+            [pscustomobject]@{ id = "{0.0.0.00000000}.$($_.PSChildName)".ToLower(); name = $(if ($iface) { "$desc ($iface)" } else { "$desc" }) }
+        } | Sort-Object id)
+}
+
+# Omarchy's Shift + Mute (omarchy-audio-output-switch): the next playback device becomes the default.
+function Switch-AudioOutput {
+    $outs = @(Get-AudioOutputs)
+    if ($outs.Count -lt 2) { return $(if ($outs) { $outs[0].name } else { '' }) }
+    $cur = "$([WinarchyAudio]::DefaultId())".ToLower()
+    $i = [array]::IndexOf(@($outs.id), $cur)
+    $next = $outs[($i + 1) % $outs.Count]
+    [WinarchyAudio]::SetDefault($next.id)
+    $next.name
+}
+
 function Invoke-AudioAction([string]$What, [string]$A, [string]$B) {
     Initialize-CoreAudio
     switch ($What) {
@@ -147,7 +182,9 @@ function Invoke-AudioAction([string]$What, [string]$A, [string]$B) {
         'app-volume' { [void][WinarchyAudio]::SetApp([uint32]$A, [int]$B, -1) }
         'app-mute' { [void][WinarchyAudio]::SetApp([uint32]$A, -1, [int]$B) }
         'default' { [WinarchyAudio]::SetDefault($A) }
-        default { throw 'usage: winarchy audio <sessions|app-volume <pid> <0-100>|app-mute <pid> <0|1>|default <device id>>' }
+        # The name goes where winarchy.ahk reads it for its OSD.
+        'next-output' { Write-Utf8 (Join-Path $Generated 'audio-output.txt') (Switch-AudioOutput) }
+        default { throw 'usage: winarchy audio <sessions|app-volume <pid> <0-100>|app-mute <pid> <0|1>|default <device id>|next-output>' }
     }
     Update-AudioState
 }

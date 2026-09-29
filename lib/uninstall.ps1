@@ -14,6 +14,8 @@ function Get-UserApps($entries) {
     $core = Get-CoreWingetIds
     foreach ($e in $entries) {
         if ($e.kind -eq 'herdr') { [pscustomobject]@{ label = 'Herdr'; entry = $e }; continue }
+        if ($e.kind -eq 'webapp') { [pscustomobject]@{ label = "$($e.label) (web app)"; entry = $e }; continue }
+        if ($e.kind -eq 'port') { [pscustomobject]@{ label = $e.label; entry = $e }; continue }
         if ($e.kind -ne 'winget' -or $e.preinstalled) { continue }
         $item = $Catalog | ForEach-Object { $_.items } | Where-Object { $_.id -eq $e.id } | Select-Object -First 1
         $mine = if ($e.source) { $e.source -eq 'menu' } else { $item -and $core -notcontains $e.id }
@@ -81,7 +83,7 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
     # keeps both (a kept Herdr with its PATH entry gone would stop answering to `herdr`).
     $keptHerdrBins = @($keptApps | Where-Object { $_.entry.kind -eq 'herdr' } | ForEach-Object { $_.entry.bin })
     foreach ($e in $entries) {
-        if ($e.kind -in 'winget', 'note', 'herdr') { continue }
+        if ($e.kind -in 'winget', 'note', 'herdr', 'webapp', 'port') { continue }
         if ($e.kind -eq 'envpath' -and $keptHerdrBins -contains $e.dir) { continue }
         $what = switch ($e.kind) {
             'reg' { "registry $($e.path)\$($e.name)" }
@@ -94,6 +96,14 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
         }
         & $step "Restore $what" { Restore-JournalEntry $e $dir }
     }
+    # Reminders are scheduled tasks that call winarchy's menu.ahk: with winarchy gone they
+    # would only fail when they come due. Ours all carry the prefix (lib/system.ps1).
+    $reminders = @(Get-ScheduledTask -TaskName 'winarchy-reminder-*' -ErrorAction SilentlyContinue)
+    if ($reminders) {
+        & $step "Remove $($reminders.Count) reminder(s) (Task Scheduler)" {
+            $reminders | Unregister-ScheduledTask -Confirm:$false
+        }
+    }
     # The replay removed the screenshot auto-copy shortcut unless you had one before
     # winarchy; if it's gone, stop the running copy too (it runs from the code folder).
     if (-not (Test-Path -LiteralPath (Join-Path ([Environment]::GetFolderPath('Startup')) 'Screenshot to Clipboard.lnk'))) {
@@ -102,11 +112,13 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
 
     # What winarchy runs on (GlazeWM, Flow, AutoHotkey, ...) goes unless -KeepApps; the
     # person's own apps go only if they said so.
-    foreach ($e in $entries | Where-Object { $_.kind -in 'winget', 'herdr' }) {
+    foreach ($e in $entries | Where-Object { $_.kind -in 'winget', 'herdr', 'webapp', 'port' }) {
         $own = $userKeys -contains $e.key
         if ($own -and $keptKeys -contains $e.key) { continue }
         if (-not $own -and $KeepApps) { continue }
         if ($e.kind -eq 'herdr') { & $step 'Remove Herdr' { Restore-JournalEntry $e $dir }; continue }
+        if ($e.kind -eq 'webapp') { & $step "Remove web app $($e.label)" { Restore-JournalEntry $e $dir }; continue }
+        if ($e.kind -eq 'port') { & $step "Remove $($e.label)" { Restore-JournalEntry $e $dir }; continue }
         if ($e.preinstalled) { Write-Host "  keeping $($e.id) (it was installed before winarchy)"; continue }
         & $step "winget uninstall $($e.id)" { winget uninstall -e --id $e.id --silent --accept-source-agreements | Out-Host }
     }

@@ -14,6 +14,7 @@ Everything the Omarchy menu does is also a `winarchy` command, for scripts or wh
 | `winarchy apply [-MonitorsOnly] [-Resplit]` | Apply your settings again; `-Resplit` fits the workspaces to the monitors connected now |
 | `winarchy bar on\|off\|toggle` | The top bar |
 | `winarchy keys` | Print the keybindings |
+| `winarchy keys-refresh` | Read again which keys your own Startup scripts bind (Winarchy's leave those to them; this runs by itself when one is saved) |
 | `winarchy status` / `winarchy version` | The current theme, background and font / the version |
 
 ### Apps
@@ -55,8 +56,8 @@ Everything the Omarchy menu does is also a `winarchy` command, for scripts or wh
 | `winarchy dns-set <dhcp\|cloudflare\|google\|custom>` | Switch the DNS servers on your connections (admin prompt) |
 | `winarchy reminder [when] [text]` / `reminder show` / `reminder clear` | Set, list or clear reminders |
 | `winarchy speedtest [network\|disk]` | Measure your internet or disk speed |
-| `winarchy transcode [format] [file]` | Convert a video, audio or image file with FFmpeg |
-| `winarchy web-app [name] [url]` / `web-app remove` | Add or remove a Start menu web app |
+| `winarchy transcode [file] [format] [size]` | Omarchy's transcode: a picture to jpg / png (high, medium, low), a video to mp4 / gif (4k, 1080p, 720p), saved beside it and copied to the clipboard |
+| `winarchy web-app [name] [url]` / `web-app remove` | Add or remove a web app of your own (Omarchy's are in _Install > Web Apps_; see [web apps](25-web-apps.md)) |
 | `winarchy deps` | Install anything Winarchy needs that's missing |
 | `winarchy sync [-Offline]` | Download Omarchy's themes and backgrounds, and rebuild the selectors |
 | `winarchy uninstall [-DryRun] [-KeepApps] [-Purge] [-Yes]` | Back to normal Windows (see [system snapshots](47-system-snapshots.md)) |

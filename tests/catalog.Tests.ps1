@@ -3,10 +3,16 @@ BeforeAll {
     $Verb = 'test'
     $root = Split-Path -Parent $PSScriptRoot
     # herdr: the Terminal group's Herdr row answers its presence test from lib/herdr.ps1.
-    foreach ($f in 'common', 'detect', 'render', 'catalog', 'herdr') { . "$root\lib\$f.ps1" }
+    # webapps (+ journal): the Web Apps group's rows come from default/webapps.json.
+    foreach ($f in 'common', 'detect', 'render', 'journal', 'webapps', 'catalog', 'herdr') { . "$root\lib\$f.ps1" }
     $Code = $root
     # Log lines from tests go to a scratch log, never the real one.
     $LogFile = Join-Path $TestDrive 'winarchy.log'
+    # The Web Apps rows ask the journal: a scratch one, never the real one.
+    $script:JournalDir = Join-Path $TestDrive 'journal'
+    $script:JournalCache = $null
+    New-Item -ItemType Directory $script:JournalDir | Out-Null
+    Write-Json (Join-Path $script:JournalDir 'journal.json') ([ordered]@{ entries = @() })
 }
 
 Describe 'Catalog table' {
@@ -106,6 +112,54 @@ Describe 'Install and remove' {
     It 'refuses a key that is not in the catalog' {
         { Install-CatalogItem 'no-such-item' } | Should -Throw '*unknown catalog item*'
         { Uninstall-CatalogItem 'no-such-item' } | Should -Throw '*unknown catalog item*'
+    }
+}
+
+Describe 'Terminal apps in Start' {
+    BeforeEach {
+        $script:lnkDir = Join-Path $TestDrive ([guid]::NewGuid())
+        Mock Get-TuiShortcutPath { Join-Path $script:lnkDir "$($item.tui.name).lnk" }
+        Mock Find-TuiExe { Join-Path $env:SystemRoot 'notepad.exe' }
+        Mock Save-File {}
+    }
+    It 'gives every TUI row a Start entry' {
+        foreach ($k in 'lazygit', 'lazydocker', 'dua', 'cliamp', 'btop', 'herdr') { (Get-CatalogItem $k).tui | Should -Not -BeNullOrEmpty -Because $k }
+    }
+    It 'makes one that opens the app in the terminal, with its own AppUserModelID' {
+        $item = Get-CatalogItem 'cliamp'
+        Add-TuiShortcut $item | Should -BeTrue
+        $lnk = Join-Path $script:lnkDir 'Cliamp.lnk'
+        $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
+        $s.Arguments | Should -Match 'notepad\.exe'
+        if (Get-Command wt.exe -ErrorAction SilentlyContinue) { $s.Arguments | Should -Match '^new-tab --title "Cliamp"' }
+        [Winarchy.Shortcut]::GetAppId($lnk) | Should -Be 'Winarchy.Tui.cliamp'
+        Should -Invoke Save-File -Times 1
+    }
+    It 'passes the arguments a TUI needs' {
+        Add-TuiShortcut (Get-CatalogItem 'dua') | Out-Null
+        (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $script:lnkDir 'dua.lnk')).Arguments | Should -Match 'interactive$'
+    }
+    It 'makes none while the exe is not there yet' {
+        Mock Find-TuiExe { $null }
+        Add-TuiShortcut (Get-CatalogItem 'lazygit') | Should -BeFalse
+        Test-Path (Join-Path $script:lnkDir 'lazygit.lnk') | Should -BeFalse
+    }
+    It 'takes it out again, and the folder once empty' {
+        $item = Get-CatalogItem 'lazygit'
+        Add-TuiShortcut $item | Out-Null
+        Remove-TuiShortcut $item
+        Test-Path $script:lnkDir | Should -BeFalse
+    }
+    It 'fills in and cleans up on apply' {
+        Mock Get-InstalledSnapshot { [ordered]@{ arp = @() } }
+        Mock Test-CatalogCommand { $name -eq 'lazygit' }
+        Mock Test-CatalogArp { $false }
+        Mock Test-HerdrInstalled { $false }
+        New-Item -ItemType Directory -Force $script:lnkDir | Out-Null
+        Set-Content (Join-Path $script:lnkDir 'dua.lnk') 'stale'
+        Sync-TuiShortcuts
+        Test-Path (Join-Path $script:lnkDir 'lazygit.lnk') | Should -BeTrue
+        Test-Path (Join-Path $script:lnkDir 'dua.lnk') | Should -BeFalse
     }
 }
 

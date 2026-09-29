@@ -8,4 +8,19 @@ APPS  (winarchy launchers; set "launchers": false in config.json to use your own
   Super + Shift + /             1Password
   Super + Shift + O             Obsidian
   Super + Shift + G             Signal
+  Super + Shift + D             lazydocker
+  Super + Shift + Alt + M       Cliamp (music in the terminal)
+  Super + Shift + W             Omawrite (writing)
+
+WEB APPS  (a site in its own window; Install > Web Apps puts them in Start too)
+  Super + Shift + A             ChatGPT
+  Super + Shift + Alt + A       Grok
+  Super + Shift + E             HEY
+  Super + Shift + Alt + E       HEY: new email
+  Super + Shift + C             HEY Calendar
   Super + Shift + Y             YouTube
+  Super + Shift + X             X
+  Super + Shift + Alt + X       X: new post
+  Super + Shift + P             Google Photos (brings an open one back)
+  Super + Shift + Alt + G       WhatsApp (brings an open one back)
+  Super + Shift + Ctrl + G      Google Messages (brings an open one back)
