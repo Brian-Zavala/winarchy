@@ -1,0 +1,20 @@
+{
+  "_help": "Programs the install would otherwise compile on every PC, built once by .github/workflows/prebuilt.yml from the source pinned here and published as a release. The workflow runs when this file changes and builds each entry that has no url yet; put the url and sha256 from its run summary here by hand, so an install never downloads something this file has not pinned. Bump rev to publish a new build of the same source. An entry without a url is built on the PC as before.",
+  "ttfx": {
+    "source": "omacom/ttfx",
+    "tag": "v0.3.3",
+    "version": "0.3.3",
+    "rev": 1,
+    "url": "https://github.com/Brian-Zavala/winarchy/releases/download/prebuilt-ttfx-v0.3.3-1/ttfx-0.3.3-win-x64.zip",
+    "sha256": "843D73B1102D00E4B3C41A64449D0C95F2B471ECB7E78B5839AA8886DBAF03CC"
+  },
+  "glazewm-animations": {
+    "source": "florensm/glazewm",
+    "commit": "d76641418f9642837b63817a8eeed7fbed4aadb5",
+    "version": "3.10.1",
+    "fallbackToolchain": "nightly-2026-07-20",
+    "rev": 1,
+    "url": "https://github.com/Brian-Zavala/winarchy/releases/download/prebuilt-glazewm-animations-v3.10.1-d76641418f96-1/glazewm-animations-3.10.1-d76641418f96-win-x64.zip",
+    "sha256": "26662F78C7040E6F5DC84B33DD448117524B47526E2A01E24418C789FB1116E1"
+  }
+}

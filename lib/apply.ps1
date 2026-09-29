@@ -356,11 +356,13 @@ function Get-ZpackJson($p) {
     $network = & $widget 'network' './network.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'n')
     $audio = & $widget 'audio' './audio.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'a')
     $bluetooth = & $widget 'bluetooth' './bluetooth.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'b')
+    # The bar's battery icon on a laptop (Quattro's omarchy.power): p0..p7, reads power.json.
+    $power = & $widget 'power' './power.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'p')
     [ordered]@{
         '$schema' = 'https://github.com/glzr-io/zebar/raw/v3.0.0/resources/zpack-schema.json'
         name = 'omarchy'; version = '3.0.0'; description = 'Omarchy style top bar, menu and pickers for GlazeWM (winarchy)'
         tags = @('topbar'); previewImages = @(); repositoryUrl = ''
-        widgets = @($bar, $menu, $calendar, $usage, $display, $tailscale, $worldclock, $network, $audio, $bluetooth)
+        widgets = @($bar, $menu, $calendar, $usage, $display, $tailscale, $worldclock, $network, $audio, $bluetooth, $power)
     } | ConvertTo-Json -Depth 12
 }
 
@@ -428,16 +430,38 @@ function Write-ZebarPack($p, $cfg) {
         try { Save-ZebarClient $cfg.zebarClientVersion $Pack }
         catch { Log "Zebar client FAILED: $($_.Exception.Message) (the bar needs it; winarchy apply tries again)" }
     }
-    $settings = Join-Path $env:USERPROFILE '.glzr\zebar\settings.json'
-    $want = [ordered]@{
-        '$schema' = 'https://github.com/glzr-io/zebar/raw/v3.3.1/resources/settings-schema.json'
-        startupConfigs = @([ordered]@{ pack = 'omarchy'; widget = 'bar'; preset = 'default' })
-    }
-    $cur = Read-Json $settings
-    if (-not $cur -or -not ($cur.startupConfigs | Where-Object { $_.pack -eq 'omarchy' -and $_.widget -eq 'bar' })) {
-        Save-File $settings
-        Write-Json $settings $want
-    }
+    Set-ZebarStartup
+}
+
+$ZebarSettings = Join-Path $env:USERPROFILE '.glzr\zebar\settings.json'
+
+# The widgets Zebar opens when it starts, or $null when $cur needs no change. Zebar's own
+# first run (settings.json missing) writes its starter bar (glzr-io.starter) as the only
+# one: that generic bar then shows instead of winarchy's. So the starter is dropped,
+# winarchy's bar comes first, and any other widget the person added stays.
+function Get-ZebarStartupConfigs($cur) {
+    $all = @($cur.startupConfigs | Where-Object { $_ })
+    $keep = @($all | Where-Object { $_.pack -ne 'glzr-io.starter' -and -not ($_.pack -eq 'omarchy' -and $_.widget -eq 'bar') })
+    $bar = [ordered]@{ pack = 'omarchy'; widget = 'bar'; preset = 'default' }
+    $want = @($bar) + $keep
+    $ours = @($all | Where-Object { $_.pack -eq 'omarchy' -and $_.widget -eq 'bar' })
+    if ($cur -and $ours.Count -eq 1 -and $all.Count -eq $want.Count) { return $null }
+    $want
+}
+
+# Writes Zebar's settings.json so it opens winarchy's bar (Get-ZebarStartupConfigs). Apply
+# runs it, and install before GlazeWM + Zebar are even installed: with the file already
+# there, Zebar never has a first run, so it never sets up its starter bar.
+function Set-ZebarStartup {
+    $cur = Read-Json $ZebarSettings
+    $configs = Get-ZebarStartupConfigs $cur
+    if ($null -eq $configs) { return }
+    Save-File $ZebarSettings
+    Write-Json $ZebarSettings ([ordered]@{
+            '$schema' = 'https://github.com/glzr-io/zebar/raw/v3.3.1/resources/settings-schema.json'
+            startupConfigs = @($configs)
+        })
+    if ($cur) { Log "Zebar settings: set to open winarchy's bar (it had $(@($cur.startupConfigs | ForEach-Object { "$($_.pack)/$($_.widget)" }) -join ', '))" }
 }
 
 # Fetches Zebar's client as $dir\zebar.mjs. esm.sh serves it as one self-contained file.
@@ -574,7 +598,30 @@ function Set-TerminalProfiles($p) {
     $list = @($wt.profiles.list | Where-Object { $_.guid -notin $ScreensaverProfile, $AboutProfile, $AgentProfile })
     foreach ($w in $want) { Save-JsonItem $file 'profiles.list' $w.name }
     $wt.profiles.list = @($list) + $want
+    if ($pwsh) { Set-TerminalDefaultProfile $file $wt }
     Write-Json $file $wt
+}
+
+# New tabs open PowerShell 7, the shell winarchy's profile and commands are set up in -
+# but only in place of the default Windows Terminal ships with (Windows PowerShell 5.1),
+# or none: WSL, cmd or anything else there was the person's own pick. Done once: whatever
+# the default is changed to afterwards stays. Uninstall puts the old default back unless
+# it was changed again since.
+$WindowsPowerShellProfile = '{61c54bbd-c2c6-5271-96e7-009a87ff44bf}'
+$PowerShellCoreProfile = '{574e775e-4f2a-5b96-ac1e-a2962a402336}'
+function Set-TerminalDefaultProfile([string]$file, $wt) {
+    if (Test-Journaled "json|$file|defaultProfile") { return }
+    $cur = $wt.defaultProfile
+    if ($cur -and $cur -ne $WindowsPowerShellProfile) { return }
+    # Windows Terminal adds PowerShell 7 to the list by itself, under the fixed guid (with
+    # more than one install, the others get their own). Not listed yet: it is added, with
+    # that guid, the next time Terminal starts. Listed but all hidden: the person hid it.
+    $core = @($wt.profiles.list | Where-Object { $_.source -eq 'Windows.Terminal.PowershellCore' })
+    $shown = @($core | Where-Object { -not $_.hidden })
+    if ($core -and -not $shown) { return }
+    $guid = if (-not $shown -or $shown.guid -contains $PowerShellCoreProfile) { $PowerShellCoreProfile } else { $shown[0].guid }
+    Save-JsonProperty $file 'defaultProfile' $guid
+    $wt | Add-Member -Force -NotePropertyName defaultProfile -NotePropertyValue $guid
 }
 
 # Omarchy's branding text (Style > Screensaver / About edit these).

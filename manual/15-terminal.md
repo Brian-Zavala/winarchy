@@ -1,6 +1,6 @@
 # Terminal
 
-`Super + Return` opens your terminal: Windows Terminal, running PowerShell 7. Winarchy themes it with everything else, in the theme's colors and your font, and gives it Omarchy's padding. `"apps": { "terminal": ... }` in your settings picks another terminal.
+`Super + Return` opens your terminal: Windows Terminal, running PowerShell 7. New tabs open PowerShell 7 too: Winarchy makes it Windows Terminal's default profile, unless you had already picked a default other than Windows PowerShell. Winarchy themes it with everything else, in the theme's colors and your font, and gives it Omarchy's padding. `"apps": { "terminal": ... }` in your settings picks another terminal.
 
 Copy and paste with `Super + C` and `Super + V`, the same as in every other app (see [clipboard](08-unified-clipboard-history.md)).
 

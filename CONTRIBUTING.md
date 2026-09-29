@@ -42,6 +42,10 @@ winarchy apply; winarchy doctor                         # on your PC
 
 CI runs the same checks on every push and pull request.
 
+Anything the install would otherwise compile on each PC (ttfx, the window-animation GlazeWM) is built once by
+`.github/workflows/prebuilt.yml` from the source `default/prebuilt.json` pins. It runs when that file changes and
+builds each entry without a `url`. Copy the url and SHA-256 from the run's summary into `default/prebuilt.json`.
+
 ## Credits
 
 Winarchy is an unofficial port of [Omarchy](https://github.com/omacom/omarchy) (MIT) to Windows, built on

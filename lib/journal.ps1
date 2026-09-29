@@ -89,7 +89,9 @@ function Save-Dir([string]$path) {
 }
 
 # A property inside a JSON settings file, by dotted path ("profiles.defaults.colorScheme").
-function Save-JsonProperty([string]$path, [string]$pointer) {
+# $setTo, when given, is the one value winarchy puts there: uninstall then restores only
+# while it still reads that, so a choice the person made afterwards is left alone.
+function Save-JsonProperty([string]$path, [string]$pointer, [string]$setTo) {
     $key = "json|$path|$pointer"
     if (Test-Journaled $key) { return }
     $obj = Read-Json $path
@@ -99,7 +101,9 @@ function Save-JsonProperty([string]$path, [string]$pointer) {
         else { $existed = $false; $obj = $null; break }
     }
     if ($existed) { $value = $obj }
-    [void](Add-JournalEntry @{ kind = 'json'; key = $key; path = $path; pointer = $pointer; existed = $existed; value = $value })
+    $e = @{ kind = 'json'; key = $key; path = $path; pointer = $pointer; existed = $existed; value = $value }
+    if ($setTo) { $e.setTo = $setTo }
+    [void](Add-JournalEntry $e)
 }
 
 # A string key in a JSONC file (VS Code settings: comments must survive).
@@ -271,7 +275,13 @@ function Restore-JournalEntry($e, [string]$dir) {
         }
         'json' {
             $obj = Read-Json $e.path
-            if ($obj) { Set-JsonPointer $obj $e.pointer $e.value (-not $e.existed); Write-Json $e.path $obj }
+            if (-not $obj) { return }
+            if ($e.setTo) {
+                $now = $obj
+                foreach ($part in $e.pointer -split '\.') { $now = if ($null -ne $now) { $now.$part } }
+                if ($now -ne $e.setTo) { return }
+            }
+            Set-JsonPointer $obj $e.pointer $e.value (-not $e.existed); Write-Json $e.path $obj
         }
         'jsonc' {
             if ($e.existed) { Set-JsoncString $e.path $e.name $e.value }

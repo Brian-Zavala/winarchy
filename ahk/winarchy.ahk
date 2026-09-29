@@ -71,6 +71,11 @@ ShowTaskbars(*) {
         for hwnd in WinGetList("ahk_class " cls)
             WinShow hwnd
 }
+; Turned off (Toggle > Taskbar): show them now. Apply restarts this script with a
+; force-stop, which skips OnExit and would leave them hidden. A timer, so it runs in
+; its own thread: DetectHiddenWindows does not become every thread's default.
+if Env("hideTaskbar", "1") != "1"
+    SetTimer ShowTaskbars, -1
 HideTaskbars()
 SetTimer HideTaskbars, 1000
 OnExit ShowTaskbars
@@ -825,11 +830,22 @@ WmLog(msg) {
 
 BarGuard() {
     global BarEnabled, Zebar
-    static lastRestart := 0
+    static lastRestart := 0, lastRepair := 0
     if !BarEnabled || Busy()      ; a game changing display modes: see FullscreenWatch
         return
     if !ProcessExist("zebar.exe") {
         try Run('"' Zebar '" startup', , "Hide")
+        return
+    }
+    ; Zebar's generic starter bar: its settings.json was reset (Zebar writes that bar in
+    ; when it finds none), so restarting Zebar alone would only bring it back. Apply
+    ; points the settings at winarchy's bar again and restarts Zebar.
+    if WinExist("Zebar - glzr-io.starter ahk_exe zebar.exe") {
+        if !lastRepair || A_TickCount - lastRepair > 300000 {
+            lastRepair := A_TickCount
+            WmLog("Zebar opened its starter bar (its settings were reset): winarchy apply puts the bar back")
+            OmarchyCmd("apply")
+        }
         return
     }
     if BarWindows().Count < MonitorGetCount() && A_TickCount - lastRestart > 20000 {
@@ -2062,7 +2078,7 @@ if Env("compose", "0") = "1" {
 #^b::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" bluetooth-panel')   ; bluetooth panel (again: close)
 #^w::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" network-panel')     ; network panel (again: close)
 #^d::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" display-panel')     ; display panel (again: close)
-#^p::OpenMenu("power")                            ; power mode (Omarchy's power profiles)
+#^p::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" power-panel')         ; power panel (desktop: power menu)
 #^!d::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" calendar')   ; calendar (the clock's)
 #^!e::Run('"' A_AhkPath '" "' A_ScriptDir '\menu.ahk" worldclock')   ; world clock (Omarchy's Elsewhen)
 #+!SC033::Send "#n"                               ; Super+Shift+Alt+Comma: notification history

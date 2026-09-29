@@ -119,7 +119,7 @@ No `Print` key on your laptop? `Super + Ctrl + C` opens the capture menu.
 | `Super + Ctrl + B` | Bluetooth panel: radio switch and paired devices |
 | `Super + Ctrl + W` | Network panel: speed test, DNS and Wi-Fi |
 | `Super + Ctrl + D` | Display panel: brightness, scale and text size |
-| `Super + Ctrl + P` | Power settings |
+| `Super + Ctrl + P` | Power panel: battery and power mode (the Power menu on a desktop) |
 | `Super + Ctrl + T` | Activity (btop) |
 | `Super + Ctrl + Q` | Calculator (Omacalc once it's installed) |
 | `Super + Ctrl + Z` | Zoom in (add `Alt` to reset) |

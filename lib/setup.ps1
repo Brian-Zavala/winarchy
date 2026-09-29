@@ -304,6 +304,9 @@ function Install-Apps {
     foreach ($a in $Apps) {
         if (& $a.test) { Save-Winget $a.id $true; Write-Done "$($a.name): installed"; continue }
         Save-Winget $a.id $false
+        # Before Zebar exists: its first run would otherwise make its generic starter bar
+        # the one it opens (Set-ZebarStartup).
+        if ($a.id -eq 'glzr-io.glazewm') { try { Set-ZebarStartup } catch { Log "Zebar settings not written yet ($($_.Exception.Message)); apply writes them" } }
         if ($a.note) { Write-Ok $a.note }
         [void](Install-WingetPackage $a.id $a.name $null)
         [void](Update-Paths)
@@ -337,8 +340,9 @@ function Install-Extras {
     }
     $p = Update-Paths
     if ($p.ttfx) { Write-Done "ttfx: $($p.ttfx)"; return }
-    # ttfx (Omarchy's Rust port of terminaltexteffects): a prebuilt Windows binary from the
-    # winarchy release if one is published, else built with cargo when Rust is present.
+    # ttfx (Omarchy's Rust port of terminaltexteffects): a download of your own (ttfxUrl),
+    # else winarchy's pinned build (default/prebuilt.json), else built with cargo when Rust
+    # is present.
     $url = (Get-Config).ttfxUrl
     $dest = Join-Path $Data 'bin\ttfx.exe'
     if ($url) {
@@ -347,6 +351,9 @@ function Install-Extras {
             Invoke-WebRequest $url -OutFile $dest -TimeoutSec 120
             Write-Ok "ttfx: downloaded to $dest"; return
         } catch { Write-Ok "ttfx download failed ($($_.Exception.Message))" }
+    } elseif ($pin = Get-Prebuilt 'ttfx') {
+        try { Install-PrebuiltTtfx $pin $dest; Write-Ok "ttfx $($pin.version): downloaded to $dest"; return }
+        catch { Write-Ok "ttfx download failed ($($_.Exception.Message)): building it instead" }
     }
     $cargo = Get-Command cargo -ErrorAction SilentlyContinue
     if ($cargo) {
@@ -358,12 +365,26 @@ function Install-Extras {
         }
         [void](Add-JournalEntry @{ kind = 'cargo'; key = 'cargo|ttfx'; crate = 'ttfx' })
         $log = Join-Path $Data 'logs\ttfx-build.log'
-        $cmd = "& '$($cargo.Source -replace "'", "''")' install --git https://github.com/omacom/ttfx --tag v0.3.3 --locked *> '$($log -replace "'", "''")'"
+        $src = (Read-Json (Join-Path $Code 'default\prebuilt.json') -AsHashtable).ttfx
+        $cmd = "& '$($cargo.Source -replace "'", "''")' install --git https://github.com/$($src.source) --tag $($src.tag) --locked *> '$($log -replace "'", "''")'"
         Start-Hidden (Get-Paths).pwsh @('-NoProfile', '-EncodedCommand', (ConvertTo-EncodedCommand $cmd))
         Write-Ok "ttfx: building in the background (a few minutes; log: $log). The screensaver shows the still logo until then."
     } else {
         Write-Ok 'ttfx not available: the screensaver shows the still logo (install Rust, then: winarchy extras)'
     }
+}
+
+# The pinned ttfx release is a zip (ttfx.exe with its license): only the exe is kept.
+function Install-PrebuiltTtfx($pin, [string]$dest) {
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) "winarchy-ttfx-$([guid]::NewGuid().ToString('N'))"
+    try {
+        Save-PinnedFile $pin.url $pin.sha256 "$tmp.zip" 120
+        Expand-Archive -LiteralPath "$tmp.zip" -DestinationPath $tmp -Force
+        $exe = Get-ChildItem -LiteralPath $tmp -Recurse -Filter ttfx.exe | Select-Object -First 1
+        if (-not $exe) { throw 'the download has no ttfx.exe' }
+        New-Item -ItemType Directory -Force (Split-Path $dest) | Out-Null
+        Copy-Item -Force -LiteralPath $exe.FullName $dest
+    } finally { Remove-Item -LiteralPath $tmp, "$tmp.zip" -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
 # Herdr, on a fresh install. Asked for rather than assumed: it is the one thing winarchy
@@ -406,6 +427,39 @@ function Install-Dependencies {
     [void](Update-Paths)
 }
 
+# Install's theme download, in a hidden process of its own (winarchy sync -Background):
+# the files, then the pickers' thumbnails. $null if it could not start (install then
+# downloads at the themes step, as before).
+function Start-ThemeDownload {
+    try {
+        New-Item -ItemType Directory -Force $Generated | Out-Null
+        Remove-Item -LiteralPath $ThemeDownloadProgress -Force -ErrorAction SilentlyContinue
+        $a = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Code 'bin\winarchy.ps1'), 'sync', '-Background')
+        Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList (ConvertTo-ArgString $a) -WindowStyle Hidden -PassThru
+    } catch { Log "theme download did not start in the background ($($_.Exception.Message))"; $null }
+}
+
+# Waits for it, showing its progress. One that hangs is stopped after $timeoutSec; the
+# sync that follows fetches whatever it did not bring.
+function Wait-ThemeDownload($proc, [int]$timeoutSec = 900) {
+    $deadline = [DateTime]::UtcNow.AddSeconds($timeoutSec)
+    if (-not $proc.HasExited) { Write-Ok 'Finishing the download that started with the install...' }
+    $shown = -1
+    while (-not $proc.WaitForExit(500)) {
+        if ([DateTime]::UtcNow -gt $deadline) {
+            try { $proc.Kill($true) } catch {}
+            Log "background theme download stopped after $([math]::Round($timeoutSec / 60)) min"
+            break
+        }
+        $s = Read-Json $ThemeDownloadProgress
+        if ($s -and $s.count -and $s.done -ne $shown) {
+            $shown = $s.done
+            Write-UiProgress 'downloading' $s.done $s.count ('{0:N0}/{1:N0} MB' -f ($s.bytes / 1MB), ($s.total / 1MB))
+        }
+    }
+    Remove-Item -LiteralPath $ThemeDownloadProgress -Force -ErrorAction SilentlyContinue
+}
+
 # The few questions whose answer depends on the person, not the machine. Restoring the
 # settings an earlier uninstall kept, or a config.json copied in first, only what they
 # never answered is asked.
@@ -424,7 +478,8 @@ function Get-InstallAnswers($p, [switch]$Restoring) {
         Write-Ok "Found your own launcher script ($personal)."
         $cfg.launchers = -not (Read-YesNo 'Keep using it instead of winarchy''s app keys?' $true)
     }
-    if (& $ask 'hideTaskbar') { $cfg.hideTaskbar = Read-YesNo 'Hide the Windows taskbar (the top bar replaces it)?' $true }
+    # The taskbar is not asked about: Omarchy has only the top bar, the taskbar comes back
+    # whenever GlazeWM stops, and Toggle > Taskbar (winarchy taskbar) brings it back for good.
     # A new install gets Omarchy's capture keys and CapsLock compose; a config from before
     # keeps what it had (Invoke-ConfigMigration writes that when apply runs).
     if ($script:FreshInstall) {
@@ -438,23 +493,41 @@ function Get-InstallAnswers($p, [switch]$Restoring) {
     $cfg
 }
 
-function Set-TaskbarAutoHide {
+# Auto-hide is byte 8 of StuckRects3 (3 = on). $state puts back another value: the one the
+# journal saved, when hiding the taskbar is turned off again.
+function Set-TaskbarAutoHide([int]$state = 3) {
     $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3'
     $cur = (Get-ItemProperty $key -ErrorAction SilentlyContinue).Settings
     if (-not $cur) { return }
     if (-not (Test-Journaled 'taskbar')) {
         [void](Add-JournalEntry @{ kind = 'taskbar'; key = 'taskbar'; autoHide = ($cur[8] -eq 3); stuckRects3 = [Convert]::ToBase64String($cur) })
     }
-    if ($cur[8] -eq 3) { return }
-    $cur[8] = 3
+    if ($cur[8] -eq $state) { return }
+    $cur[8] = $state
     Set-ItemProperty $key -Name Settings -Value $cur
     $mm = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\MMStuckRects3'
     if (Test-Path $mm) {
-        foreach ($n in (Get-Item $mm).Property) { $v = (Get-ItemProperty $mm).$n; $v[8] = 3; Set-ItemProperty $mm -Name $n -Value $v }
+        foreach ($n in (Get-Item $mm).Property) { $v = (Get-ItemProperty $mm).$n; $v[8] = $state; Set-ItemProperty $mm -Name $n -Value $v }
     }
     Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
     if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-Process explorer.exe }
+}
+
+# Toggle > Taskbar (winarchy taskbar on|off|toggle|status): hideTaskbar in config.json.
+# Off shows the taskbar again, with the auto-hide it had before winarchy.
+function Invoke-Taskbar([string]$action) {
+    switch ($action) {
+        'on' { Set-ConfigValue 'hideTaskbar' $true; Set-TaskbarAutoHide; Use-Lock { Invoke-Apply } }
+        'off' {
+            Set-ConfigValue 'hideTaskbar' $false
+            $e = @((Read-Journal).entries | Where-Object { $_.key -eq 'taskbar' })[0]
+            if ($e) { Set-TaskbarAutoHide ([Convert]::FromBase64String($e.stuckRects3)[8]) }
+            Use-Lock { Invoke-Apply }
+        }
+        'toggle' { Invoke-Taskbar $(if ((Get-Config).hideTaskbar) { 'off' } else { 'on' }) }
+        default { "taskbar: $(if ((Get-Config).hideTaskbar) { 'hidden' } else { 'shown' })" }
+    }
 }
 
 function Add-CliToPath {
@@ -513,6 +586,22 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
         [void](Add-JournalEntry @{ kind = 'runkeys'; key = 'runkeys'; names = @((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).PSObject.Properties.Name | Where-Object { $_ -notlike 'PS*' }) })
     }
     Save-Dir (Join-Path $env:USERPROFILE '.glzr')
+
+    # Started first, so the download runs while winget installs the apps: it needs none of
+    # them, and on most connections it is done before they are. Not asked: the theme and
+    # background pickers are empty without them; offline, sync carries on with what it has
+    # and "winarchy sync" fetches them later. After Save-Dir: its thumbnails go under
+    # ~/.glzr, which the journal must see as it was before.
+    Write-Step 'Omarchy themes and backgrounds'
+    $downloaded = @(Get-ChildItem $Themes -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName 'colors.toml') }).Count -gt 1
+    $themeDownload = $null
+    $themeOnline = -not ($restoring -and $downloaded)
+    if (-not $themeOnline) { Write-Ok 'Already downloaded (kept from before).' }
+    else {
+        $themeDownload = Start-ThemeDownload
+        Write-Ok "Downloading Omarchy's 22 themes and ~100 backgrounds (about 110 MB)$(if ($themeDownload) { ' in the background, while the apps install' })."
+    }
+
     Install-Dependencies
     Install-HerdrStep
     Install-TailscaleStep -Restoring:$restoring
@@ -528,12 +617,12 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     Write-Done 'GlazeWM, bar, menus, keys and autostart configured'
 
     Write-Step 'Omarchy themes and backgrounds'
-    $downloaded = @(Get-ChildItem $Themes -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName 'colors.toml') }).Count -gt 1
-    if ($restoring -and $downloaded) {
-        Use-Lock { Invoke-Sync -Offline }; Write-Ok 'Already downloaded (kept from before).'
-    } elseif (Read-YesNo 'Download Omarchy''s 22 themes and ~100 backgrounds now (about 110 MB)?' $true) {
+    if ($themeOnline) {
+        if ($themeDownload) { Wait-ThemeDownload $themeDownload }
+        # Fetches only what the background download did not bring (usually nothing: one
+        # request for the file list), so a failed or never-started one still ends complete.
         Use-Lock { Invoke-Sync }
-    } else { Use-Lock { Invoke-Sync -Offline }; Write-Ok 'Skipped: run "winarchy sync" any time.' }
+    } else { Use-Lock { Invoke-Sync -Offline } }
     # The theme used last (a reinstall keeps it, with its background), else tokyo-night.
     $theme = @((Read-State).theme, 'tokyo-night') | Where-Object { $_ -and (Test-Path (Join-Path $Themes "$_\colors.toml")) } | Select-Object -First 1
     if ($theme) { Use-Lock { Invoke-ThemeSet $theme } }

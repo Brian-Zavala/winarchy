@@ -94,6 +94,8 @@ Describe 'Animation setup (install offer)' {
         Mock Install-AnimationFiles { $script:order.Add('install') }
         Mock Install-BuildTools { $script:order.Add('tools') }
         Mock Invoke-AnimationBuild { $script:order.Add('build') }
+        Mock Get-AnimationPrebuilt { $null }
+        Mock Install-AnimationPrebuilt { $script:order.Add('download') }
         Mock Test-GameHelperCurrent { $true }
         Mock Invoke-Animations {}
         Mock Read-YesNo { $true }
@@ -132,6 +134,28 @@ Describe 'Animation setup (install offer)' {
         Invoke-AnimationOffer
         $script:order -join ',' | Should -Be 'exclude,tools,build'
     }
+    It 'downloads the published build instead of compiling, exclusion first' {
+        Mock Test-AnimationBuildOutput { $false }
+        Mock Get-AnimationPrebuilt { @{ commit = 'abc'; url = 'u'; sha256 = 's' } }
+        Invoke-AnimationOffer
+        $script:order -join ',' | Should -Be 'exclude,download'
+        Should -Invoke Invoke-Animations -ParameterFilter { $action -eq 'on' }
+    }
+    It 'compiles here when the download fails' {
+        Mock Test-AnimationBuildOutput { $false }
+        Mock Get-MissingBuildTools { @() }
+        Mock Get-AnimationPrebuilt { @{ commit = 'abc'; url = 'u'; sha256 = 's' } }
+        Mock Install-AnimationPrebuilt { throw 'the download does not match its pinned SHA-256' }
+        Invoke-AnimationOffer
+        $script:order -join ',' | Should -Be 'exclude,tools,build'
+    }
+    It 'leaves an installed build of the pinned commit alone' {
+        Mock Test-AnimationBuildOutput { $false }
+        Mock Get-AnimationBuild { @{ exe = 'x'; commit = 'abc' } }
+        Invoke-AnimationOffer
+        $script:order -join ',' | Should -Be 'exclude'
+        Should -Invoke Read-YesNo -ParameterFilter { $default -eq $true }
+    }
     It 'keeps going when the game helper prompt is declined' {
         Mock Test-AnimationBuildOutput { $true }
         Mock Test-GameHelperCurrent { $false }
@@ -147,6 +171,9 @@ Describe 'Animation setup (install offer)' {
         $fresh | Should -Match 'Defender'
         (Get-AnimationPitch $false @('Rust', 'Visual C++ build tools')) -join "`n" | Should -Match 'several GB'
         (Get-AnimationPitch $true @()) -join "`n" | Should -Match 'already built on this PC'
+        $download = (Get-AnimationPitch $false @() $true) -join "`n"
+        $download | Should -Match 'ready-made build'
+        $download | Should -Not -Match 'compil'
     }
     It 'reports a failed build as unfinished, not as a crash' {
         Mock Test-AnimationBuildOutput { $false }
