@@ -323,6 +323,10 @@ function Restore-JournalEntry($e, [string]$dir) {
         'herdr' { Remove-HerdrFiles $e.bin $e.packages }
         'browsertask' { Disable-BrowserPolicy }
         'gametask' { Disable-GameHelper }
+        'defender' {
+            $list = (@($e.paths) | ForEach-Object { "'$_'" }) -join ','
+            Start-Process (Get-Paths).powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $(ConvertTo-EncodedCommand "Remove-MpPreference -ExclusionPath $list")"
+        }
         'cargo' { if (Get-Command cargo -ErrorAction SilentlyContinue) { cargo uninstall $e.crate 2>&1 | Out-Host } }
         'file-if-ours' { if (Test-Path -LiteralPath $e.path) { Remove-Item -LiteralPath $e.path -Force -ErrorAction SilentlyContinue } }
         'screensaver' {

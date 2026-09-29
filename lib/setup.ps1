@@ -340,6 +340,15 @@ function Add-CliToPath {
 }
 
 function Start-Everything($p) {
+    # The animation build is unsigned and built locally: Defender can quarantine it between
+    # Update-Paths and here. Re-detect so the official GlazeWM starts instead.
+    # Apply again too, so the config and winarchy.ahk's restart guard stop pointing at it.
+    if ($p.glazewm -and -not (Test-Path $p.glazewm)) {
+        $why = if (Get-AnimationQuarantine) { 'Windows Defender removed it' } else { 'it is gone' }
+        Log "GlazeWM $($p.glazewm): $why; starting the official GlazeWM (animations back: winarchy animations allow)"
+        Use-Lock { Invoke-Apply -NoRestart }
+        $p = Get-Paths
+    }
     if ($p.glazewm -and -not (Get-GlazeWmProcess)) { Start-Process $p.glazewm }
     if ($p.flow -and -not (Get-Process Flow.Launcher -ErrorAction SilentlyContinue)) { Start-Process $p.flow }
     Restart-Bar $p
@@ -392,6 +401,8 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
 
     Write-Step 'Starting'
     Start-Everything $p
+    # Last, so a slow or failed build can't hold up the rest: the official GlazeWM already runs.
+    Invoke-AnimationOffer
     if ($restoring) { Remove-Item $restoreFile -Force -ErrorAction SilentlyContinue; Write-Ok 'Your settings are back.' }
     Write-Host ''
     Write-Host 'Done. Super = the Windows key. Start here:' -ForegroundColor Green

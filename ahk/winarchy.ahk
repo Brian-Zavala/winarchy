@@ -355,6 +355,16 @@ GlazeGuard() {
         gone := A_TickCount
         return
     }
+    ; The animation build's file is gone (Defender quarantines it at times: unsigned, built
+    ; here): no restart can work, so go to the official build at once. Toggle > Window
+    ; Animations then puts it back (`animations setup`: one admin prompt, no rebuild).
+    if InStr(exe, "\glazewm-animations\") && !FileExist(exe) {
+        gone := 0
+        WmLog("GlazeWM animation build is missing (antivirus?): switching animations off")
+        Osd("Window animations off: Windows Defender removed the build. Toggle > Window Animations restores it", 6000)
+        OmarchyCmd("animations", "off")
+        return
+    }
     now := A_TickCount
     recent := []
     for d in deaths

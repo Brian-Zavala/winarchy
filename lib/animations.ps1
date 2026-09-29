@@ -14,16 +14,42 @@ function Get-AnimationBuild {
     [ordered]@{ exe = $exe; cli = Join-Path $AnimDir 'cli\glazewm.exe'; commit = $info.commit; built = $info.built }
 }
 
+$VcOverride = '--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended'
+$BuildTools = @(
+    @{ name = 'Git'; id = 'Git.Git'; test = { [bool](Get-Command git -ErrorAction SilentlyContinue) } }
+    @{ name = 'Rust'; id = 'Rustlang.Rustup'; test = { (Get-Command rustup -ErrorAction SilentlyContinue) -and (Get-Command cargo -ErrorAction SilentlyContinue) } }
+    @{ name = 'Visual C++ build tools'; id = 'Microsoft.VisualStudio.2022.BuildTools'; override = $VcOverride; test = {
+            $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+            (Test-Path $vswhere) -and [bool](& $vswhere -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath) } }
+)
+
+function Get-MissingBuildTools { @($BuildTools | Where-Object { -not (& $_.test) }) }
+
 function Test-BuildTools {
-    $missing = @()
-    if (-not (Get-Command git -ErrorAction SilentlyContinue)) { $missing += 'Git:  winget install -e --id Git.Git' }
-    if (-not (Get-Command rustup -ErrorAction SilentlyContinue) -or -not (Get-Command cargo -ErrorAction SilentlyContinue)) {
-        $missing += 'Rust:  winget install -e --id Rustlang.Rustup'
+    Get-MissingBuildTools | ForEach-Object {
+        $override = if ($_.override) { ' --override "{0}"' -f $_.override } else { '' }
+        '{0}:  winget install -e --id {1}{2}' -f $_.name, $_.id, $override
     }
-    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-    $vc = if (Test-Path $vswhere) { & $vswhere -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath } else { $null }
-    if (-not $vc) { $missing += 'Visual C++ build tools:  winget install -e --id Microsoft.VisualStudio.2022.BuildTools --override "--quiet --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"' }
-    $missing
+}
+
+# winget installs them; the new PATH entries only reach this session by reading them back.
+function Install-BuildTools {
+    foreach ($t in Get-MissingBuildTools) {
+        Log "installing $($t.name) (for the animation build)"
+        $a = @(Get-WingetArgs install $t.id $null)
+        if ($t.override) { $a += @('--override', $t.override) }
+        $r = Invoke-Unattended 'winget' $a 3600
+        if (-not $r.Ok -and $r.Code -notin $WingetExitOk) { Log "$($t.name): winget $($r.Reason)" }
+    }
+    $env:Path = @([Environment]::GetEnvironmentVariable('Path', 'Machine'), [Environment]::GetEnvironmentVariable('Path', 'User'),
+        (Join-Path $env:USERPROFILE '.cargo\bin')) -join ';'
+}
+
+# The build for the pinned commit is on disk already (a reinstall, or Defender took the
+# installed copy): installing it needs no compiler.
+function Test-AnimationBuildOutput {
+    (Test-Path (Join-Path $AnimSrc 'target\release\glazewm.exe')) -and
+        (Read-Json (Join-Path $AnimDir 'build.json')).commit -eq (Get-Config).animations.source.commit
 }
 
 # Clones the pinned commit, builds glazewm + cli + watcher, installs them next to each
@@ -56,17 +82,95 @@ function Invoke-AnimationBuild {
             Log "build with $toolchain failed"
         }
         if (-not $built) { throw 'the GlazeWM animation build failed (see the output above)' }
-        $out = Join-Path $AnimSrc 'target\release'
-        # Stop our build if it is running, so its files can be replaced.
-        $running = Get-Process glazewm -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$AnimDir*" }
-        if ($running) { throw 'the animation build is running: winarchy animations off, then build again' }
-        New-Item -ItemType Directory -Force (Join-Path $AnimDir 'cli') | Out-Null
-        Copy-Item -Force (Join-Path $out 'glazewm.exe') (Join-Path $AnimDir 'glazewm.exe')
-        Copy-Item -Force (Join-Path $out 'glazewm-watcher.exe') (Join-Path $AnimDir 'glazewm-watcher.exe')
-        Copy-Item -Force (Join-Path $out 'glazewm-cli.exe') (Join-Path $AnimDir 'cli\glazewm.exe')
+        Install-AnimationFiles
         Write-Json (Join-Path $AnimDir 'build.json') ([ordered]@{ repo = $src.repo; commit = $src.commit; built = (Get-Date).ToString('s') })
         Log "animation build ready: $AnimDir"
     } finally { Pop-Location; Remove-Item Env:VERSION_NUMBER -ErrorAction SilentlyContinue }
+}
+
+# build output -> installed name
+$AnimFiles = [ordered]@{ 'glazewm.exe' = 'glazewm.exe'; 'glazewm-watcher.exe' = 'glazewm-watcher.exe'; 'glazewm-cli.exe' = 'cli\glazewm.exe' }
+
+# Copies the build output into place (after a build, or to put back what antivirus removed).
+function Install-AnimationFiles {
+    $out = Join-Path $AnimSrc 'target\release'
+    if (-not (Test-Path (Join-Path $out 'glazewm.exe'))) { throw 'no animation build to install: winarchy animations build (about 10 minutes)' }
+    # Stop our build if it is running, so its files can be replaced.
+    $running = Get-Process glazewm -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$AnimDir*" }
+    if ($running) { throw 'the animation build is running: winarchy animations off, then try again' }
+    New-Item -ItemType Directory -Force (Join-Path $AnimDir 'cli') | Out-Null
+    foreach ($f in $AnimFiles.GetEnumerator()) { Copy-Item -Force (Join-Path $out $f.Key) (Join-Path $AnimDir $f.Value) }
+}
+
+# Defender's behaviour model can quarantine the build (Behavior:Win32/Persistence.A!ml): it
+# is unsigned, built on this PC and starts at every login. Defender keeps a record of it.
+function Get-AnimationQuarantine {
+    try { @(Get-MpThreatDetection -ErrorAction Stop | Where-Object { "$($_.Resources)" -like "*$AnimDir*" }) } catch { @() }
+}
+
+function Test-DefenderActive {
+    try { [bool](Get-MpComputerStatus -ErrorAction Stop).RealTimeProtectionEnabled } catch { $false }
+}
+
+function Test-AnimationExclusionNeeded { (Test-DefenderActive) -and -not (Test-Journaled 'defender|animations') }
+
+# One UAC prompt: a Defender exclusion for the build's three files only (not the folder),
+# journaled so uninstall takes it back out. Paths need not exist yet: added before the
+# files are copied, Defender never gets a look at them.
+function Add-AnimationExclusion {
+    $paths = @($AnimFiles.Values | ForEach-Object { Join-Path $AnimDir $_ })
+    $list = ($paths | ForEach-Object { "'$_'" }) -join ','
+    Write-Host 'Windows will ask for admin permission (Defender exclusions are admin-only).'
+    Start-Process (Get-Paths).powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $(ConvertTo-EncodedCommand "Add-MpPreference -ExclusionPath $list")"
+    [void](Add-JournalEntry @{ kind = 'defender'; key = 'defender|animations'; paths = $paths })
+    Log 'Defender: the animation build is excluded from scanning'
+}
+
+# After `animations build`: asked, never assumed (-Yes skips it), since it lowers Defender's guard.
+function Request-AnimationExclusion {
+    if ($script:AssumeYes -or -not (Test-AnimationExclusionNeeded)) { return }
+    Write-Host 'Windows Defender may remove this build: it is unsigned and made on this PC.' -ForegroundColor Yellow
+    if (Read-YesNo 'Exclude its three files from Defender scanning (one admin prompt)?' $true) { Add-AnimationExclusion }
+    else { Write-Host '    If it disappears later: winarchy animations allow' }
+}
+
+# Everything window animations need, in one go: build tools, the build (or the one on disk),
+# the Defender exclusion, the admin game helper (the build can't have UI access, so the
+# helper carries Super+1..0 over admin windows), then switch.
+function Invoke-AnimationSetup {
+    if (Test-AnimationExclusionNeeded) { Add-AnimationExclusion }
+    if (Test-AnimationBuildOutput) {
+        if (-not (Get-AnimationBuild)) { Install-AnimationFiles; Log 'animation build installed from the earlier build' }
+    } else {
+        Install-BuildTools
+        Invoke-AnimationBuild
+    }
+    # Without it animations still work; only the keys over admin windows don't (doctor says so).
+    if (-not (Test-GameHelperCurrent)) {
+        try { Enable-GameHelper } catch { Log "game helper not set up ($($_.Exception.Message)): winarchy game-setup" }
+    }
+    Invoke-Animations 'on'
+}
+
+# The install's last step: opt-in, since it is experimental and heavy. A build already on
+# disk turns the question into a quick restore, so there the default flips to yes.
+function Invoke-AnimationOffer {
+    if ((Get-Config).animations.enabled -and (Get-AnimationBuild)) { return }
+    Write-Step 'Window animations (optional, experimental)'
+    if ($script:AssumeYes) { Write-Ok 'Skipped (unattended): winarchy animations setup adds them.'; return }
+    $ready = Test-AnimationBuildOutput
+    $q = if ($ready) { 'Turn window animations back on (already built; an admin prompt or two)?' }
+    else {
+        $tools = @(Get-MissingBuildTools | ForEach-Object name)
+        Write-Ok "Omarchy-style window animations from an experimental GlazeWM build, compiled here (about 10 minutes$(if ($tools) { "; first installs $($tools -join ', '), several GB" }))."
+        'Add window animations (a few admin prompts)?'
+    }
+    if (-not (Read-YesNo $q $ready)) { Write-Ok 'Skipped: winarchy animations setup adds them any time.'; return }
+    try { Invoke-AnimationSetup; Write-Ok 'Window animations on (winarchy animations off turns them off).' }
+    catch {
+        Log "animations: FAILED: $($_.Exception.Message)"
+        Add-Unfinished "window animations not set up ($($_.Exception.Message)); the official GlazeWM is running. Try again: winarchy animations setup"
+    }
 }
 
 # Which GlazeWM should run: the animation build when animations are on and it exists.
@@ -106,9 +210,14 @@ function Set-Animations([bool]$on) {
 
 function Invoke-Animations([string]$action) {
     switch ($action) {
-        'build' { Invoke-AnimationBuild; Write-Host 'Turn them on with: winarchy animations on' }
-        # Toggle > Window Animations before the first build: build, then switch.
-        'setup' { Invoke-AnimationBuild; Invoke-Animations 'on' }
+        'build' { Invoke-AnimationBuild; Request-AnimationExclusion; Write-Host 'Turn them on with: winarchy animations on' }
+        # Toggle > Window Animations while the build is missing (never built, or Defender took it).
+        'setup' { Invoke-AnimationSetup }
+        'allow' {
+            Add-AnimationExclusion
+            if (-not (Get-AnimationBuild)) { Install-AnimationFiles; Log 'animation build restored' }
+            Use-Lock { Invoke-Apply }
+        }
         'on' {
             if (-not (Get-AnimationBuild)) { throw 'not built yet: winarchy animations build (about 10 minutes)' }
             Set-Animations $true; Use-Lock { Invoke-Apply }
@@ -118,7 +227,7 @@ function Invoke-Animations([string]$action) {
         default {
             $b = Get-AnimationBuild
             "window animations: $(if ((Get-Config).animations.enabled -and $b) { 'on' } else { 'off' })"
-            "animation build:   $(if ($b) { "$($b.commit.Substring(0, 12)), built $($b.built)" } else { 'not built (winarchy animations build)' })"
+            "animation build:   $(if ($b) { "$($b.commit.Substring(0, 12)), built $($b.built)" } elseif (Get-AnimationQuarantine) { 'removed by Windows Defender (winarchy animations allow)' } else { 'not built (winarchy animations build)' })"
             $r = Get-GlazeWmProcess | Select-Object -First 1
             "running GlazeWM:   $(if ($r) { Get-GlazeWMPath $r (Get-Paths) } else { 'not running' })"
         }

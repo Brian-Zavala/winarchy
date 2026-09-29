@@ -44,8 +44,10 @@
                                           this for the focused window, then applies it)
   winarchy weather | update-check      refresh the bar's weather / update indicator
   winarchy bar [on|off|toggle]         the top bar (Super+Shift+Space); off stays off
-  winarchy animations [on|off|toggle|build|status]
-                                          window animations (experimental GlazeWM build)
+  winarchy animations [on|off|toggle|setup|build|allow|status]
+                                          window animations (experimental GlazeWM build);
+                                          setup: tools + build + Defender exclusion + on;
+                                          allow: exclude it from Defender (one admin prompt)
   winarchy autotile [on|off|toggle|status]
                                           Hyprland-style auto-tiling (dwindle emulation)
   winarchy config                      open your settings file

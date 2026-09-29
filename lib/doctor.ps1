@@ -32,7 +32,10 @@ function Invoke-Doctor([switch]$Fix) {
     if ($running) { $running = Get-GlazeWMPath $running $p }
     $which = if ($p.glazewm -ne $p.glazewmOfficial) { "animation build $("$($build.commit)".PadRight(12).Substring(0, 12).Trim()) (experimental)" } else { 'official' }
     & $check "GlazeWM build: $which" (-not $running -or $running -eq $p.glazewm) "the other build is running: winarchy apply"
-    if ((Get-Config).animations.enabled -and -not $build) { & $check 'window animations are on, but the animation build is missing' $false 'winarchy animations build' }
+    if ((Get-Config).animations.enabled -and -not $build) {
+        if (Get-AnimationQuarantine) { & $check 'window animations are on, but Windows Defender removed the animation build' $false 'winarchy animations allow (one admin prompt; no rebuild), or winarchy animations off' }
+        else { & $check 'window animations are on, but the animation build is missing' $false 'winarchy animations build' }
+    }
     # Only a signed binary in a secure folder may ask for uiAccess, so our own build can't:
     # Windows then hides every key from its hook while an elevated window is in front, and
     # workspace switching (Super+1..0 are GlazeWM's own keys) dies over a game run as

@@ -38,6 +38,117 @@ Describe 'Window animations' {
     }
 }
 
+Describe 'Animation build and Defender' {
+    BeforeEach {
+        $AnimDir = Join-Path $TestDrive 'anim'
+        $AnimSrc = Join-Path $TestDrive 'src'
+        Remove-Item -Recurse -Force $AnimDir, $AnimSrc -ErrorAction SilentlyContinue
+    }
+    It 'finds only detections of the animation build' {
+        function Get-MpThreatDetection {}
+        Mock Get-MpThreatDetection { @(
+                [pscustomobject]@{ Resources = @("file:_$AnimDir\glazewm.exe") },
+                [pscustomobject]@{ Resources = @('file:_C:\other\thing.exe') }) }
+        @(Get-AnimationQuarantine).Count | Should -Be 1
+    }
+    It 'finds nothing when Defender is unavailable' {
+        function Get-MpThreatDetection {}
+        Mock Get-MpThreatDetection { throw 'no Defender' }
+        @(Get-AnimationQuarantine).Count | Should -Be 0
+    }
+    It 'puts the build output back in the official layout' {
+        $out = Join-Path $AnimSrc 'target\release'
+        New-Item -ItemType Directory -Force $out | Out-Null
+        foreach ($f in 'glazewm.exe', 'glazewm-watcher.exe', 'glazewm-cli.exe') { Set-Content (Join-Path $out $f) $f }
+        Install-AnimationFiles
+        Get-Content (Join-Path $AnimDir 'cli\glazewm.exe') | Should -Be 'glazewm-cli.exe'
+        Test-Path (Join-Path $AnimDir 'glazewm-watcher.exe') | Should -BeTrue
+    }
+    It 'says to build when there is no build output' {
+        { Install-AnimationFiles } | Should -Throw '*winarchy animations build*'
+    }
+    It 'never adds the exclusion unattended' {
+        function Test-Journaled {}
+        Mock Test-DefenderActive { $true }
+        Mock Test-Journaled { $false }
+        Mock Add-AnimationExclusion {}
+        $script:AssumeYes = $true
+        try { Request-AnimationExclusion } finally { $script:AssumeYes = $false }
+        Should -Invoke Add-AnimationExclusion -Times 0
+    }
+}
+
+Describe 'Animation setup (install offer)' {
+    BeforeAll {
+        # From lib/setup.ps1 and lib/targets.ps1, which this file does not load.
+        function Write-Step {} ; function Write-Ok {}
+        function Add-Unfinished([string]$what) {} ; function Read-YesNo([string]$question, [bool]$default) {}
+        function Test-GameHelperCurrent {} ; function Enable-GameHelper {}
+    }
+    BeforeEach {
+        $script:order = [Collections.Generic.List[string]]::new()
+        Mock Get-Config { @{ animations = @{ enabled = $false; source = @{ commit = 'abc' } } } }
+        Mock Get-AnimationBuild { $null }
+        Mock Test-AnimationExclusionNeeded { $true }
+        Mock Add-AnimationExclusion { $script:order.Add('exclude') }
+        Mock Install-AnimationFiles { $script:order.Add('install') }
+        Mock Install-BuildTools { $script:order.Add('tools') }
+        Mock Invoke-AnimationBuild { $script:order.Add('build') }
+        Mock Test-GameHelperCurrent { $true }
+        Mock Invoke-Animations {}
+        Mock Read-YesNo { $true }
+    }
+    It 'is skipped unattended' {
+        $script:AssumeYes = $true
+        try { Invoke-AnimationOffer } finally { $script:AssumeYes = $false }
+        Should -Invoke Read-YesNo -Times 0
+        $script:order.Count | Should -Be 0
+    }
+    It 'is not offered while animations already run' {
+        Mock Get-Config { @{ animations = @{ enabled = $true } } }
+        Mock Get-AnimationBuild { @{ exe = 'x' } }
+        Invoke-AnimationOffer
+        Should -Invoke Read-YesNo -Times 0
+    }
+    It 'defaults to no for a fresh build and to yes for a restore' {
+        Mock Test-AnimationBuildOutput { $false }
+        Mock Get-MissingBuildTools { @() }
+        Mock Read-YesNo { $false }
+        Invoke-AnimationOffer
+        Should -Invoke Read-YesNo -ParameterFilter { $default -eq $false }
+        Mock Test-AnimationBuildOutput { $true }
+        Invoke-AnimationOffer
+        Should -Invoke Read-YesNo -ParameterFilter { $default -eq $true }
+    }
+    It 'restores the build on disk without compiling, exclusion first' {
+        Mock Test-AnimationBuildOutput { $true }
+        Invoke-AnimationOffer
+        $script:order -join ',' | Should -Be 'exclude,install'
+        Should -Invoke Invoke-Animations -ParameterFilter { $action -eq 'on' }
+    }
+    It 'installs tools and builds when nothing is built, exclusion first' {
+        Mock Test-AnimationBuildOutput { $false }
+        Mock Get-MissingBuildTools { @() }
+        Invoke-AnimationOffer
+        $script:order -join ',' | Should -Be 'exclude,tools,build'
+    }
+    It 'keeps going when the game helper prompt is declined' {
+        Mock Test-AnimationBuildOutput { $true }
+        Mock Test-GameHelperCurrent { $false }
+        Mock Enable-GameHelper { throw 'declined' }
+        Invoke-AnimationOffer
+        Should -Invoke Invoke-Animations -ParameterFilter { $action -eq 'on' }
+    }
+    It 'reports a failed build as unfinished, not as a crash' {
+        Mock Test-AnimationBuildOutput { $false }
+        Mock Get-MissingBuildTools { @() }
+        Mock Invoke-AnimationBuild { throw 'cargo broke' }
+        Mock Add-Unfinished {}
+        { Invoke-AnimationOffer } | Should -Not -Throw
+        Should -Invoke Add-Unfinished -ParameterFilter { $what -like '*cargo broke*winarchy animations setup*' }
+    }
+}
+
 Describe 'Wallpaper reveal band' {
     BeforeAll { Add-Type -AssemblyName WindowsBase }
     It 'starts closed and leans like Omarchy''s (slant -0.18)' {
