@@ -26,7 +26,7 @@ Rather read it before you run it? Good instinct. Here's [install.ps1](install.ps
 
 ## The Winarchy Manual
 
-Like Omarchy's, it lives in [`manual/`](manual/). If a chapter is missing, it's because Windows had nothing worth saying about it.
+Like Omarchy, it lives in [`manual/`](manual/). If a chapter is missing, it's because Windows had nothing worth saying about it.
 
 - [Welcome to Winarchy!](manual/01-welcome-to-winarchy.md)
 
