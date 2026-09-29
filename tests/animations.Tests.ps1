@@ -139,6 +139,15 @@ Describe 'Animation setup (install offer)' {
         Invoke-AnimationOffer
         Should -Invoke Invoke-Animations -ParameterFilter { $action -eq 'on' }
     }
+    It 'explains the good and the catch before asking, with the right cost' {
+        $fresh = (Get-AnimationPitch $false @('Rust')) -join "`n"
+        $fresh | Should -Match 'The good:'
+        $fresh | Should -Match 'The catch:'
+        $fresh | Should -Match 'installs Rust \(free, a few hundred MB\)'
+        $fresh | Should -Match 'Defender'
+        (Get-AnimationPitch $false @('Rust', 'Visual C++ build tools')) -join "`n" | Should -Match 'several GB'
+        (Get-AnimationPitch $true @()) -join "`n" | Should -Match 'already built on this PC'
+    }
     It 'reports a failed build as unfinished, not as a crash' {
         Mock Test-AnimationBuildOutput { $false }
         Mock Get-MissingBuildTools { @() }

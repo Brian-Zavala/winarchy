@@ -2,6 +2,7 @@
 # missing, and every system change is journaled first (lib/journal.ps1).
 
 . "$PSScriptRoot\fonts.ps1"
+. "$PSScriptRoot\ui.ps1"      # Write-Step, Write-Ok, the banner, progress bar, finish screen
 
 $Apps = @(
     @{ id = 'glzr-io.glazewm'; name = 'GlazeWM + Zebar'; test = { (Get-Paths).glazewm -and (Get-Paths).zebar }; note = 'Windows will ask for permission (UAC) once.' },
@@ -14,13 +15,11 @@ $Apps = @(
 $env:GIT_TERMINAL_PROMPT = '0'
 $env:GCM_INTERACTIVE = 'never'
 
-function Write-Step([string]$msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
-function Write-Ok([string]$msg) { Write-Host "    $msg" -ForegroundColor DarkGray }
-
 function Read-YesNo([string]$question, [bool]$default = $true) {
     if ($script:AssumeYes) { return $default }
     $hint = if ($default) { '[Y/n]' } else { '[y/N]' }
-    $a = Read-Host "    $question $hint"
+    Write-UiQuestion $question $hint
+    $a = Read-Host
     if (-not $a) { return $default }
     $a -match '^(y|yes)$'
 }
@@ -155,7 +154,7 @@ function Add-Unfinished([string]$what) { $script:Unfinished.Add($what); Log "unf
 function Write-Unfinished {
     if (-not $script:Unfinished.Count) { return }
     Write-Step 'Needs attention'
-    foreach ($u in $script:Unfinished) { Write-Host "    $u" -ForegroundColor Yellow }
+    foreach ($u in $script:Unfinished) { Write-Warn $u }
 }
 
 # Only when there is something to read: a clean run just closes its window.
@@ -170,7 +169,7 @@ function Install-WingetPackage([string]$id, [string]$name, [string]$scope) {
     $r = Invoke-Winget install $id $scope
     # Not every package offers a per-user scope: fall back to the default.
     if (-not $r.Ok -and $scope -and $null -ne $r.Code) { $r = Invoke-Winget install $id $null }
-    if (-not $r.Ok) { Write-Ok "$name did not install ($($r.Reason))" }
+    if ($r.Ok) { Write-Done "$name installed" } else { Write-Warn "$name did not install ($($r.Reason))" }
     $r.Ok
 }
 
@@ -182,17 +181,17 @@ function Install-Prerequisites {
         [void](Install-WingetPackage 'AutoHotkey.AutoHotkey' 'AutoHotkey v2' 'user')
         $p = Update-Paths
         if (-not $p.ahk) { throw 'AutoHotkey v2 did not install; install it from https://www.autohotkey.com and run install again.' }
-    } else { Save-Winget 'AutoHotkey.AutoHotkey' $true; Write-Ok "AutoHotkey: $($p.ahk)" }
+    } else { Save-Winget 'AutoHotkey.AutoHotkey' $true; Write-Done "AutoHotkey: $($p.ahk)" }
     if (-not $p.nerdFont) {
         Write-Ok 'installing JetBrainsMono Nerd Font (bar icons + terminal glyphs)'
         [void](Install-NerdFont 'JetBrainsMono')
-    } else { Write-Ok 'JetBrainsMono Nerd Font: installed' }
+    } else { Write-Done 'JetBrainsMono Nerd Font: installed' }
 }
 
 function Install-Apps {
     Write-Step 'Apps'
     foreach ($a in $Apps) {
-        if (& $a.test) { Save-Winget $a.id $true; Write-Ok "$($a.name): installed"; continue }
+        if (& $a.test) { Save-Winget $a.id $true; Write-Done "$($a.name): installed"; continue }
         Save-Winget $a.id $false
         if ($a.note) { Write-Ok $a.note }
         [void](Install-WingetPackage $a.id $a.name $null)
@@ -221,12 +220,12 @@ function Get-CoreWingetIds {
 function Install-Extras {
     Write-Step 'Extras (About, Activity, screensaver effects, agent usage)'
     foreach ($x in $Extras) {
-        if (& $x.have) { Save-Winget $x.id $true; Write-Ok "$($x.name): installed"; continue }
+        if (& $x.have) { Save-Winget $x.id $true; Write-Done "$($x.name): installed"; continue }
         Save-Winget $x.id $false
         if (-not (Install-WingetPackage $x.id $x.name $null)) { Add-Unfinished "$($x.name) (optional) did not install: winget install -e --id $($x.id)" }
     }
     $p = Update-Paths
-    if ($p.ttfx) { Write-Ok "ttfx: $($p.ttfx)"; return }
+    if ($p.ttfx) { Write-Done "ttfx: $($p.ttfx)"; return }
     # ttfx (Omarchy's Rust port of terminaltexteffects): a prebuilt Windows binary from the
     # winarchy release if one is published, else built with cargo when Rust is present.
     $url = (Get-Config).ttfxUrl
@@ -253,7 +252,7 @@ function Install-Extras {
 # downstream (config, theming, hdl/hds/hdlm/hsl, the menu rows) is written by the apply
 # that runs after this either way.
 function Install-HerdrStep {
-    if (Test-HerdrInstalled) { Write-Ok "Herdr: $(Get-HerdrExe)"; return }
+    if (Test-HerdrInstalled) { Write-Done "Herdr: $(Get-HerdrExe)"; return }
     Write-Step 'Herdr (optional)'
     Write-Ok 'Omarchy Quattro replaced tmux with Herdr: one terminal holding your editor, your'
     Write-Ok 'coding agent and a shell, laid out in one word with hdl / hds / hdlm / hsl.'
@@ -360,7 +359,11 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     $script:AssumeYes = $Yes -or [bool]$env:WINARCHY_YES
     $script:Unfinished.Clear()
     $cfgVersion = (Get-Content -Raw (Join-Path $Code 'VERSION') -ErrorAction SilentlyContinue)?.Trim()
-    Write-Host "winarchy $cfgVersion - Omarchy's look and keys on Windows 11 (unofficial)" -ForegroundColor Green
+    Start-UiClock
+    Write-UiBanner $cfgVersion
+    # Invoke-WebRequest's own progress bar slows big downloads (the Nerd Font zip) a lot,
+    # and the theme download draws its own.
+    $ProgressPreference = 'SilentlyContinue'
     New-Item -ItemType Directory -Force $Data | Out-Null
     Test-Preflight
     if ($Adopt) { return Invoke-Adopt }
@@ -387,7 +390,7 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     if ((Get-Config).hideTaskbar) { Set-TaskbarAutoHide }
     Add-CliToPath
     Use-Lock { Invoke-Apply -NoRestart }
-    Write-Ok 'GlazeWM, bar, menus, keys and autostart configured'
+    Write-Done 'GlazeWM, bar, menus, keys and autostart configured'
 
     Write-Step 'Omarchy themes and backgrounds'
     $downloaded = @(Get-ChildItem $Themes -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName 'colors.toml') }).Count -gt 1
@@ -404,14 +407,8 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     Start-Everything $p
     # Last, so a slow or failed build can't hold up the rest: the official GlazeWM already runs.
     Invoke-AnimationOffer
-    if ($restoring) { Remove-Item $restoreFile -Force -ErrorAction SilentlyContinue; Write-Ok 'Your settings are back.' }
-    Write-Host ''
-    Write-Host 'Done. Super = the Windows key. Start here:' -ForegroundColor Green
-    Write-Host '  Super + K             all keybindings'
-    Write-Host '  Super + Space         Omarchy menu        Super + Alt + Space   app launcher'
-    Write-Host '  Super + Return        terminal            Super + 1..0    workspaces'
-    Write-Host '  winarchy doctor    check the setup     winarchy uninstall   undo everything'
-    Write-Host "  Settings: $ConfigFile   (then: winarchy apply)"
+    if ($restoring) { Remove-Item $restoreFile -Force -ErrorAction SilentlyContinue; Write-Done 'Your settings are back.' }
+    Write-UiFinish
     Write-Unfinished
 }
 
@@ -460,6 +457,8 @@ function Invoke-Adopt {
 function Invoke-Update {
     $m = [Threading.Mutex]::new($false, 'Local\WinarchyUpdate')
     if (-not $m.WaitOne(0)) { Write-Host 'An update is already running in another window.'; return }
+    Start-UiClock
+    $ProgressPreference = 'SilentlyContinue'
     $script:Unfinished.Clear()
     $updFile = Join-Path $Pack 'updates.json'
     $pending = @((Read-Json $updFile).items | Where-Object { $_ })
@@ -564,6 +563,7 @@ function Invoke-Update {
         $m.ReleaseMutex(); $m.Dispose()
     }
     Write-Unfinished
-    if ($script:Unfinished.Count) { Wait-KeyToClose } else { Write-Host "`nDone." -ForegroundColor Green }
+    if ($script:Unfinished.Count) { Wait-KeyToClose }
+    else { Write-Host ''; Write-Host "  $(Format-Ui (Get-UiGlyphs).ok 'green' -Bold) $(Format-Ui 'Up to date.' 'green' -Bold)$(Format-Ui "  took $(Get-UiClock)" 'dim')" }
     if ($crash) { throw $crash }
 }

@@ -152,6 +152,38 @@ function Invoke-AnimationSetup {
     Invoke-Animations 'on'
 }
 
+# What the install says before asking: the good and the bad in plain words, so the choice
+# is an informed one. Only the cost differs between a first build and a restore.
+function Get-AnimationPitch([bool]$ready, [string[]]$tools) {
+    $cost = if ($ready) { 'It is already built on this PC, so turning it back on takes a few seconds.' }
+    elseif ($tools) {
+        $size = if ($tools -match 'Visual C\+\+') { 'several GB' } else { 'a few hundred MB' }
+        "It is built on this PC: first it installs $($tools -join ', ') (free, $size), then compiles for about 10 minutes."
+    }
+    else { 'It is built on this PC: about 10 minutes of compiling, and you can keep working meanwhile.' }
+    @(
+        'Omarchy on Linux glides windows into place: they zoom in when they open and slide'
+        'when they move or resize. Windows can do that too, with a test version of GlazeWM'
+        '(the window manager) that has animations added.'
+        ''
+        'The good:'
+        '  + Windows open, move and resize smoothly, like on Omarchy. Your keys stay the same.'
+        '  + Easy to undo: "winarchy animations off", or Toggle > Window Animations in the menu.'
+        '  + If it crashes twice in 5 minutes, or Defender removes it, winarchy switches back to'
+        '    the normal GlazeWM by itself.'
+        ''
+        'The catch:'
+        '  - It is experimental: movement can look a little janky now and then.'
+        "  - $cost"
+        '  - It is not signed, so Windows Defender may remove it. winarchy asks Windows to'
+        '    leave just its three files alone (an admin prompt; uninstall takes that back out).'
+        '  - Windows gives unsigned programs no keys while an admin window is in front, like a'
+        '    game run as administrator. A small helper passes Super + 1..0 through (another admin prompt).'
+        ''
+        'You can add it any time later with: winarchy animations setup'
+    )
+}
+
 # The install's last step: opt-in, since it is experimental and heavy. A build already on
 # disk turns the question into a quick restore, so there the default flips to yes.
 function Invoke-AnimationOffer {
@@ -159,12 +191,14 @@ function Invoke-AnimationOffer {
     Write-Step 'Window animations (optional, experimental)'
     if ($script:AssumeYes) { Write-Ok 'Skipped (unattended): winarchy animations setup adds them.'; return }
     $ready = Test-AnimationBuildOutput
-    $q = if ($ready) { 'Turn window animations back on (already built; an admin prompt or two)?' }
-    else {
-        $tools = @(Get-MissingBuildTools | ForEach-Object name)
-        Write-Ok "Omarchy-style window animations from an experimental GlazeWM build, compiled here (about 10 minutes$(if ($tools) { "; first installs $($tools -join ', '), several GB" }))."
-        'Add window animations (a few admin prompts)?'
+    $tools = if ($ready) { @() } else { @(Get-MissingBuildTools | ForEach-Object name) }
+    Write-Host ''
+    foreach ($line in Get-AnimationPitch $ready $tools) {
+        $color = switch -Wildcard ($line) { '  + *' { 'Green' } '  - *' { 'Yellow' } default { 'Gray' } }
+        Write-Host "    $line" -ForegroundColor $color
     }
+    Write-Host ''
+    $q = if ($ready) { 'Turn window animations back on?' } else { 'Add window animations?' }
     if (-not (Read-YesNo $q $ready)) { Write-Ok 'Skipped: winarchy animations setup adds them any time.'; return }
     try { Invoke-AnimationSetup; Write-Ok 'Window animations on (winarchy animations off turns them off).' }
     catch {

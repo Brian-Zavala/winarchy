@@ -22,7 +22,8 @@ $Invariant   = [Globalization.CultureInfo]::InvariantCulture
 
 function Log([string]$msg) {
     $line = "$(Get-Date -Format 'HH:mm:ss') [$Verb] $msg"
-    Write-Host $line
+    # Install and update show a tidy bullet instead (lib/ui.ps1); the file keeps the full line.
+    if ($script:UiPretty) { Write-UiLog $msg } else { Write-Host $line }
     try {
         New-Item -ItemType Directory -Force (Split-Path $LogFile) | Out-Null
         Add-Content -LiteralPath $LogFile -Value $line

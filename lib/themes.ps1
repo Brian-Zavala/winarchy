@@ -21,7 +21,23 @@ function New-Thumb([string]$src, [string]$dst, [int]$Width = 480) {
 
 function Update-Thumb([string]$src, [string]$dst, [int]$Width = 480) {
     if ((Test-Path $dst) -and (Get-Item $dst).LastWriteTime -ge (Get-Item $src).LastWriteTime) { return $true }
+    # Update-Index's first pass only collects what is missing (see New-Thumbs).
+    if ($null -ne $script:ThumbQueue) { $script:ThumbQueue.Add(@{ src = $src; dst = $dst; width = $Width }); return $true }
     try { New-Thumb $src $dst -Width $Width; $true } catch { Log "thumbnail failed for ${src}: $($_.Exception.Message)"; $false }
+}
+
+# A first sync brings ~190 images: decoding them 8 at a time is about 4x faster. Small
+# batches stay sequential (a runspace pool costs more than it saves); a thumbnail that
+# fails here is simply tried again, and logged, by Update-Index's second pass.
+function New-Thumbs([object[]]$jobs) {
+    if ($jobs.Count -lt 8) { return }
+    $def = ${function:New-Thumb}.ToString()
+    $done = 0
+    $jobs | ForEach-Object -ThrottleLimit 8 -Parallel {
+        ${function:New-Thumb} = $using:def
+        try { New-Thumb $_.src $_.dst -Width $_.width } catch {}
+        1
+    } | ForEach-Object { $done++; if (Get-Command Write-UiProgress -ErrorAction SilentlyContinue) { Write-UiProgress 'thumbnails' $done $jobs.Count "$done/$($jobs.Count)" } }
 }
 
 function Get-BackgroundDirs {
@@ -55,20 +71,31 @@ function Invoke-Sync([switch]$Offline) {
             $todo = @($want | Where-Object { -not ((Test-Path $_.dest) -and (Get-Item $_.dest).Length -eq $_.size) })
             $total = ($todo | Measure-Object size -Sum).Sum
             if ($todo) { Log ("downloading {0} file(s), {1:N0} MB" -f $todo.Count, ($total / 1MB)) }
-            $n = 0; $i = 0
-            foreach ($f in $todo) {
-                $i++
-                Write-Progress -Activity 'Omarchy themes and backgrounds' -Status $f.path -PercentComplete (100 * $i / $todo.Count)
-                New-Item -ItemType Directory -Force (Split-Path $f.dest) | Out-Null
-                $url = "https://raw.githubusercontent.com/$repo/$tag/$($f.path)"
+            # 8 at a time: one file after another spends most of its time waiting on each
+            # request (measured: 8 backgrounds in 2.9 s one by one, 0.37 s together).
+            $todo | ForEach-Object { Split-Path $_.dest } | Sort-Object -Unique | ForEach-Object { New-Item -ItemType Directory -Force $_ | Out-Null }
+            $base = "https://raw.githubusercontent.com/$repo/$tag"
+            $n = 0; $i = 0; $bytes = 0
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            $todo | ForEach-Object -ThrottleLimit 8 -Parallel {
+                $ProgressPreference = 'SilentlyContinue'
+                $f = $_
+                $url = "$using:base/$($f.path)"
                 try {
                     Invoke-WebRequest $url -OutFile "$($f.dest).part" -TimeoutSec 120
                     Move-Item -Force "$($f.dest).part" $f.dest
-                    $n++
-                } catch { Log "download failed: $url ($($_.Exception.Message))"; Remove-Item "$($f.dest).part" -ErrorAction SilentlyContinue }
+                    @{ ok = $true; size = $f.size }
+                } catch {
+                    Remove-Item "$($f.dest).part" -ErrorAction SilentlyContinue
+                    @{ ok = $false; size = $f.size; error = "download failed: $url ($($_.Exception.Message))" }
+                }
+            } | ForEach-Object {
+                $i++
+                if ($_.ok) { $n++; $bytes += $_.size } else { Log $_.error }
+                $rate = $bytes / 1MB / [Math]::Max(0.1, $sw.Elapsed.TotalSeconds)
+                Write-UiProgress 'downloading' $i $todo.Count ('{0:N0}/{1:N0} MB  {2:N1} MB/s' -f ($bytes / 1MB), ($total / 1MB), $rate)
             }
-            Write-Progress -Activity 'Omarchy themes and backgrounds' -Completed
-            Log "downloaded $n new file(s)"
+            Log "downloaded $n new file(s)$(if ($n) { ' in {0:N1} s' -f $sw.Elapsed.TotalSeconds })"
         } catch { Log "offline or GitHub unavailable, using local files ($($_.Exception.Message))" }
     }
     Update-Index
@@ -81,6 +108,21 @@ function Update-Index {
     # Theme previews are the picker's big cover-flow cards, so they are twice the width of the
     # wallpaper thumbs. The width is in the folder name: Update-Thumb only compares timestamps.
     Remove-Item (Join-Path $Thumbs '_themes') -Recurse -Force -ErrorAction SilentlyContinue
+    # Pass one collects the thumbnails that are missing, New-Thumbs makes them all at once,
+    # pass two builds the index (and makes, one by one, any the batch could not).
+    $script:ThumbQueue = [Collections.Generic.List[object]]::new()
+    try { [void](Get-IndexData) } finally { $queue = $script:ThumbQueue; $script:ThumbQueue = $null }
+    New-Thumbs @($queue)
+    $data = Get-IndexData
+    $themeList = $data.themes; $groups = $data.groups
+
+    $index = [ordered]@{ generated = (Get-Date).ToString('s'); themes = @($themeList); groups = @($groups) }
+    Write-Utf8 (Join-Path $Pack 'index.json') ($index | ConvertTo-Json -Depth 6 -Compress)
+    Write-Status (Read-State)
+    Log "index: $(@($themeList).Count) themes, $(($groups | ForEach-Object { $_.items.Count } | Measure-Object -Sum).Sum) backgrounds in $($groups.Count) groups"
+}
+
+function Get-IndexData {
     $themeList = foreach ($dir in Get-ChildItem $Themes -Directory | Where-Object Name -NotLike '_*' | Sort-Object Name) {
         if (-not (Test-Path (Join-Path $dir.FullName 'colors.toml'))) { continue }
         $c = Read-Colors $dir.Name
@@ -117,11 +159,7 @@ function Update-Index {
         }
     }
     if ($mine) { $groups.Add([ordered]@{ id = 'mine'; label = 'Mine'; items = @($mine) }) }
-
-    $index = [ordered]@{ generated = (Get-Date).ToString('s'); themes = @($themeList); groups = @($groups) }
-    Write-Utf8 (Join-Path $Pack 'index.json') ($index | ConvertTo-Json -Depth 6 -Compress)
-    Write-Status (Read-State)
-    Log "index: $(@($themeList).Count) themes, $(($groups | ForEach-Object { $_.items.Count } | Measure-Object -Sum).Sum) backgrounds in $($groups.Count) groups"
+    @{ themes = @($themeList); groups = $groups }
 }
 
 # --- backgrounds ------------------------------------------------------------------
