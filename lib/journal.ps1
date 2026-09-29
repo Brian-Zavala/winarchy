@@ -213,6 +213,7 @@ function Restore-PartOwnedFile($e, [string]$dir) {
     }
     if ($leaf -in 'profile.ps1', 'Microsoft.PowerShell_profile.ps1') {
         Remove-HerdrProfile $path
+        if (Get-Command Remove-AccountProfile -ErrorAction SilentlyContinue) { Remove-AccountProfile $path }
         if (Get-Command Remove-ShellProfile -ErrorAction SilentlyContinue) { Remove-ShellProfile $path }
     } elseif ($path -like '*\.vscode\extensions\extensions.json') {
         Write-Json $path @(@(Read-Json $path) | Where-Object { $_ -and $_.identifier.id -ne 'local.omarchy-theme' }) 12

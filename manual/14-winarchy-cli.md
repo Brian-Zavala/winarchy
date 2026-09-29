@@ -33,7 +33,8 @@ Everything the Omarchy menu does is also a `winarchy` command, for scripts or wh
 | `winarchy default-agent <name>` | Choose the default agent, and start it |
 | `winarchy agent-usage [-Force]` | Refresh the bar's agent usage |
 | `winarchy agent-make theme\|plugin\|app` | Start your default agent, asking it to make a theme, a bar plugin or an app (the usage panel's _Make something_ tiles) |
-| `winarchy agent-login claude\|codex` | Sign in to Claude Code or Codex again, then refresh its limits |
+| `winarchy agent-login claude\|codex` | Sign in to Claude Code or Codex again, then refresh its limits. `claude/work` signs in one of several accounts |
+| `winarchy agent-account list\|add\|use\|rename\|remove\|mode` | Several Claude Code or Codex accounts: `add claude`, `use claude/work` (or `claude/next`), `rename claude/work "Side"`, `remove claude/work`, `mode claude auto 95` (autoswitch) |
 | `winarchy herdr status` | Where Herdr is, its config and its theme |
 | `winarchy herdr layout\|square\|multi\|swarm` | The layouts behind `hdl`, `hds`, `hdlm` and `hsl` (see [shell functions](20-shell-functions.md)) |
 

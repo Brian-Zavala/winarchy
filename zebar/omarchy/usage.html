@@ -11,19 +11,19 @@
     <!-- The bar's agents panel (Omarchy's agents panel), dropped under the bar icon: every
          subscription's limits, and tiles that start the default agent making something.
          Clicking outside it closes it. -->
-    <div id="panel" role="dialog" aria-label="AI coding agents">
+    <div id="wrap"><div id="panel" role="dialog" aria-label="AI coding agents">
       <header id="hero">
         <span class="glyph" aria-hidden="true"></span>
         <div class="who">
           <span id="title">Agents</span>
           <span id="today"></span>
         </div>
-        <button id="add" class="add" title="Choose your default agent" aria-label="Choose your default agent"></button>
+        <button id="add" class="add" title="Add a subscription (a)" aria-label="Add a subscription"></button>
       </header>
 
       <div id="empty" class="hidden">
-        <strong>No agent usage yet</strong>
-        <span>It appears after a coding agent has run on this PC.</span>
+        <strong>No subscriptions yet</strong>
+        <span>Sign in to an AI coding subscription, and this panel keeps track of how much of it you have left.</span>
       </div>
       <div id="agents"></div>
 
@@ -41,7 +41,7 @@
         <button id="refresh" title="Refresh (r)" aria-label="Refresh"></button>
       </footer>
       <div id="tip" class="hidden" role="tooltip"></div>
-    </div>
+    </div></div>
     <script type="module" src="./usage.js"></script>
   </body>
 </html>

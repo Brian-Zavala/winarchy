@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Several Claude Code and Codex accounts, as in Omarchy's upcoming account switching. Press `+` in the agents panel to add one: it signs in in a private browser window, and your existing sign-in stays the Main account. Each account shows its own limits, with _Use_ to switch. New agent windows, Herdr panes and `claude` or `codex` typed in PowerShell then use it. _Autoswitch_ (off by default) moves to the account with the most left when one reaches 95%. Conversations, skills and settings stay shared. `winarchy agent-account` manages them from a terminal. Codex also shows its free limit resets.
+- Agents panel fixes. Keyboard focus and an open tooltip no longer vanish every 30 seconds. The panel follows the Display panel's text size. A wide tooltip no longer scrolls the card sideways or goes off its edge. Pressing refresh twice runs one refresh, and long names no longer wrap. The agents icon now shows once Claude Code or Codex is installed, before any usage, so a new install can sign in from it.
+
 ## 0.1.29 — 2026-09-29
 
 - The bar's agent panel follows Omarchy's new agents panel. It shows every subscription at once, with tokens today across all of them. Each limit has a meter and the time left until it resets. _Use_ switches the default agent, and _Sign in_ fixes an expired Claude Code sign-in. Three _Make something_ tiles, _Theme_, _Plugin_ and _App_, start your default agent to build one with you (`winarchy agent-make`). A plugin is a Zebar widget pack of your own, and it now follows theme and font changes. Tokens by day and by model are one click away on each subscription. Prompts sent to an agent (`winarchy agent -Prompt`) now reach it exactly as written, even with quotes or `$` in them.

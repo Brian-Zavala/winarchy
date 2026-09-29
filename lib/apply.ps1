@@ -791,6 +791,8 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Respli
     try { [void](Update-AppList) } catch { Log "app list FAILED: $($_.Exception.Message)" }
     try { [void](Update-Catalog) } catch { Log "catalog FAILED: $($_.Exception.Message)" }
     try { [void](Update-AgentList) } catch { Log "agent list FAILED: $($_.Exception.Message)" }
+    # Extra agent accounts: folders, links into the primary home, the profile functions.
+    try { Repair-AgentAccounts } catch { Log "agent accounts FAILED: $($_.Exception.Message)" }
     # Re-merge the usage records already on disk (no collectors, no network): turning an
     # agent off in config.json takes it off the bar at once, not at the next refresh.
     try { [void](Write-AgentUsageFile (Get-Config)) } catch { Log "agent usage FAILED: $($_.Exception.Message)" }

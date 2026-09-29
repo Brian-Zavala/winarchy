@@ -162,6 +162,9 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
     if ($Purge) {
         $spare = @('backup')
         & $step "Delete your settings and the downloaded themes/backgrounds ($Data, keeping $($spare -join ', '))" {
+            # Extra agent accounts link into ~/.claude and ~/.codex: those links go first, so
+            # the recursive delete can never reach your own transcripts through one.
+            if (Get-Command Clear-AccountLinks -ErrorAction SilentlyContinue) { try { Clear-AccountLinks $AccountsRoot } catch { Log "agent account links: $($_.Exception.Message)" } }
             Get-ChildItem $Data -Force | Where-Object Name -notin $spare | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
             # A terminal that loaded winarchy's compiled helpers keeps those files open. They are
             # only a cache the next install rebuilds, so say so rather than fail the run.

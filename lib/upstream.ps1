@@ -15,6 +15,7 @@ $UpstreamWatch = @(
     @{ match = '^default/omarchy/omarchy-menu\.jsonc$|^bin/omarchy-menu'; area = 'Menu'; review = { 'zebar/omarchy/menu.json', 'zebar/omarchy/menu.js', 'ahk/menu.ahk' } }
     @{ match = '^config/herdr/|^default/bash/fns/herdr$|^default/bash/aliases$'; area = 'Herdr and shell'; review = { 'lib/herdr.ps1', 'templates/herdr.toml.tpl', 'lib/agents.ps1' } }
     @{ match = '^bin/omarchy-agent-usage-'; area = 'Agent usage'; review = { 'lib/agents/' } }
+    @{ match = '^bin/omarchy-agent-account'; area = 'Agent accounts'; review = { 'lib/accounts.ps1' } }
     @{ match = '^bin/omarchy-(agent|default-agent)'; area = 'Coding agents'; review = { 'lib/agents.ps1' } }
     @{ match = '^themes/|^default/themed/|^bin/omarchy-theme'; area = 'Theming'; review = { 'lib/render.ps1', 'lib/themes.ps1', 'lib/targets.ps1' } }
     @{ match = '^config/omarchy/shell\.json$|^shell/plugins/bar/'; area = 'Top bar'; review = { 'zebar/omarchy/bar.html', 'zebar/omarchy/bar.css' } }

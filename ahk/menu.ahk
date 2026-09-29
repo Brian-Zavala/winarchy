@@ -16,7 +16,9 @@ OnError ScriptLogError
 ;   menu.ahk install-app <key> | remove-app <key> | catalog-refresh   (Install/Remove routes)
 ;   menu.ahk tui-add | tui-remove <name>                              (Install/Remove > TUI: your own)
 ;   menu.ahk herdr | agent | default-agent <name>                     (Herdr + coding agents)
-;   menu.ahk usage | usage-refresh | agent-make <theme|plugin|app> | agent-login <claude|codex>
+;   menu.ahk usage | usage-refresh | agent-make <theme|plugin|app> | agent-login <claude|codex>[/<account>]
+;   menu.ahk agent-account-add | agent-account-use <provider/id> | agent-account-mode <provider> <manual|auto>
+;   menu.ahk agent-notice <text>                                     (autoswitch notices)
 ;                                                                     (bar agent icon: usage panel)
 ;   menu.ahk display-panel | display-state | brightness <n> <pct> | brightness-step <delta> | scale <n> <pct>
 ;            monitor <key> <on|off> | text-size <px>                  (bar display icon: Display panel)
@@ -69,6 +71,12 @@ switch verb {
         if OmarchyCmdWait("agent-make", arg)
             Notify("Your agent didn't start (winarchy agent list shows whether it's installed)")
     case "agent-login": RunInTerminal("Sign in", CliInTerminal("agent-login", arg))
+    ; Several subscriptions per agent (lib/accounts.ps1). Adding signs in, so a terminal.
+    case "agent-account-add": RunInTerminal("Add account", CliInTerminal("agent-account", "add"))
+    ; Use rewrites agents.json from what the last collect saw, so the panel shows it at once.
+    case "agent-account-use": OmarchyCmd("agent-account", "use", arg)
+    case "agent-account-mode": OmarchyCmd("agent-account", "mode", arg, A_Args.Length > 2 ? A_Args[3] : "manual")
+    case "agent-notice": Osd(arg, 8000)
     ; The bar's display icon (Quattro's omarchy.monitor): the Display panel and its controls.
     ; Monitor numbers are AHK's; the panel got them from display.json.
     case "display-panel": OpenPanel("display", "d", WriteDisplayState)
