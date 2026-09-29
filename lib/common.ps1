@@ -206,17 +206,27 @@ function Use-Lock([scriptblock]$body) {
 # --- native -----------------------------------------------------------------------
 # Add-Type -MemberDefinition for [Winarchy.<name>], compiled once: the C# compiler costs
 # ~250 ms per process, loading the compiled DLL ~20 ms. The DLL's name carries a hash of
-# the source, so an edited definition compiles afresh.
-function Add-NativeType([string]$name, [string]$members) {
-    if ("Winarchy.$name" -as [type]) { return }
-    $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($members))).Substring(0, 16)
+# the source (and of the .NET version it was built on), so an edited definition compiles
+# afresh. -TypeDefinition/-TypeName: a whole C# source whose type is named in it (audio's
+# Core Audio interop), cached the same way - the bar's panels run those every few seconds.
+function Add-NativeType([string]$name, [string]$members, [string]$TypeDefinition, [string]$TypeName) {
+    $full = if ($TypeDefinition) { $TypeName } else { "Winarchy.$name" }
+    if ($full -as [type]) { return }
+    $source = if ($TypeDefinition) { "type|$TypeDefinition" } else { $members }
+    $bytes = [Text.Encoding]::UTF8.GetBytes("$([Environment]::Version.Major)|$source")
+    $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).Substring(0, 16)
     $dir = Join-Path $Generated 'native'
     $dll = Join-Path $dir "Winarchy.$name.$hash.dll"
+    $add = {
+        param([string]$out)
+        $a = if ($TypeDefinition) { @{ TypeDefinition = $TypeDefinition } } else { @{ Namespace = 'Winarchy'; Name = $name; MemberDefinition = $members } }
+        if ($out) { Add-Type @a -OutputAssembly $out -OutputType Library } else { Add-Type @a }
+    }
     try {
         if (-not (Test-Path -LiteralPath $dll)) {
             New-Item -ItemType Directory -Force $dir | Out-Null
             $tmp = Join-Path $dir "Winarchy.$name.$hash.$PID.tmp"
-            Add-Type -Namespace Winarchy -Name $name -MemberDefinition $members -OutputAssembly $tmp -OutputType Library
+            & $add $tmp
             try { Move-Item -LiteralPath $tmp $dll -ErrorAction Stop }
             catch { Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue }   # another process won
             Get-ChildItem $dir -Filter "Winarchy.$name.*.dll" | Where-Object Name -ne (Split-Path -Leaf $dll) |
@@ -224,7 +234,7 @@ function Add-NativeType([string]$name, [string]$members) {
         }
         Add-Type -LiteralPath $dll
     } catch {
-        if (-not ("Winarchy.$name" -as [type])) { Add-Type -Namespace Winarchy -Name $name -MemberDefinition $members }
+        if (-not ($full -as [type])) { & $add $null }
     }
 }
 

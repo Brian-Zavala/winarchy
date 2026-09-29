@@ -621,24 +621,24 @@ function Set-MinimizeAnimationPolicy($cfg) {
 # does: that menu item is WM_COMMAND 0x7402 to the desktop's SHELLDLL_DefView, and it only
 # toggles, so look at whether the icon list is visible first.
 function Set-DesktopIconsVisible([bool]$show) {
-    Add-Type -Namespace WinarchyDesk -Name Win -MemberDefinition @'
+    Add-NativeType Desk @'
 [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string name);
 [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string name);
 [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
 [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
-'@ -ErrorAction SilentlyContinue
-    $view = [WinarchyDesk.Win]::FindWindowEx([WinarchyDesk.Win]::FindWindow('Progman', $null), [IntPtr]::Zero, 'SHELLDLL_DefView', $null)
+'@
+    $view = [Winarchy.Desk]::FindWindowEx([Winarchy.Desk]::FindWindow('Progman', $null), [IntPtr]::Zero, 'SHELLDLL_DefView', $null)
     if ($view -eq [IntPtr]::Zero) {
         $w = [IntPtr]::Zero
         do {
-            $w = [WinarchyDesk.Win]::FindWindowEx([IntPtr]::Zero, $w, 'WorkerW', $null)
-            if ($w -ne [IntPtr]::Zero) { $view = [WinarchyDesk.Win]::FindWindowEx($w, [IntPtr]::Zero, 'SHELLDLL_DefView', $null) }
+            $w = [Winarchy.Desk]::FindWindowEx([IntPtr]::Zero, $w, 'WorkerW', $null)
+            if ($w -ne [IntPtr]::Zero) { $view = [Winarchy.Desk]::FindWindowEx($w, [IntPtr]::Zero, 'SHELLDLL_DefView', $null) }
         } while ($w -ne [IntPtr]::Zero -and $view -eq [IntPtr]::Zero)
     }
     if ($view -eq [IntPtr]::Zero) { return }
-    $list = [WinarchyDesk.Win]::FindWindowEx($view, [IntPtr]::Zero, 'SysListView32', $null)
-    if ($list -eq [IntPtr]::Zero -or [WinarchyDesk.Win]::IsWindowVisible($list) -eq $show) { return }
-    [void][WinarchyDesk.Win]::PostMessage($view, 0x111, [IntPtr]0x7402, [IntPtr]::Zero)
+    $list = [Winarchy.Desk]::FindWindowEx($view, [IntPtr]::Zero, 'SysListView32', $null)
+    if ($list -eq [IntPtr]::Zero -or [Winarchy.Desk]::IsWindowVisible($list) -eq $show) { return }
+    [void][Winarchy.Desk]::PostMessage($view, 0x111, [IntPtr]0x7402, [IntPtr]::Zero)
 }
 
 # hideDesktopIcons (on for a new install): Explorer's "Show desktop icons" off. What the PC

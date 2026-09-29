@@ -85,33 +85,23 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-. "$PSScriptRoot\..\lib\common.ps1"
-. "$PSScriptRoot\..\lib\detect.ps1"
-. "$PSScriptRoot\..\lib\keys.ps1"
-. "$PSScriptRoot\..\lib\render.ps1"
-. "$PSScriptRoot\..\lib\themes.ps1"
-. "$PSScriptRoot\..\lib\targets.ps1"
-. "$PSScriptRoot\..\lib\journal.ps1"
-. "$PSScriptRoot\..\lib\apply.ps1"
-. "$PSScriptRoot\..\lib\setup.ps1"
-. "$PSScriptRoot\..\lib\uninstall.ps1"
-. "$PSScriptRoot\..\lib\doctor.ps1"
-. "$PSScriptRoot\..\lib\extras.ps1"
-. "$PSScriptRoot\..\lib\apps.ps1"
-. "$PSScriptRoot\..\lib\webapps.ps1"
-. "$PSScriptRoot\..\lib\ports.ps1"
-. "$PSScriptRoot\..\lib\catalog.ps1"
-. "$PSScriptRoot\..\lib\agents.ps1"
-. "$PSScriptRoot\..\lib\herdr.ps1"
-. "$PSScriptRoot\..\lib\shell.ps1"
-. "$PSScriptRoot\..\lib\tailscale.ps1"
-. "$PSScriptRoot\..\lib\winicons.ps1"
-. "$PSScriptRoot\..\lib\animations.ps1"
-. "$PSScriptRoot\..\lib\autotile.ps1"
-. "$PSScriptRoot\..\lib\transition.ps1"
-. "$PSScriptRoot\..\lib\system.ps1"
-. "$PSScriptRoot\..\lib\netpanel.ps1"
-. "$PSScriptRoot\..\lib\audio.ps1"
+$AllLibs = 'common', 'detect', 'keys', 'render', 'themes', 'targets', 'journal', 'apply', 'setup',
+    'uninstall', 'doctor', 'extras', 'apps', 'webapps', 'ports', 'catalog', 'agents', 'herdr', 'shell',
+    'tailscale', 'winicons', 'animations', 'autotile', 'transition', 'system', 'netpanel', 'audio'
+# The verbs the bar, its panels and winarchy.ahk run all day (the Audio panel every few
+# seconds) load only the libraries they use: parsing all of them is a good part of a
+# second's start. tests\lazyload.Tests.ps1 walks each one. Every other verb loads the lot.
+$VerbLibs = @{
+    'audio'         = @('common', 'netpanel', 'audio')
+    'network-state' = @('common', 'netpanel')
+    'speedtest-run' = @('common', 'netpanel')
+    'wifi'          = @('common', 'system', 'netpanel')
+    'dns-set'       = @('common', 'system')
+    'winicon'       = @('common', 'winicons')
+    'keys'          = @('common')
+    'version'       = @('common')
+}
+foreach ($lib in ($VerbLibs[$Verb] ?? $AllLibs)) { . "$PSScriptRoot\..\lib\$lib.ps1" }
 
 $version = (Get-Content -Raw (Join-Path $Code 'VERSION') -ErrorAction SilentlyContinue)?.Trim()
 

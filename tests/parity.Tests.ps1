@@ -5,6 +5,8 @@ BeforeAll {
     foreach ($f in 'common', 'detect', 'render', 'catalog', 'herdr', 'agents', 'system', 'netpanel', 'audio') { . "$root\lib\$f.ps1" }
     $Code = $root
     $LogFile = Join-Path $TestDrive 'winarchy.log'
+    # Invoke-AudioAction compiles its interop into generated\native (Add-NativeType): not the real one.
+    $Generated = Join-Path $TestDrive 'generated'
     $menu = Get-Content -Raw (Join-Path $root 'zebar\omarchy\menu.json') | ConvertFrom-Json -AsHashtable
     $ahk = Get-Content -Raw (Join-Path $root 'ahk\menu.ahk')
     $bar = Get-Content -Raw (Join-Path $root 'zebar\omarchy\bar.html')
