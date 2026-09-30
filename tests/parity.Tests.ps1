@@ -53,6 +53,10 @@ Describe 'the bar' {
         (Get-Content -Raw (Join-Path $root 'ahk\winarchy.ahk')) | Should -Match '#\^p::[^\n]*power-panel'
         foreach ($f in 'html', 'css', 'js') { Test-Path (Join-Path $root "zebar\omarchy\power.$f") | Should -BeTrue }
     }
+    It 'filters redundant tray icons behind the chevron when they have their own bar icons' {
+        $bar | Should -Match "!/\^tailscale/i\.test\(icon\.tooltip"
+        $bar | Should -Match "!/battery/i\.test\(icon\.tooltip"
+    }
     It 'toggles the battery percentage from Toggle, on a laptop only' {
         $row = $menu.toggle.items | Where-Object label -EQ 'Battery Percentage'
         $row.action | Should -Be @('battery-percentage')

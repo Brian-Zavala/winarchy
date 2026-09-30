@@ -232,8 +232,9 @@
       function renderTray(tray) {
         const el = $('tray');
         if (!tray) { el.replaceChildren(); updateChevron(); return; }
-        // Tailscale has its own bar icon (#tailscale) once installed: hide its native tray icon.
-        const icons = tray.icons.filter(icon => !/^tailscale/i.test(icon.tooltip ?? ''));
+        // Tailscale and battery have their own bar icons (#tailscale, #battery):
+        // hide their native tray icons.
+        const icons = tray.icons.filter(icon => !/^tailscale/i.test(icon.tooltip ?? '') && !/battery/i.test(icon.tooltip ?? ''));
         syncList(el, icons, icon => icon.id, icon => {
           const img = document.createElement('img');
           bindTrayIcon(img, tray, icon);
