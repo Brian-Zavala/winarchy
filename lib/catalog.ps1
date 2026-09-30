@@ -159,6 +159,8 @@ $Catalog = @(
             @{ key = 'grok-cli'; label = 'Grok'; id = 'npm-grok'
                test = { Test-CatalogCommand 'grok' }
                install = { Install-NpmGlobal '@xai-official/grok' 'Grok' }; remove = { Uninstall-NpmGlobal '@xai-official/grok' 'Grok' } }
+            @{ key = 'antigravity-cli'; label = 'Antigravity'; id = 'Google.AntigravityCLI'
+               test = { Test-CatalogCommand 'agy' } }
         )
     },
     @{

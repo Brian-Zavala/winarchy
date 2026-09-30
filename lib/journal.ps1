@@ -127,7 +127,29 @@ function Save-Wallpaper {
 
 function Save-LockScreen {
     if (Test-Journaled 'lockscreen') { return }
-    $img = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Lock Screen\Creative' -ErrorAction SilentlyContinue).LandscapeAssetPath
+    $img = $null
+    try {
+        $ps = (Get-Paths).powershell ?? 'powershell.exe'
+        $res = & $ps -NoProfile -ExecutionPolicy Bypass -Command @'
+            try {
+                [void][Windows.System.UserProfile.LockScreen, Windows.System.UserProfile, ContentType = WindowsRuntime]
+                $uri = [Windows.System.UserProfile.LockScreen]::OriginalImageFile
+                if ($uri -and $uri.LocalPath -and (Test-Path -LiteralPath $uri.LocalPath)) {
+                    $uri.LocalPath
+                }
+            } catch {}
+'@
+        if ($res) { $img = $res.Trim() }
+    } catch {}
+
+    if (-not $img) {
+        $creative = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Lock Screen\Creative' -ErrorAction SilentlyContinue).LandscapeAssetPath
+        if ($creative -and (Test-Path -LiteralPath $creative)) { $img = $creative }
+    }
+    if (-not $img) {
+        $csp = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP' -ErrorAction SilentlyContinue).LockScreenImagePath
+        if ($csp -and (Test-Path -LiteralPath $csp)) { $img = $csp }
+    }
     [void](Add-JournalEntry @{ kind = 'lockscreen'; key = 'lockscreen'; path = $img })
 }
 
@@ -309,12 +331,30 @@ function Restore-JournalEntry($e, [string]$dir) {
             Initialize-Native
             Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value $e.style
             Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value $e.tile
-            [void][Winarchy.Native]::SystemParametersInfo(0x14, 0, $e.path, 3)
+            $wp = if ($e.path -and (Test-Path -LiteralPath $e.path)) {
+                $e.path
+            } elseif (Test-Path "$env:SystemRoot\Web\Wallpaper\Windows\img0.jpg") {
+                "$env:SystemRoot\Web\Wallpaper\Windows\img0.jpg"
+            } else {
+                $e.path
+            }
+            [void][Winarchy.Native]::SystemParametersInfo(0x14, 0, $wp, 3)
         }
         'lockscreen' {
-            if ($e.path -and (Test-Path -LiteralPath $e.path)) {
-                & (Get-Paths).powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Code 'ps51\lockscreen.ps1') -Path $e.path
-            } else { Write-Warning "  lock screen image $($e.path) is gone; set one in Settings > Personalization > Lock screen" }
+            $target = if ($e.path -and (Test-Path -LiteralPath $e.path)) {
+                $e.path
+            } elseif (Test-Path "$env:SystemRoot\Web\Screen\img100.jpg") {
+                "$env:SystemRoot\Web\Screen\img100.jpg"
+            } else {
+                $null
+            }
+            $lockScript = Join-Path $Code 'ps51\lockscreen.ps1'
+            if ($target -and (Test-Path $lockScript)) {
+                $ps = (Get-Paths).powershell ?? 'powershell.exe'
+                & $ps -NoProfile -ExecutionPolicy Bypass -File $lockScript -Path $target
+            } elseif (-not $target) {
+                Write-Warning "  could not find default lock screen image; set one in Settings > Personalization > Lock screen"
+            }
         }
         'taskbar' { Restore-Taskbar $e }
         'runkeys' {

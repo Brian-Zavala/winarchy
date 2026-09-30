@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fix screensaver triggering UAC prompts and appearing windowed: explicitly set `elevate = $false` on `Omarchy Screensaver`, `Omarchy About`, and `Omarchy Agent` Windows Terminal profiles so the screensaver launches unelevated and full screen without security dialogs.
+- Lock screen and wallpaper restoration on uninstall: properly resolve Windows 11 lock screen image paths using WinRT, provide robust fallbacks to default Windows system assets (`img100.jpg` / `img0.jpg`), and actively restore default assets if current wallpaper or lockscreen still point to winarchy.
+- Antigravity CLI (`agy`) usage collector for the status bar agent panel. Antigravity CLI now displays in the Zebar status bar agent menu with today's prompts and tokens, 7-day activity graph, model tier, and "Make default" controls.
+
 ## 0.1.31 — 2026-09-29
 
 - Several Claude Code and Codex accounts, as in Omarchy's upcoming account switching. Press `+` in the agents panel to add one: it signs in in a private browser window, and your existing sign-in stays the Main account. Each account shows its own limits, with _Use_ to switch. New agent windows, Herdr panes and `claude` or `codex` typed in PowerShell then use it. _Autoswitch_ (off by default) moves to the account with the most left when one reaches 95%. Conversations, skills and settings stay shared. `winarchy agent-account` manages them from a terminal. Codex also shows its free limit resets.

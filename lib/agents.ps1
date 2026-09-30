@@ -55,7 +55,7 @@ $AgentTable = [ordered]@{
     agy = @{
         label = 'Antigravity'; cmd = 'agy'; args = @('--dangerously-skip-permissions')
         prompt = { param($p) @('--prompt-interactive', $p) }
-        hint = 'npm install -g antigravity-cli'
+        hint = 'winget install -e --id Google.AntigravityCLI'
     }
     muse = @{
         label = 'Muse Code'; cmd = 'muse'; args = @('--approval-mode', 'never')
@@ -154,6 +154,8 @@ function Find-AgentExe([string]$cmd) {
     if ($c) { return $c.Source }
     foreach ($f in @(
             (Join-Path ([Environment]::GetFolderPath('ApplicationData')) "npm\$cmd.cmd"),
+            (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "$cmd\bin\$cmd.exe"),
+            (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "Programs\Antigravity\bin\$cmd.cmd"),
             (Join-Path $HOME ".local\bin\$cmd.exe"))) {
         if (Test-Path -LiteralPath $f) { return $f }
     }

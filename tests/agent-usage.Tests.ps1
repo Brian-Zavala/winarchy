@@ -180,6 +180,32 @@ print(repr(r.readline(5)), repr(r.readline(0.1)), repr(r.readline(5)), repr(r.re
         $r.usageStatusText | Should -Be 'Codex unavailable'
         @($r.limits).Count | Should -Be 0
     }
+
+    It 'agy: counts prompt history and recent days accurately' {
+        $cfgDir = Join-Path $TestDrive 'agyhome'
+        New-Item -ItemType Directory -Force $cfgDir | Out-Null
+        $nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+        @(
+            @{ display = 'write a test'; timestamp = $nowMs; conversationId = 'c1' } | ConvertTo-Json -Compress
+            @{ display = 'fix the test'; timestamp = $nowMs; conversationId = 'c1' } | ConvertTo-Json -Compress
+        ) | Set-Content (Join-Path $cfgDir 'history.jsonl')
+        @{ model = 'Gemini 3.8 Flash (High)' } | ConvertTo-Json | Set-Content (Join-Path $cfgDir 'settings.json')
+
+        $r = Invoke-Collector 'agy' @{ ANTIGRAVITY_CONFIG_DIR = $cfgDir }
+        Assert-RecordV1 $r 'agy'
+        $r.totalPrompts | Should -Be 2
+        $r.todayPrompts | Should -Be 2
+        $r.tierLabel | Should -Be 'Gemini 3.8 Flash'
+        $r.ready | Should -BeTrue
+    }
+
+    It 'agy: reports unavailable when not installed and no data exists' {
+        $cfgDir = Join-Path $TestDrive 'agy-none'
+        $r = Invoke-Collector 'agy' @{ ANTIGRAVITY_CONFIG_DIR = $cfgDir; PATH = "$env:SystemRoot\System32"; LOCALAPPDATA = (Join-Path $TestDrive 'localappdata'); APPDATA = (Join-Path $TestDrive 'appdata') }
+        Assert-RecordV1 $r 'agy'
+        $r.usageStatusText | Should -Be 'Antigravity unavailable'
+        $r.ready | Should -BeFalse
+    }
 }
 
 Describe 'agents.json (what the bar reads)' {

@@ -121,6 +121,39 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
         & $step 'Stop screenshot auto-copy' { Stop-ScreenshotWatcher }
     }
 
+    # If the lock screen or wallpaper is still pointing to winarchy's folder, restore the Windows default.
+    $curLock = try {
+        $ps = (Get-Paths).powershell ?? 'powershell.exe'
+        $res = & $ps -NoProfile -ExecutionPolicy Bypass -Command @'
+            try {
+                [void][Windows.System.UserProfile.LockScreen, Windows.System.UserProfile, ContentType = WindowsRuntime]
+                $uri = [Windows.System.UserProfile.LockScreen]::OriginalImageFile
+                if ($uri -and $uri.LocalPath) { $uri.LocalPath }
+            } catch {}
+'@
+        if ($res) { $res.Trim() }
+    } catch {}
+    if ($curLock -and ($curLock -like "*$Data*" -or $curLock -like "*winarchy*")) {
+        & $step 'Restore default Windows lock screen' {
+            $lockScript = Join-Path $Code 'ps51\lockscreen.ps1'
+            $defScreen = "$env:SystemRoot\Web\Screen\img100.jpg"
+            if ((Test-Path $defScreen) -and (Test-Path $lockScript)) {
+                $ps = (Get-Paths).powershell ?? 'powershell.exe'
+                & $ps -NoProfile -ExecutionPolicy Bypass -File $lockScript -Path $defScreen
+            }
+        }
+    }
+
+    $curWp = (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -ErrorAction SilentlyContinue).WallPaper
+    if ($curWp -and ($curWp -like "*$Data*" -or $curWp -like "*winarchy*")) {
+        & $step 'Restore default Windows wallpaper' {
+            if (Test-Path "$env:SystemRoot\Web\Wallpaper\Windows\img0.jpg") {
+                Initialize-Native
+                [void][Winarchy.Native]::SystemParametersInfo(0x14, 0, "$env:SystemRoot\Web\Wallpaper\Windows\img0.jpg", 3)
+            }
+        }
+    }
+
     # What winarchy runs on (GlazeWM, Flow, AutoHotkey, ...) goes unless -KeepApps; the
     # person's own apps go only if they said so.
     foreach ($e in $entries | Where-Object { $_.kind -in 'winget', 'herdr', 'webapp', 'port' }) {

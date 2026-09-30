@@ -572,6 +572,7 @@ function Set-TerminalProfiles($p) {
     $want = @(
         [ordered]@{
             guid = $ScreensaverProfile; name = 'Omarchy Screensaver'; hidden = $true
+            elevate = $false
             commandline = "`"$pwsh`" -NoProfile -ExecutionPolicy Bypass -File `"$Code\lib\screensaver.ps1`" -Text `"$Data\branding\screensaver.txt`"$ttfxArg"
             tabTitle = 'Omarchy Screensaver'; suppressApplicationTitle = $true
             background = '#000000'; opacity = 100; useAcrylic = $false; padding = '0'
@@ -580,6 +581,7 @@ function Set-TerminalProfiles($p) {
         },
         [ordered]@{
             guid = $AboutProfile; name = 'Omarchy About'; hidden = $true
+            elevate = $false
             commandline = "`"$pwsh`" -NoProfile -ExecutionPolicy Bypass -File `"$Code\lib\about.ps1`""
             tabTitle = 'Omarchy About'; suppressApplicationTitle = $true
             padding = '14'; scrollbarState = 'hidden'; bellStyle = 'none'; closeOnExit = 'always'; startingDirectory = $Data
@@ -591,6 +593,7 @@ function Set-TerminalProfiles($p) {
         # not a localized string. Not hidden: it is a profile worth opening by hand.
         [ordered]@{
             guid = $AgentProfile; name = 'Omarchy Agent'
+            elevate = $false
             commandline = "`"$pwsh`" -NoLogo -Command `"& '$Code\bin\winarchy.ps1' agent -Inline`""
             tabTitle = 'Omarchy Agent'; suppressApplicationTitle = $true
             font = [ordered]@{ face = $font }; padding = '8'; bellStyle = 'none'
