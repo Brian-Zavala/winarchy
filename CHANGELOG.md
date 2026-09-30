@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.33 — 2026-09-30
+
 - Fix screensaver triggering UAC prompts and appearing windowed: explicitly set `elevate = $false` on `Omarchy Screensaver`, `Omarchy About`, and `Omarchy Agent` Windows Terminal profiles so the screensaver launches unelevated and full screen without security dialogs.
 - Lock screen and wallpaper restoration on uninstall: properly resolve Windows 11 lock screen image paths using WinRT, provide robust fallbacks to default Windows system assets (`img100.jpg` / `img0.jpg`), and actively restore default assets if current wallpaper or lockscreen still point to winarchy.
 - Antigravity CLI (`agy`) usage collector for the status bar agent panel. Antigravity CLI now displays in the Zebar status bar agent menu with today's prompts and tokens, 7-day activity graph, model tier, and "Make default" controls.
