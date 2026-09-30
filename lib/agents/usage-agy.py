@@ -3,9 +3,9 @@
 """Collect Antigravity CLI usage into one display-ready JSON record.
 
 Everything the agents panel shows for Antigravity comes from this command:
-local prompt history and configuration from ~/.gemini/antigravity-cli.
-The panel itself only ever reads the JSON this prints; it never talks to
-disk formats or endpoints directly.
+local prompt history, session transcripts, and configuration from
+~/.gemini/antigravity-cli. The panel itself only ever reads the JSON this
+prints; it never talks to disk formats or endpoints directly.
 """
 
 from __future__ import annotations
@@ -65,6 +65,14 @@ def local_date_from_millis(ms: Any) -> str:
     return date_string(dt.datetime.now().date())
 
 
+def local_date_from_iso(raw: str) -> str:
+  try:
+    parsed = dt.datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    return date_string(parsed.astimezone().date())
+  except Exception:
+    return date_string(dt.datetime.now().date())
+
+
 def collect_usage() -> dict[str, Any]:
   installed = is_installed()
   c_dir = config_dir()
@@ -72,16 +80,15 @@ def collect_usage() -> dict[str, Any]:
   settings_file = c_dir / "settings.json"
 
   recent_dates = recent_date_strings()
-  day_counts: dict[str, int] = {d: 0 for d in recent_dates}
+  day_tokens: dict[str, int] = {d: 0 for d in recent_dates}
   active_dates: set[str] = set()
   conversation_ids: set[str] = set()
   today_str = recent_dates[-1]
 
   today_prompts = 0
   total_prompts = 0
-  total_chars = 0
-  today_chars = 0
 
+  # 1. Read prompts and session IDs from history.jsonl
   if history_file.is_file():
     try:
       with open(history_file, "r", encoding="utf-8", errors="replace") as f:
@@ -94,10 +101,6 @@ def collect_usage() -> dict[str, Any]:
           except Exception:
             continue
           total_prompts += 1
-          display_text = str(item.get("display") or "")
-          char_len = len(display_text)
-          total_chars += char_len
-
           cid = item.get("conversationId")
           if cid:
             conversation_ids.add(cid)
@@ -105,25 +108,30 @@ def collect_usage() -> dict[str, Any]:
           if ts:
             d_str = local_date_from_millis(ts)
             active_dates.add(d_str)
-            if d_str in day_counts:
-              day_counts[d_str] += 1
             if d_str == today_str:
               today_prompts += 1
-              today_chars += char_len
     except Exception:
       pass
 
-  # If brain/ directory has conversation folders, include them in session counting
+  # Include conversation directories under brain/
   brain_dir = c_dir / "brain"
+  transcript_files: list[Path] = []
   if brain_dir.is_dir():
     try:
       for entry in brain_dir.iterdir():
         if entry.is_dir() and not entry.name.startswith("."):
           conversation_ids.add(entry.name)
+          logs_dir = entry / ".system_generated" / "logs"
+          tf_full = logs_dir / "transcript_full.jsonl"
+          tf_compact = logs_dir / "transcript.jsonl"
+          if tf_full.is_file():
+            transcript_files.append(tf_full)
+          elif tf_compact.is_file():
+            transcript_files.append(tf_compact)
     except Exception:
       pass
 
-  # Check active model from settings.json
+  # 2. Check active model from settings.json
   tier_label = ""
   if settings_file.is_file():
     try:
@@ -131,35 +139,87 @@ def collect_usage() -> dict[str, Any]:
         settings = json.load(f)
       model_raw = str(settings.get("model", "")).strip()
       if model_raw:
-        # e.g. "Gemini 3.8 Flash (High)" -> "Gemini 3.8 Flash"
         tier_label = model_raw.split(" (")[0]
     except Exception:
       pass
 
-  recent_days = [{"date": d, "messageCount": day_counts[d]} for d in recent_dates]
+  model_name = tier_label or "Gemini"
+
+  # 3. Scan transcripts for comprehensive token counts
+  total_input_tokens = 0
+  total_output_tokens = 0
+  today_token_total = 0
+
+  for tf in transcript_files:
+    try:
+      with open(tf, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+          line = line.strip()
+          if not line:
+            continue
+          try:
+            obj = json.loads(line)
+          except Exception:
+            continue
+
+          raw_ts = obj.get("created_at")
+          if not raw_ts:
+            continue
+          step_date = local_date_from_iso(str(raw_ts))
+          active_dates.add(step_date)
+
+          src = obj.get("source")
+          typ = obj.get("type")
+          content = str(obj.get("content") or "")
+          thinking = str(obj.get("thinking") or "")
+          tool_calls = obj.get("tool_calls") or []
+
+          in_chars = 0
+          out_chars = 0
+          if src == "USER_EXPLICIT" or typ == "USER_INPUT" or src == "SYSTEM":
+            in_chars = len(content)
+          elif src == "MODEL":
+            out_chars = len(content) + len(thinking) + len(json.dumps(tool_calls))
+
+          step_in = in_chars // 4
+          step_out = out_chars // 4
+          step_total = step_in + step_out
+
+          total_input_tokens += step_in
+          total_output_tokens += step_out
+
+          if step_date in day_tokens:
+            day_tokens[step_date] += step_total
+          if step_date == today_str:
+            today_token_total += step_total
+    except Exception:
+      pass
+
+  # Fallback if no transcripts but history was present
+  if total_input_tokens == 0 and total_output_tokens == 0 and total_prompts > 0:
+    today_token_total = today_prompts * 50
+    total_output_tokens = total_prompts * 50
+
+  recent_days = [{"date": d, "messageCount": day_tokens[d]} for d in recent_dates]
   total_sessions = len(conversation_ids)
-  today_sessions = 1 if today_prompts > 0 else 0
+  today_sessions = 1 if today_prompts > 0 or today_token_total > 0 else 0
 
   now_utc = dt.datetime.now(dt.timezone.utc).isoformat()
 
-  # Estimate tokens based on prompt length if not reported by an endpoint
-  today_tokens = max(0, round(today_chars / 4.0)) if today_chars else 0
-  total_tokens = max(0, round(total_chars / 4.0)) if total_chars else 0
-
-  model_usage: dict[str, Any] = {}
-  if tier_label:
-    model_usage[tier_label] = {
-      "inputTokens": total_tokens,
-      "outputTokens": 0,
+  model_usage: dict[str, Any] = {
+    model_name: {
+      "inputTokens": total_input_tokens,
+      "outputTokens": total_output_tokens,
       "cacheReadInputTokens": 0,
       "cacheCreationInputTokens": 0,
     }
+  }
 
   today_tokens_by_model: dict[str, int] = {}
-  if tier_label and today_tokens:
-    today_tokens_by_model[tier_label] = today_tokens
+  if today_token_total > 0:
+    today_tokens_by_model[model_name] = today_token_total
 
-  if not installed and total_prompts == 0:
+  if not installed and total_prompts == 0 and total_input_tokens == 0:
     return {
       "schemaVersion": 1,
       "id": AGENT_ID,
@@ -192,7 +252,7 @@ def collect_usage() -> dict[str, Any]:
     "hasLocalStats": True,
     "todayPrompts": today_prompts,
     "todaySessions": today_sessions,
-    "todayTotalTokens": today_tokens,
+    "todayTotalTokens": today_token_total,
     "todayTokensByModel": today_tokens_by_model,
     "recentDays": recent_days,
     "totalPrompts": total_prompts,

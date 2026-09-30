@@ -206,6 +206,24 @@ print(repr(r.readline(5)), repr(r.readline(0.1)), repr(r.readline(5)), repr(r.re
         $r.usageStatusText | Should -Be 'Antigravity unavailable'
         $r.ready | Should -BeFalse
     }
+
+    It 'agy: calculates tokens from conversation transcripts' {
+        $cfgDir = Join-Path $TestDrive 'agy-transcripts'
+        $brainDir = Join-Path $cfgDir 'brain\conv1\.system_generated\logs'
+        New-Item -ItemType Directory -Force $brainDir | Out-Null
+        $nowIso = [DateTimeOffset]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
+        @(
+            @{ created_at = $nowIso; source = 'USER_EXPLICIT'; type = 'USER_INPUT'; content = 'hello agent please help me' } | ConvertTo-Json -Compress
+            @{ created_at = $nowIso; source = 'MODEL'; type = 'PLANNER_RESPONSE'; thinking = 'thought text'; tool_calls = @(@{ id = '1'; name = 'test' }) } | ConvertTo-Json -Compress
+        ) | Set-Content (Join-Path $brainDir 'transcript_full.jsonl')
+        @{ model = 'Gemini 3.8 Flash' } | ConvertTo-Json | Set-Content (Join-Path $cfgDir 'settings.json')
+
+        $r = Invoke-Collector 'agy' @{ ANTIGRAVITY_CONFIG_DIR = $cfgDir }
+        Assert-RecordV1 $r 'agy'
+        $r.todayTotalTokens | Should -BeGreaterThan 0
+        $r.modelUsage.'Gemini 3.8 Flash'.inputTokens | Should -BeGreaterThan 0
+        $r.modelUsage.'Gemini 3.8 Flash'.outputTokens | Should -BeGreaterThan 0
+    }
 }
 
 Describe 'agents.json (what the bar reads)' {
