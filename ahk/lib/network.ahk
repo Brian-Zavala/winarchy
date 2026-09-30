@@ -59,7 +59,7 @@ NetworkRefresh() {
 ; lists (only names, type and state are read). IP_ADAPTER_ADDRESSES_LH, P = pointer size:
 ; Next 8, Description 8+7P, FriendlyName 8+8P, IfType 28+9P, OperStatus 32+9P.
 NetAdapters() {
-    P := A_PtrSize, size := 16384, r := 0, list := []
+    ptrSize := A_PtrSize, size := 16384, r := 0, list := []
     loop 3 {
         buf := Buffer(size)
         ; AF_UNSPEC; GAA_FLAG_SKIP_UNICAST | ANYCAST | MULTICAST | DNS_SERVER
@@ -71,8 +71,8 @@ NetAdapters() {
         return list
     p := buf.Ptr
     while p {                             ; up: OperStatus = IfOperStatusUp
-        list.Push({type: NumGet(p, 28 + 9 * P, "uint"), up: NumGet(p, 32 + 9 * P, "int") = 1
-            , name: StrGet(NumGet(p, 8 + 8 * P, "ptr"), "UTF-16"), desc: StrGet(NumGet(p, 8 + 7 * P, "ptr"), "UTF-16")})
+        list.Push({type: NumGet(p, 28 + 9 * ptrSize, "uint"), up: NumGet(p, 32 + 9 * ptrSize, "int") = 1
+            , name: StrGet(NumGet(p, 8 + 8 * ptrSize, "ptr"), "UTF-16"), desc: StrGet(NumGet(p, 8 + 7 * ptrSize, "ptr"), "UTF-16")})
         p := NumGet(p, 8, "ptr")
     }
     return list

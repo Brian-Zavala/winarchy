@@ -8,7 +8,7 @@ general:
   # is added by lib/autotile.ps1's ConvertTo-AutoTileStartup when config "autoTiling.enabled"
   # is true, else nothing. The watcher (lib/autotile-watch.ps1) exits on its own when
   # GlazeWM does, so there is no matching shutdown_commands entry.
-  startup_commands: ['shell-exec zebar'{{ autotile_startup }}]
+  startup_commands: ['shell-exec zebar startup'{{ autotile_startup }}]
   shutdown_commands: ['shell-exec taskkill /IM zebar.exe /F']
   config_reload_commands: []
 

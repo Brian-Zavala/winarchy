@@ -48,7 +48,8 @@ function Invoke-Doctor([switch]$Fix) {
     }
     & $check 'Zebar (top bar)' ([bool](Get-Process zebar -ErrorAction SilentlyContinue)) 'winarchy.ahk restarts it within 5 s; else run: winarchy apply'
     if ($cfg.autoTiling.enabled) {
-        $autotileRunning = [bool](Get-CimInstance Win32_Process -Filter "Name='pwsh.exe'" -ErrorAction SilentlyContinue |
+        $autotileRunning = [Threading.Mutex]::TryOpenExisting('Global\winarchy-autotile', [ref]$null) -or
+            [bool](Get-CimInstance Win32_Process -Filter "Name='pwsh.exe'" -ErrorAction SilentlyContinue |
             Where-Object { $_.CommandLine -like '*autotile-watch.ps1*' })
         & $check 'auto-tiling watcher' $autotileRunning 'winarchy apply (GlazeWM starts it); if it keeps dying, winarchy autotile off then on'
     }

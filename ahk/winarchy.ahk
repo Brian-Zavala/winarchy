@@ -1,5 +1,6 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
+Persistent()
 #Include lib\env.ahk
 #Include lib\osd.ahk
 #Include lib\tailscale.ahk

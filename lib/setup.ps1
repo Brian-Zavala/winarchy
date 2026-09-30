@@ -301,12 +301,13 @@ function Install-Prerequisites {
 
 function Install-Apps {
     Write-Step 'Apps'
+    # Before Zebar exists: its first run would otherwise make its generic starter bar
+    # the one it opens (Set-ZebarStartup). Call here so even if GlazeWM was already installed,
+    # the startup config is always in place.
+    try { Set-ZebarStartup } catch { Log "Zebar settings not written yet ($($_.Exception.Message)); apply writes them" }
     foreach ($a in $Apps) {
         if (& $a.test) { Save-Winget $a.id $true; Write-Done "$($a.name): installed"; continue }
         Save-Winget $a.id $false
-        # Before Zebar exists: its first run would otherwise make its generic starter bar
-        # the one it opens (Set-ZebarStartup).
-        if ($a.id -eq 'glzr-io.glazewm') { try { Set-ZebarStartup } catch { Log "Zebar settings not written yet ($($_.Exception.Message)); apply writes them" } }
         if ($a.note) { Write-Ok $a.note }
         [void](Install-WingetPackage $a.id $a.name $null)
         [void](Update-Paths)
@@ -550,7 +551,7 @@ function Start-Everything($p) {
         $p = Get-Paths
     }
     if ($p.glazewm -and -not (Get-GlazeWmProcess)) { Start-GlazeWM $p.glazewm }
-    if ($p.flow -and -not (Get-Process Flow.Launcher -ErrorAction SilentlyContinue)) { Start-Process $p.flow }
+    if ($p.flow -and -not (Get-Process Flow.Launcher -ErrorAction SilentlyContinue)) { Start-InteractiveProcess $p.flow }
     Restart-Bar $p
     Restart-OmarchyAhk $p
 }

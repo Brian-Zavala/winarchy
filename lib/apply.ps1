@@ -745,16 +745,24 @@ function Get-OmarchyAhk {
 function Restart-OmarchyAhk($p) {
     # Force-stop: the new instance takes over hiding the taskbar without it flashing.
     Get-OmarchyAhk | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-    Start-Process -FilePath $p.ahk -ArgumentList "`"$Code\ahk\winarchy.ahk`"" -WorkingDirectory "$Code\ahk"
+    Start-InteractiveProcess -FilePath $p.ahk -ArgumentList "`"$Code\ahk\winarchy.ahk`"" -WorkingDirectory "$Code\ahk"
+}
+
+function Stop-Zebar {
+    Get-Process zebar -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -like "*com.glzr.zebar*" -or $_.CommandLine -like "*zebar\webview-cache*" } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 }
 
 function Restart-Bar($p) {
-    Get-Process zebar -ErrorAction SilentlyContinue | Stop-Process -Force
+    try { Set-ZebarStartup } catch {}
+    Stop-Zebar
     Start-Sleep -Milliseconds 800
     if (-not $p.zebar) { return }
     # Zebar attaches to its parent's console: started from here it would log into this
     # terminal (winarchy update) and die when the tab closes. AutoHotkey has no console.
-    if ($p.ahk) { Start-Process -FilePath $p.ahk -ArgumentList "`"$Code\ahk\menu.ahk`"", 'bar-start' }
+    if ($p.ahk) { Start-InteractiveProcess -FilePath $p.ahk -ArgumentList "`"$Code\ahk\menu.ahk`"", 'bar-start' }
     else { Start-Hidden $p.zebar @('startup') }
 }
 
@@ -773,12 +781,12 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Respli
         }
     }
     if ($MonitorsOnly) { return }
-    # Window animations on/off switches between the official GlazeWM and the animation build.
-    Switch-GlazeWM $p
     Initialize-Branding
     Write-AhkIni $p $cfg
     try { Write-WebAppIni $p } catch { Log "web app keys FAILED: $($_.Exception.Message)" }
     Write-ZebarPack $p $cfg
+    # Window animations on/off switches between the official GlazeWM and the animation build.
+    Switch-GlazeWM $p
     Set-Autostart $p $cfg
     try { Set-TerminalProfiles $p } catch { Log "terminal profiles FAILED: $($_.Exception.Message)" }
     Set-WindowsScreensaver $cfg

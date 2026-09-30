@@ -475,6 +475,148 @@ function Start-Hidden([string]$file, [string[]]$arguments) {
     Start-Process -FilePath $file -ArgumentList $arguments -WindowStyle Hidden
 }
 
+# Run an interactive or desktop GUI process. If executed inside an isolated desktop (such
+# as a background agent sandbox or service), explicitly launch onto WinSta0\Default.
+function Start-InteractiveProcess {
+    param(
+        [Parameter(Mandatory)][string]$FilePath,
+        [string[]]$ArgumentList = @(),
+        [string]$WorkingDirectory = '',
+        [switch]$Hidden
+    )
+    $desk = ''
+    try {
+        if (-not ([System.Management.Automation.PSTypeName]'WinarchyDeskUtil').Type) {
+            Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public class WinarchyDeskUtil {
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetThreadDesktop(int dwThreadId);
+    [DllImport("kernel32.dll")]
+    public static extern int GetCurrentThreadId();
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool GetUserObjectInformation(IntPtr hObj, int nIndex, StringBuilder pvInfo, int nLength, out int lpnLengthNeeded);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct STARTUPINFO {
+        public Int32 cb;
+        public string lpReserved;
+        public string lpDesktop;
+        public string lpTitle;
+        public Int32 dwX;
+        public Int32 dwY;
+        public Int32 dwXSize;
+        public Int32 dwYSize;
+        public Int32 dwXCountChars;
+        public Int32 dwYCountChars;
+        public Int32 dwFillAttribute;
+        public Int32 dwFlags;
+        public Int16 wShowWindow;
+        public Int16 cbReserved2;
+        public IntPtr lpReserved2;
+        public IntPtr hStdInput;
+        public IntPtr hStdOutput;
+        public IntPtr hStdError;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PROCESS_INFORMATION {
+        public IntPtr hProcess;
+        public IntPtr hThread;
+        public Int32 dwProcessId;
+        public Int32 dwThreadId;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern bool CreateProcess(
+        string lpApplicationName,
+        string lpCommandLine,
+        IntPtr lpProcessAttributes,
+        IntPtr lpThreadAttributes,
+        bool bInheritHandles,
+        uint dwCreationFlags,
+        IntPtr lpEnvironment,
+        string lpCurrentDirectory,
+        ref STARTUPINFO lpStartupInfo,
+        out PROCESS_INFORMATION lpProcessInformation);
+
+    [DllImport("kernel32.dll")]
+    public static extern bool CloseHandle(IntPtr hObject);
+
+    public static string GetCurrentDesktop() {
+        try {
+            IntPtr hDesk = GetThreadDesktop(GetCurrentThreadId());
+            if (hDesk == IntPtr.Zero) return "";
+            StringBuilder sb = new StringBuilder(256);
+            int needed;
+            if (GetUserObjectInformation(hDesk, 2, sb, 256, out needed)) {
+                return sb.ToString();
+            }
+        } catch {}
+        return "";
+    }
+
+    public static int LaunchOnDesktop(string exePath, string cmdLine, string workDir, string desktop, bool hidden) {
+        STARTUPINFO si = new STARTUPINFO();
+        si.cb = Marshal.SizeOf(si);
+        si.lpDesktop = desktop;
+        if (hidden) {
+            si.dwFlags = 1;
+            si.wShowWindow = 0;
+        }
+
+        PROCESS_INFORMATION pi = new PROCESS_INFORMATION();
+        bool ok = CreateProcess(
+            exePath,
+            cmdLine,
+            IntPtr.Zero,
+            IntPtr.Zero,
+            false,
+            0,
+            IntPtr.Zero,
+            string.IsNullOrEmpty(workDir) ? null : workDir,
+            ref si,
+            out pi);
+        if (ok) {
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+            return pi.dwProcessId;
+        } else {
+            return -Marshal.GetLastWin32Error();
+        }
+    }
+}
+'@ -ErrorAction SilentlyContinue
+        }
+        $desk = [WinarchyDeskUtil]::GetCurrentDesktop()
+    } catch {}
+
+    if ($desk -and $desk -ne 'Default') {
+        $argsStr = ($ArgumentList | ForEach-Object {
+            $val = ([string]$_).Trim()
+            if ($val.StartsWith('"') -and $val.EndsWith('"')) {
+                $val
+            } elseif ($val -match '\s') {
+                '"{0}"' -f $val
+            } else {
+                $val
+            }
+        }) -join ' '
+        $cmd = if ($argsStr) { '"{0}" {1}' -f $FilePath, $argsStr } else { '"{0}"' -f $FilePath }
+        $res = [WinarchyDeskUtil]::LaunchOnDesktop($FilePath, $cmd, $WorkingDirectory, "WinSta0\Default", [bool]$Hidden)
+        if ($res -gt 0) { return }
+    }
+
+    $splat = @{ FilePath = $FilePath }
+    if ($ArgumentList) { $splat.ArgumentList = $ArgumentList }
+    if ($WorkingDirectory) { $splat.WorkingDirectory = $WorkingDirectory }
+    if ($Hidden) { $splat.WindowStyle = 'Hidden' }
+    Start-Process @splat
+}
+
 # The window manager itself, never its CLI: cli\glazewm.exe has the same process name, and
 # the auto-tiling watcher keeps one running for its event subscription. So a plain
 # `Get-Process glazewm` says "running" even when the WM has crashed, which quietly disables
@@ -515,5 +657,5 @@ function Start-GlazeWM([string]$exe) {
             return
         }
     }
-    Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe)
+    Start-InteractiveProcess -FilePath $exe -WorkingDirectory (Split-Path $exe)
 }
