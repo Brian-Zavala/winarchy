@@ -690,6 +690,62 @@ function Invoke-Adopt {
 # winarchy update (also the bar's update icon): exactly what update-check found,
 # once at a time, then a fresh check so the icon shows what is really left. Nothing in
 # it waits for a person: the window closes by itself unless something needs attention.
+# Edits to winarchy's own files (by hand, or by an agent started in the code folder) stop
+# git pull. Kept in a stash, never thrown away, so the update can go ahead.
+function Save-LocalCodeEdits {
+    if (-not (git -C $Code status --porcelain 2>$null)) { return }
+    $msg = "winarchy $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+    git -C $Code stash push -u -q -m $msg 2>&1 | Out-Host
+    if ($LASTEXITCODE) { Write-Warn 'Your changes to winarchy''s files could not be set aside; the update may not apply.'; return }
+    Write-Ok "Your changes to winarchy's files are saved in a git stash (`"$msg`"): git -C `"$Code`" stash pop brings them back."
+}
+
+# A copy installed from the zip, updated the way the bootstrap installs it. With git here
+# now, it becomes a checkout (git pull from then on); without, the branch's zip replaces
+# the files, and the ones the new version no longer has go - only those .winarchy-files
+# lists, never anything winarchy didn't put there. $true when the version changed.
+function Update-CodeFromZip {
+    $src = Get-WinarchySource
+    $manifest = Join-Path $Code '.winarchy-files'
+    $versionFile = Join-Path $Code 'VERSION'
+    $before = (Get-Content -Raw $versionFile -ErrorAction SilentlyContinue)?.Trim()
+    $old = @(Get-Content $manifest -ErrorAction SilentlyContinue | Where-Object { $_ })
+    $removeStale = {
+        param([string[]]$keep)
+        $want = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($k in $keep) { [void]$want.Add($k) }
+        foreach ($rel in $old) { if (-not $want.Contains($rel)) { Remove-Item -LiteralPath (Join-Path $Code $rel) -Force -ErrorAction SilentlyContinue } }
+    }
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) "winarchy-update-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+    try {
+        if (Get-Command git -ErrorAction SilentlyContinue) {
+            git clone --depth 1 --branch $src.ref --no-checkout "https://github.com/$($src.repo).git" $tmp 2>&1 | Out-Host
+            if ($LASTEXITCODE) { throw "git clone of $($src.repo) failed" }
+            Move-Item (Join-Path $tmp '.git') (Join-Path $Code '.git')
+            git -C $Code reset --hard -q 2>&1 | Out-Host
+            if ($LASTEXITCODE) { throw 'git reset in the code folder failed' }
+            & $removeStale @(git -C $Code ls-files | ForEach-Object { $_ -replace '/', '\' })
+            Remove-Item -LiteralPath $manifest -Force -ErrorAction SilentlyContinue
+            Write-Ok 'winarchy is a git checkout now: updates pull from here on'
+        } else {
+            $zip = "$tmp.zip"
+            Invoke-WebRequest "https://github.com/$($src.repo)/archive/refs/heads/$($src.ref).zip" -OutFile $zip -TimeoutSec 300
+            Expand-Archive $zip $tmp -Force
+            $root = (Get-ChildItem $tmp -Directory | Select-Object -First 1).FullName
+            $files = @(Get-ChildItem $root -Recurse -File -Force | ForEach-Object { $_.FullName.Substring($root.Length + 1) })
+            if (-not $files) { throw 'the downloaded zip was empty' }
+            & $removeStale $files
+            Copy-Item -Recurse -Force (Join-Path $root '*') $Code
+            Set-Content -LiteralPath $manifest -Value $files -Encoding UTF8
+            Get-ChildItem $Code -Recurse -File | Unblock-File
+            Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+        }
+    } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+    $after = (Get-Content -Raw $versionFile -ErrorAction SilentlyContinue)?.Trim()
+    if ($after -ne $before) { Write-Done "winarchy $before -> $after" } else { Write-Ok 'up to date' }
+    $after -ne $before
+}
+
 function Invoke-Update {
     $m = [Threading.Mutex]::new($false, 'Local\WinarchyUpdate')
     if (-not $m.WaitOne(0)) { Write-Host 'An update is already running in another window.'; return }
@@ -707,8 +763,10 @@ function Invoke-Update {
 
         Write-Step 'winarchy'
         $codeChanged = $false
-        if ((Test-Path (Join-Path $Code '.git')) -and (git -C $Code remote)) {
+        $hasGit = [bool](Get-Command git -ErrorAction SilentlyContinue)
+        if ((Test-Path (Join-Path $Code '.git')) -and $hasGit -and (git -C $Code remote)) {
             $before = git -C $Code rev-parse HEAD
+            Save-LocalCodeEdits
             git -C $Code pull --ff-only 2>&1 | Out-Host
             if ($LASTEXITCODE) {
                 # Carry on with the rest: themes and apps don't depend on the code moving.
@@ -717,6 +775,10 @@ function Invoke-Update {
                     else { 'winarchy code not updated: git pull failed (see above)' })
             }
             $codeChanged = $before -ne (git -C $Code rev-parse HEAD)
+        } elseif (Test-Path (Join-Path $Code '.winarchy-files')) {
+            # Installed from the zip (the bootstrap on a PC without git).
+            try { $codeChanged = Update-CodeFromZip }
+            catch { Add-Unfinished "winarchy code not updated: $($_.Exception.Message)" }
         } else { Write-Ok 'installed from a local copy (no git remote): nothing to pull' }
 
         # Whatever winarchy needs and this PC is missing - including anything the code just

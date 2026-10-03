@@ -60,7 +60,16 @@ function Invoke-UpdateCheck {
             $items.Add([ordered]@{ name = 'Omarchy themes'; from = $tag; to = $rel.tag_name })
         }
     } catch { Log "update-check: GitHub unreachable ($($_.Exception.Message))" }
-    if ((Test-Path (Join-Path $Code '.git')) -and (git -C $Code remote)) {
+    $hasGit = [bool](Get-Command git -ErrorAction SilentlyContinue)
+    if (-not ((Test-Path (Join-Path $Code '.git')) -and $hasGit) -and (Test-Path (Join-Path $Code '.winarchy-files'))) {
+        # A zip install has no commits to count: the version file says it all.
+        try {
+            $src = Get-WinarchySource
+            $remote = "$(Invoke-RestMethod "https://raw.githubusercontent.com/$($src.repo)/$($src.ref)/VERSION" -TimeoutSec 15)".Trim()
+            $local = (Get-Content -Raw (Join-Path $Code 'VERSION') -ErrorAction SilentlyContinue)?.Trim()
+            if ($remote -match '^\d+(\.\d+)+$' -and $remote -ne $local) { $items.Add([ordered]@{ name = 'winarchy'; from = $local; to = $remote }) }
+        } catch { Log "update-check: winarchy version unknown ($($_.Exception.Message))" }
+    } elseif ($hasGit -and (Test-Path (Join-Path $Code '.git')) -and (git -C $Code remote)) {
         try {
             git -C $Code fetch --quiet 2>$null
             $behind = [int](git -C $Code rev-list --count 'HEAD..@{u}' 2>$null)

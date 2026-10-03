@@ -63,6 +63,11 @@ function Get-WtProfile {
     if ($line) { $line.Substring(10).Trim() } else { '' }
 }
 
+# Where the code comes from: the same WINARCHY_REPO / WINARCHY_REF the bootstrap honours.
+function Get-WinarchySource {
+    @{ repo = $env:WINARCHY_REPO ?? 'Brian-Zavala/winarchy'; ref = $env:WINARCHY_REF ?? 'main' }
+}
+
 # This process's PATH again from the registry (Machine, then User), keeping the entries
 # only this process has (a Store PowerShell's own folder): winget and npm add to the
 # registry, and a process started before that sees none of it - nor does anything it

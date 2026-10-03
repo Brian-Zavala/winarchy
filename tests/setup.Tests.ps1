@@ -359,3 +359,33 @@ Describe 'Preflight' {
         { Test-Preflight } | Should -Not -Throw
     }
 }
+
+Describe 'Updating a zip install' {
+    BeforeEach {
+        $script:realCode = $Code
+        $Code = Join-Path $TestDrive "code-$([guid]::NewGuid().ToString('N').Substring(0, 6))"
+        New-Item -ItemType Directory -Force (Join-Path $Code 'lib') | Out-Null
+        Set-Content (Join-Path $Code 'VERSION') '0.1.0'
+        Set-Content (Join-Path $Code 'lib\gone.ps1') 'old'
+        Set-Content (Join-Path $Code 'mine.txt') 'not winarchy''s'
+        Set-Content (Join-Path $Code '.winarchy-files') @('VERSION', 'lib\gone.ps1')
+        $src = Join-Path $TestDrive "zip-$([guid]::NewGuid().ToString('N').Substring(0, 6))"
+        New-Item -ItemType Directory -Force (Join-Path $src 'winarchy-main\lib') | Out-Null
+        Set-Content (Join-Path $src 'winarchy-main\VERSION') '0.2.0'
+        Set-Content (Join-Path $src 'winarchy-main\lib\new.ps1') 'new'
+        $script:zip = "$src.zip"
+        Compress-Archive (Join-Path $src 'winarchy-main') $script:zip
+        Mock Get-Command { $null } -ParameterFilter { $Name -eq 'git' }
+        Mock Invoke-WebRequest { Copy-Item $script:zip $OutFile }
+        Mock Write-Ok {}; Mock Write-Done {}
+    }
+    It 'replaces the files, drops only the ones winarchy put there, and says the version moved' {
+        Update-CodeFromZip | Should -BeTrue
+        Get-Content (Join-Path $Code 'VERSION') | Should -Be '0.2.0'
+        Test-Path (Join-Path $Code 'lib\new.ps1') | Should -BeTrue
+        Test-Path (Join-Path $Code 'lib\gone.ps1') | Should -BeFalse
+        Test-Path (Join-Path $Code 'mine.txt') | Should -BeTrue
+        Get-Content (Join-Path $Code '.winarchy-files') | Should -Contain 'lib\new.ps1'
+        Should -Invoke Invoke-WebRequest -ParameterFilter { $Uri -like '*/archive/refs/heads/main.zip' }
+    }
+}
