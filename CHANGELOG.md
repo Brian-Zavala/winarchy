@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.39 — 2026-10-03
+
 - The bar's weather shows just an icon for the sky outside (sun, clouds, rain, snow, storm). Click it for the temperature, feels like and wind.
 
 ## 0.1.37 — 2026-10-03
