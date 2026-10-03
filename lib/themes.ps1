@@ -336,7 +336,14 @@ function Stop-Flow {
 
 function Set-FlowTheme($c) {
     $p = Get-Paths
-    if (-not $p.flow -or -not (Test-Path $p.flowSettings)) { return 'skipped' }
+    if (-not $p.flow) { return 'skipped' }
+    if (-not (Test-Path $p.flowSettings)) {
+        # Flow writes its settings when it closes, so a fresh PC's first run has none yet:
+        # closing it brings them out. Not running, there is nothing to theme yet.
+        if (-not (Get-Process Flow.Launcher -ErrorAction SilentlyContinue)) { return 'skipped' }
+        Stop-Flow
+        if (-not (Test-Path $p.flowSettings)) { Start-Process $p.flow; return 'skipped' }
+    }
     $tpl = Get-Content -Raw (Join-Path $Code 'templates\flow-theme.xaml.tpl')
     $c2 = $c.Clone()
     $c2.selected_row = Mix $c.background $c.foreground 0.08

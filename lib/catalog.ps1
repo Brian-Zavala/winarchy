@@ -501,6 +501,32 @@ function Remove-CustomTui([string]$Name) {
     Write-Ok "Removed $Name"
 }
 
+# The theme target an app has (lib/themes.ps1, Get-ThemeTargets): themed as soon as it is
+# installed, not at the next theme change.
+$CatalogThemeTarget = @{
+    vscode = 'vscode'; neovim = 'neovim'; 'claude-code' = 'claude'; btop = 'btop'; herdr = 'herdr'; 'windows-terminal' = 'terminal'
+}
+
+# After an install or a removal: this process's PATH, the detected paths and the ini the
+# menu reads (editor, btop, Herdr), the agent list, then the app's theme. Without it
+# those stayed as they were until the next winarchy apply.
+function Sync-AfterCatalogChange($item, [switch]$Installed) {
+    Update-ProcessPath
+    try {
+        $p = Update-Paths
+        if (Get-Command Write-AhkIni -ErrorAction SilentlyContinue) { Write-AhkIni $p (Get-Config) }
+        if (Get-Command Update-AgentList -ErrorAction SilentlyContinue) { [void](Update-AgentList) }
+    } catch { Log "$($item.label): refresh after the change FAILED: $($_.Exception.Message)" }
+    $target = $CatalogThemeTarget[$item.key]
+    if (-not $Installed -or -not $target -or -not (Get-Command Get-ThemeTargets -ErrorAction SilentlyContinue)) { return }
+    $off = (Get-Config).themeTargets
+    if ($off -and $off[$target] -eq $false) { return }
+    try {
+        $theme = (Read-State).theme
+        if ($theme) { [void](& (Get-ThemeTargets)[$target].run $theme (Read-Colors $theme)); Write-Ok "$($item.label): themed $theme" }
+    } catch { Log "$($item.label): theme FAILED: $($_.Exception.Message)" }
+}
+
 function Install-CatalogItem([string]$key) {
     $item = Get-CatalogItem $key
     if (-not $item) { throw "unknown catalog item '$key' (winarchy catalog lists them)" }
@@ -513,7 +539,9 @@ function Install-CatalogItem([string]$key) {
     if ($item.install) {
         & $item.install
         if ($item.tui -and (Add-TuiShortcut $item)) { Write-Ok "$($item.tui.name) is in Start and the menu's Apps list" }
-        [void](Update-Catalog); return
+        [void](Update-Catalog)
+        Sync-AfterCatalogChange $item -Installed
+        return
     }
     # Journal before the change, so `winarchy uninstall` knows this one was ours.
     Save-Winget $item.id $false 'menu'
@@ -524,6 +552,7 @@ function Install-CatalogItem([string]$key) {
     if ($item.tui -and (Add-TuiShortcut $item)) { Write-Ok "$($item.tui.name) is in Start and the menu's Apps list" }
     # Setup after the package itself (Tailscale: start its sign-in, show it in the bar).
     if ($item.postInstall) { & $item.postInstall }
+    Sync-AfterCatalogChange $item -Installed
 }
 
 function Uninstall-CatalogItem([string]$key) {
@@ -535,6 +564,7 @@ function Uninstall-CatalogItem([string]$key) {
         & $item.remove
         Remove-JournalEntry "winget|$($item.id)"
         [void](Update-Catalog)
+        Sync-AfterCatalogChange $item
         return
     }
     & winget uninstall -e --id $item.id --silent --disable-interactivity | Out-Host
@@ -543,4 +573,5 @@ function Uninstall-CatalogItem([string]$key) {
     # `winarchy uninstall` try to remove it a second time.
     Remove-JournalEntry "winget|$($item.id)"
     [void](Update-Catalog)
+    Sync-AfterCatalogChange $item
 }

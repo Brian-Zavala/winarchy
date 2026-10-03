@@ -292,3 +292,36 @@ Describe 'Coding agents install without Node.js' {
         { & (Get-CatalogItem 'claude-code').install } | Should -Throw '*winget install -e --id Anthropic.ClaudeCode*npm install -g @anthropic-ai/claude-code*'
     }
 }
+
+Describe 'After an install or removal' {
+    BeforeEach {
+        function Write-AhkIni($p, $cfg) {}
+        function Update-AgentList {}
+        function Get-ThemeTargets { @{ vscode = @{ run = { param($t, $c) $script:themed = $t } } } }
+        function Read-Colors($t) { @{} }
+        Mock Update-ProcessPath {}
+        Mock Update-Paths { @{} }
+        Mock Write-AhkIni {}
+        Mock Update-AgentList {}
+        Mock Read-State { @{ theme = 'nord' } }
+        Mock Get-Config { @{} }
+        Mock Write-Ok {}
+        $script:themed = $null
+    }
+    It 'refreshes PATH, paths, the ini and the agent list, then themes the app' {
+        Sync-AfterCatalogChange (Get-CatalogItem 'vscode') -Installed
+        Should -Invoke Update-ProcessPath -Times 1
+        Should -Invoke Update-Paths -Times 1
+        Should -Invoke Write-AhkIni -Times 1
+        Should -Invoke Update-AgentList -Times 1
+        $script:themed | Should -Be 'nord'
+    }
+    It 'themes nothing after a removal, or for a target turned off' {
+        Sync-AfterCatalogChange (Get-CatalogItem 'vscode')
+        $script:themed | Should -BeNullOrEmpty
+        Mock Get-Config { @{ themeTargets = @{ vscode = $false } } }
+        Sync-AfterCatalogChange (Get-CatalogItem 'vscode') -Installed
+        $script:themed | Should -BeNullOrEmpty
+        Should -Invoke Write-AhkIni -Times 2
+    }
+}

@@ -159,6 +159,19 @@ RegistryPathDirs() {
     return dirs
 }
 
+; A command line tool, found on PATH as it is now: this script's own PATH is from when you
+; logged in, so something installed since (Install > TUI) would look missing.
+FindCommand(name) {
+    dirs := [EnvGet("LOCALAPPDATA") "\Microsoft\WinGet\Links"]
+    dirs.Push(RegistryPathDirs()*)
+    for d in dirs {
+        for ext in [".exe", ".cmd", ".bat"]
+            if FileExist(p := RTrim(d, "\") "\" name ext)
+                return p
+    }
+    return ""
+}
+
 ; This script's PATH again from the registry, keeping entries only this process has: a
 ; script started at login doesn't see what was installed since (winget, npm), and neither
 ; does anything it runs.

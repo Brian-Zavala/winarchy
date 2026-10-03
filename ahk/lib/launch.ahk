@@ -94,19 +94,7 @@ RunPort(name, label) {
 }
 
 ; --- Terminal apps -------------------------------------------------------------------
-; A command line tool, found on PATH as it is now: this script's own PATH is from when you
-; logged in, so something installed since (Install > TUI) would look missing.
-FindCommand(name) {
-    dirs := [EnvGet("LOCALAPPDATA") "\Microsoft\WinGet\Links"]
-    dirs.Push(RegistryPathDirs()*)
-    for d in dirs {
-        for ext in [".exe", ".cmd", ".bat"]
-            if FileExist(p := RTrim(d, "\") "\" name ext)
-                return p
-    }
-    return ""
-}
-
+; FindCommand (env.ahk): found on PATH as it is now, not as it was at login.
 ; Open a terminal app, or say where to install it from.
 RunTui(title, name, args := "", where := "") {
     exe := FindCommand(name)

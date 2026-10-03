@@ -640,7 +640,15 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     if ($theme) { Use-Lock { Invoke-ThemeSet $theme } }
 
     Write-Step 'Starting'
+    # A Flow that never ran has no settings for the theme above to change.
+    $flowPending = $p.flow -and -not (Test-Path $p.flowSettings)
     Start-Everything $p
+    if ($flowPending -and $theme) {
+        for ($i = 0; $i -lt 20 -and -not (Get-Process Flow.Launcher -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Milliseconds 500 }
+        Start-Sleep -Seconds 3             # past its first start, so closing it saves its settings
+        try { if ((Set-FlowTheme (Read-Colors $theme)) -ne 'skipped') { Write-Done 'Flow Launcher themed' } }
+        catch { Log "Flow Launcher theme FAILED: $($_.Exception.Message)" }
+    }
     # Last, so a slow or failed build can't hold up the rest: the official GlazeWM already runs.
     Invoke-AnimationOffer
     if ($restoring -and (Test-Path $restoreFile)) { Remove-Item $restoreFile -Force -ErrorAction SilentlyContinue; Write-Done 'Your settings are back.' }
