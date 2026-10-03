@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.41 — 2026-10-03
+
 - The bar no longer has a globe next to the clock. Released Omarchy has none: the world clock opens from a middle click on the clock, `Super + Ctrl + Alt + E` or _Trigger > World Clock_.
 
 ## 0.1.40 — 2026-10-03
