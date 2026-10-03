@@ -357,21 +357,26 @@ function Find-TuiExe($item) {
     if (Test-Path -LiteralPath $link) { $link }
 }
 
+# What a terminal app's shortcut runs: Windows Terminal on winarchy's own profile (so
+# "Run as administrator" in Terminal's defaults can't break it), else the exe itself.
+function Get-TuiShortcutCommand($item, [string]$exe) {
+    $wt = (Get-Command wt.exe -ErrorAction SilentlyContinue).Source
+    if (-not $wt) { return @{ target = $exe; arguments = "$($item.tui.args)" } }
+    $prof = Get-WtProfile
+    $p = if ($prof) { " -p `"$prof`"" } else { '' }
+    @{ target = $wt; arguments = "new-tab$p --title `"$($item.tui.name)`" `"$exe`"$(if ($item.tui.args) { " $($item.tui.args)" })" }
+}
+
 function Add-TuiShortcut($item) {
     $exe = Find-TuiExe $item
     if (-not $exe) { Log "$($item.label): no exe found for its Start shortcut yet"; return $false }
     $lnkPath = Get-TuiShortcutPath $item
     New-Item -ItemType Directory -Force (Split-Path $lnkPath) | Out-Null
     Save-File $lnkPath
-    $wt = (Get-Command wt.exe -ErrorAction SilentlyContinue).Source
+    $cmd = Get-TuiShortcutCommand $item $exe
     $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnkPath)
-    if ($wt) {
-        $s.TargetPath = $wt
-        $s.Arguments = "new-tab --title `"$($item.tui.name)`" `"$exe`"$(if ($item.tui.args) { " $($item.tui.args)" })"
-    } else {
-        $s.TargetPath = $exe
-        $s.Arguments = "$($item.tui.args)"
-    }
+    $s.TargetPath = $cmd.target
+    $s.Arguments = $cmd.arguments
     $s.WorkingDirectory = $env:USERPROFILE
     $s.IconLocation = "$exe,0"
     $s.Description = "$($item.tui.name) in the terminal"
@@ -387,6 +392,15 @@ function Remove-TuiShortcut($item) {
     if ((Test-Path -LiteralPath $dir) -and -not (Get-ChildItem -LiteralPath $dir -Force)) { Remove-Item -LiteralPath $dir -Force -ErrorAction SilentlyContinue }
 }
 
+# A shortcut made by an older winarchy (no terminal profile yet) or for an exe that moved.
+function Test-TuiShortcutCurrent($item, [string]$lnk) {
+    $exe = Find-TuiExe $item
+    if (-not $exe) { return $true }
+    $cmd = Get-TuiShortcutCommand $item $exe
+    $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
+    $s.TargetPath -eq $cmd.target -and $s.Arguments -eq $cmd.arguments
+}
+
 # apply, and every refresh of the Apps list: a shortcut for every installed terminal app
 # that lacks one (installed with winget by hand counts too), and none for one that was
 # uninstalled some other way.
@@ -394,8 +408,10 @@ function Sync-TuiShortcuts {
     $snapshot = Get-InstalledSnapshot
     foreach ($item in $Catalog | ForEach-Object { $_.items } | Where-Object { $_.tui }) {
         $installed = try { [bool](& $item.test $snapshot) } catch { $false }
-        $has = Test-Path -LiteralPath (Get-TuiShortcutPath $item)
+        $lnk = Get-TuiShortcutPath $item
+        $has = Test-Path -LiteralPath $lnk
         if ($installed -and -not $has) { [void](Add-TuiShortcut $item) }
+        elseif ($installed -and -not (Test-TuiShortcutCurrent $item $lnk)) { [void](Add-TuiShortcut $item) }
         elseif (-not $installed -and $has) { Remove-TuiShortcut $item }
     }
     # Your own (Install > TUI > Custom TUI): kept while the command is still there.

@@ -54,6 +54,15 @@ function Write-PackFile([string]$name, [string]$text) {
     }
 }
 
+# The Windows Terminal profile winarchy's own tabs open on (Omarchy Shell, elevate off),
+# as winarchy.ini names it once apply has written it; '' before that.
+function Get-WtProfile {
+    $ini = Join-Path $Generated 'winarchy.ini'
+    if (-not (Test-Path -LiteralPath $ini)) { return '' }
+    $line = Get-Content -LiteralPath $ini -ErrorAction SilentlyContinue | Where-Object { $_ -like 'wtProfile=*' } | Select-Object -First 1
+    if ($line) { $line.Substring(10).Trim() } else { '' }
+}
+
 function Read-Json([string]$path, [switch]$AsHashtable) {
     if (-not (Test-Path -LiteralPath $path)) { return $null }
     try { Get-Content -Raw -LiteralPath $path | ConvertFrom-Json -AsHashtable:$AsHashtable } catch { $null }

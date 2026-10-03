@@ -564,14 +564,50 @@ $AgentProfile = '{5f6a2c1e-7a39-4b1f-9e0d-0a1c2e3f4b53}'
 # as one file name (error 0x80070002).
 $ShellProfile = '{5f6a2c1e-7a39-4b1f-9e0d-0a1c2e3f4b54}'
 
+# Terminal writes its settings.json the first time it starts. On a PC where it never has
+# there is none, and without one the profiles below would be skipped. Start one: Terminal
+# adds its own profiles and defaults to it when it starts. Not journaled as a file, so
+# uninstall leaves Terminal's later settings alone; the items in it are journaled.
+function New-TerminalSettings($p) {
+    if (-not $p.wt) { return $null }
+    $file = Get-TerminalSettingsTarget
+    if (-not $file) { return $null }
+    if (-not (Test-Path -LiteralPath $file)) {
+        New-Item -ItemType Directory -Force (Split-Path $file) | Out-Null
+        Write-Json $file ([ordered]@{ '$schema' = 'https://aka.ms/terminal-profiles-schema'; profiles = [ordered]@{ defaults = [ordered]@{}; list = @() } })
+        Log "Windows Terminal: no settings yet, started $file"
+    }
+    $p.wtSettings = $file
+    try { Write-Json $PathsFile $p 6 } catch {}
+    $file
+}
+
+# A font family Windows has (per-user or machine-wide): Terminal shows an error dialog
+# for a face that isn't installed.
+function Test-FontInstalled([string]$family) {
+    foreach ($key in 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts', 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts') {
+        $names = (Get-Item $key -ErrorAction SilentlyContinue).Property
+        if ($names | Where-Object { $_ -like "$family*" }) { return $true }
+    }
+    $false
+}
+
 function Set-TerminalProfiles($p) {
     $file = $p.wtSettings
-    if (-not $file -or -not (Test-Path $file)) { return }
+    if (-not $file -or -not (Test-Path $file)) { $file = New-TerminalSettings $p }
+    if (-not $file) { return }
     $wt = Read-Json $file
     if (-not $wt) { return }
-    [void](Get-TerminalDefaults $wt)
+    $defaults = Get-TerminalDefaults $wt
     if (-not $wt.profiles.list) { $wt.profiles | Add-Member -Force -NotePropertyName list -NotePropertyValue @() }
     $font = Get-FontFamily
+    # Every tab in the Nerd Font, unless one is set already (winarchy font changes it later):
+    # the bar's glyphs and the prompt's icons are boxes in Terminal's own Cascadia.
+    if (-not $defaults.font.face -and (Test-FontInstalled $font)) {
+        Save-JsonProperty $file 'profiles.defaults.font.face'
+        if (-not $defaults.font) { $defaults | Add-Member -Force -NotePropertyName font -NotePropertyValue ([pscustomobject]@{}) }
+        $defaults.font | Add-Member -Force -NotePropertyName face -NotePropertyValue $font
+    }
     $pwsh = $p.pwsh
     # No ttfx yet (it may still be building in the background): screensaver.ps1 then looks
     # in ~/.cargo/bin, where that build puts it.

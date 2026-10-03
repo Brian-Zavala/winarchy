@@ -132,9 +132,21 @@ Describe 'Terminal apps in Start' {
         $lnk = Join-Path $script:lnkDir 'Cliamp.lnk'
         $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
         $s.Arguments | Should -Match 'notepad\.exe'
-        if (Get-Command wt.exe -ErrorAction SilentlyContinue) { $s.Arguments | Should -Match '^new-tab --title "Cliamp"' }
+        if (Get-Command wt.exe -ErrorAction SilentlyContinue) { $s.Arguments | Should -Match '^new-tab( -p "[^"]+")? --title "Cliamp"' }
         [Winarchy.Shortcut]::GetAppId($lnk) | Should -Be 'Winarchy.Tui.cliamp'
         Should -Invoke Save-File -Times 1
+    }
+    It 'opens on the Omarchy Shell profile, and repairs a shortcut made without it' {
+        if (-not (Get-Command wt.exe -ErrorAction SilentlyContinue)) { Set-ItResult -Skipped -Because 'no Windows Terminal'; return }
+        $item = Get-CatalogItem 'cliamp'
+        Mock Get-WtProfile { '' }
+        Add-TuiShortcut $item | Out-Null
+        $lnk = Join-Path $script:lnkDir 'Cliamp.lnk'
+        Test-TuiShortcutCurrent $item $lnk | Should -BeTrue
+        Mock Get-WtProfile { '{5f6a2c1e-7a39-4b1f-9e0d-0a1c2e3f4b54}' }
+        Test-TuiShortcutCurrent $item $lnk | Should -BeFalse
+        Add-TuiShortcut $item | Out-Null
+        (New-Object -ComObject WScript.Shell).CreateShortcut($lnk).Arguments | Should -Match '^new-tab -p "\{5f6a2c1e-7a39-4b1f-9e0d-0a1c2e3f4b54\}" --title "Cliamp"'
     }
     It 'passes the arguments a TUI needs' {
         Add-TuiShortcut (Get-CatalogItem 'dua') | Out-Null

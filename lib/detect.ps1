@@ -78,6 +78,13 @@ function Find-TerminalSettings {
     )
 }
 
+# Where Terminal reads its settings once it has started: its package's LocalState. For
+# a PC where it never has, so there is no settings.json for Find-TerminalSettings yet.
+function Get-TerminalSettingsTarget {
+    $pkg = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Packages') -Directory -Filter 'Microsoft.WindowsTerminal_*' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($pkg) { Join-Path $pkg.FullName 'LocalState\settings.json' }
+}
+
 # The https handler's ProgId. Current builds keep the live choice in a ProgId subkey
 # of UserChoiceLatest (its own values are only a hash), and leave the older UserChoice
 # behind with whatever was chosen before, so the subkey comes first.
