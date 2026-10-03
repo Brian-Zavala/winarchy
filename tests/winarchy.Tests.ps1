@@ -939,3 +939,32 @@ Describe 'Doctor: Windows Terminal' {
         @(Get-MissingTerminalProfiles $wt) | Should -Be @('Omarchy Screensaver', 'Omarchy About')
     }
 }
+
+Describe 'Clear-AgentSessionEnv' {
+    BeforeEach {
+        $saved = @{}
+        foreach ($n in 'CLAUDECODE', 'NO_COLOR', 'GIT_EDITOR', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_PID', 'WINARCHY_TEST_KEEP') {
+            $saved[$n] = [Environment]::GetEnvironmentVariable($n)
+        }
+    }
+    AfterEach {
+        foreach ($n in $saved.Keys) { [Environment]::SetEnvironmentVariable($n, $saved[$n]) }
+    }
+    It 'drops what a Claude Code shell added, and nothing else' {
+        $env:CLAUDECODE = '1'; $env:NO_COLOR = '1'; $env:GIT_EDITOR = 'true'
+        $env:CLAUDE_CODE_SESSION_ID = 'x'; $env:CLAUDE_PID = '1'; $env:WINARCHY_TEST_KEEP = 'kept'
+        Mock Get-ChildItem { 'CLAUDECODE', 'NO_COLOR', 'GIT_EDITOR', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_PID', 'WINARCHY_TEST_KEEP' |
+            ForEach-Object { [pscustomobject]@{ Name = $_ } } } -ParameterFilter { $Path -eq 'Env:' }
+        Clear-AgentSessionEnv
+        foreach ($n in 'CLAUDECODE', 'NO_COLOR', 'GIT_EDITOR', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_PID') {
+            [Environment]::GetEnvironmentVariable($n) | Should -BeNullOrEmpty -Because $n
+        }
+        $env:WINARCHY_TEST_KEEP | Should -Be 'kept'
+    }
+    It 'leaves NO_COLOR alone outside a Claude Code shell' {
+        Remove-Item Env:CLAUDECODE -ErrorAction SilentlyContinue
+        $env:NO_COLOR = '1'
+        Clear-AgentSessionEnv
+        $env:NO_COLOR | Should -Be '1'
+    }
+}

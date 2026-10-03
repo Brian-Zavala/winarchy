@@ -120,6 +120,8 @@ $VerbLibs = @{
 foreach ($lib in ($VerbLibs[$Verb] ?? $AllLibs)) { . "$PSScriptRoot\..\lib\$lib.ps1" }
 # Started by the bar, a key or an old terminal, this PATH can be from before an install.
 Update-ProcessPath
+# Started from a Claude Code shell, nothing this starts should inherit that session.
+Clear-AgentSessionEnv
 
 $version = (Get-Content -Raw (Join-Path $Code 'VERSION') -ErrorAction SilentlyContinue)?.Trim()
 

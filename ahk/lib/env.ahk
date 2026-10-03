@@ -2,6 +2,39 @@
 ; (%USERPROFILE%\.winarchy\generated\winarchy.ini), so no script hard-codes a path.
 
 global OW := LoadOmarchyEnv()
+ScrubAgentEnv()
+
+; Started from a Claude Code shell, this script had NO_COLOR=1 and the session's CLAUDE_*
+; variables, and so did every terminal it opened: prompts lost their colours and `claude`
+; took itself for a child of that session. Drop them, keeping what the user set in their
+; own environment. The winarchy CLI does the same (lib\common.ps1 Clear-AgentSessionEnv).
+ScrubAgentEnv() {
+    if EnvGet("CLAUDECODE") = ""
+        return
+    names := []
+    if p := DllCall("GetEnvironmentStringsW", "ptr") {
+        at := p
+        while (s := StrGet(at, "UTF-16")) != "" {
+            if i := InStr(s, "=", , 2)
+                names.Push(SubStr(s, 1, i - 1))
+            at += (StrLen(s) + 1) * 2
+        }
+        DllCall("FreeEnvironmentStringsW", "ptr", p)
+    }
+    for name in names {
+        if !(name ~= "i)^(NO_COLOR|GIT_EDITOR|COREPACK_ENABLE_AUTO_PIN|CLAUDECODE|CLAUDE_PID|CLAUDE_EFFORT|CLAUDE_CODE_\w+)$")
+            continue
+        try {
+            RegRead("HKCU\Environment", name)
+            continue
+        }
+        try {
+            RegRead("HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment", name)
+            continue
+        }
+        EnvSet name
+    }
+}
 
 LoadOmarchyEnv() {
     ini := EnvGet("USERPROFILE") "\.winarchy\generated\winarchy.ini"

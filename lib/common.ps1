@@ -80,6 +80,25 @@ function Update-ProcessPath {
     $env:Path = @($dirs | Where-Object { $_ -and $seen.Add($_.TrimEnd('\')) }) -join ';'
 }
 
+# Claude Code's shells add their own variables, NO_COLOR=1 among them. winarchy run from
+# one (an agent running `winarchy apply`, an install pasted into one) passed them on to
+# AutoHotkey, Zebar and GlazeWM, and from them to every terminal a key opens: oh-my-posh
+# and PowerShell then drew prompts without colour (Nerd Font caps as stray blobs, worst in
+# Herdr), and a `claude` there took itself for a child of that agent's session. So drop
+# them before starting anything, except what the user set in their own environment.
+# winarchy.ahk does the same (lib\env.ahk ScrubAgentEnv) when started some other way.
+$AgentEnvNames = 'NO_COLOR', 'GIT_EDITOR', 'COREPACK_ENABLE_AUTO_PIN', 'CLAUDECODE', 'CLAUDE_PID', 'CLAUDE_EFFORT'
+
+function Clear-AgentSessionEnv {
+    if (-not $env:CLAUDECODE) { return }
+    foreach ($name in @(Get-ChildItem Env: | ForEach-Object Name)) {
+        if ($name -notin $AgentEnvNames -and $name -notlike 'CLAUDE_CODE_*') { continue }
+        if ($null -ne [Environment]::GetEnvironmentVariable($name, 'User') -or
+            $null -ne [Environment]::GetEnvironmentVariable($name, 'Machine')) { continue }
+        Remove-Item "Env:$name" -ErrorAction SilentlyContinue
+    }
+}
+
 # The user PATH as stored: %USERPROFILE%\... entries unexpanded. Reading it through
 # [Environment] expands them, and writing that back hard-codes every one of them.
 function Get-UserPathRaw {

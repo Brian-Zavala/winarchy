@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed: prompts in Herdr and in terminals opened with Winarchy's keys could lose all their colours, leaving oh-my-posh's and starship's Nerd Font caps as stray outlines. When Winarchy was installed, updated or applied from a Claude Code session, the key daemon, bar and window manager inherited that session's `NO_COLOR=1` and passed it to everything they started, and a `claude` started there took itself for part of that session. Winarchy and its key daemon now drop those variables before starting anything. A `NO_COLOR` you set yourself is kept.
+
 ## 0.1.48 — 2026-10-03
 
 - Fixed: switching themes could open a full-screen "Hmmm… can't reach this page, 127.0.0.1 refused to connect" page instead of the menu, and the bar could disappear after it. Zebar serves the bar, menu and panels from a small web server on 127.0.0.1:6124. When `winarchy update`/`apply` restarted Zebar while you opened the menu, the new Zebar could start before the old one let go of that port, and it then ran without its server. Restarts now wait for the port to be free, and Winarchy restarts a Zebar that has no server within about 10 seconds.
