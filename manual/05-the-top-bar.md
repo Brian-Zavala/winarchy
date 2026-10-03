@@ -14,7 +14,7 @@ From left to right:
 | The clock, centered | The calendar (`Super + Ctrl + Alt + D`) | The next date format; middle-click opens the world clock (`Super + Ctrl + Alt + E`) |
 | What's playing, when something is | Play / pause | Next track; middle-click goes back |
 | A bell and a time, when a reminder is set | All your reminders (`Super + Ctrl + Alt + R`) | |
-| Weather | The weather details | |
+| Weather: an icon for the sky outside (sun, clouds, rain, snow...) | The temperature and details: feels like, wind, where (`Super + Ctrl + Alt + W`) | |
 | Updates, when there are any | Update everything | |
 | The chevron | Running windows and the tray | |
 | The AI agent icon | The agents panel: limits, tokens today, and tiles that have your agent make a theme, plugin or app (see [AI](17-ai.md)) | Start your coding agent |

@@ -337,12 +337,13 @@
         if (code >= 95) return '\u{F0593}';                                      // lightning
         return '\u{F0590}';
       }
+      // Just the sky on the bar; the temperature and the rest are a click away (ShowWeather).
       function renderWeather(w) {
         const el = $('weather');
         el.classList.toggle('hidden', !w || w.temp === undefined);
         if (!w || w.temp === undefined) return;
-        el.textContent = `${weatherIcon(w.code, w.isDay)} ${w.temp}°`;
-        el.title = w.text;
+        setText(el, weatherIcon(w.code, w.isDay));
+        el.title = `${w.desc ? w.desc[0].toUpperCase() + w.desc.slice(1) : 'Weather'} (click: details)`;
       }
 
       // agents.json (winarchy agent-usage): only agents with usage or limits to show, so an
