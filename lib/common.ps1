@@ -54,14 +54,16 @@ function Write-PackFile([string]$name, [string]$text) {
     }
 }
 
-# The Windows Terminal profile winarchy's own tabs open on (Omarchy Shell, elevate off),
-# as winarchy.ini names it once apply has written it; '' before that.
-function Get-WtProfile {
+# One value from the generated winarchy.ini ($null when it isn't there).
+function Get-AhkIniValue([string]$key) {
     $ini = Join-Path $Generated 'winarchy.ini'
-    if (-not (Test-Path -LiteralPath $ini)) { return '' }
-    $line = Get-Content -LiteralPath $ini -ErrorAction SilentlyContinue | Where-Object { $_ -like 'wtProfile=*' } | Select-Object -First 1
-    if ($line) { $line.Substring(10).Trim() } else { '' }
+    $line = Get-Content -LiteralPath $ini -ErrorAction SilentlyContinue | Where-Object { $_ -like "$key=*" } | Select-Object -First 1
+    if ($line) { $line.Substring($key.Length + 1).Trim() }
 }
+
+# The Windows Terminal profile winarchy's own tabs open on (Omarchy Shell, elevate off),
+# once apply has written it; '' before that.
+function Get-WtProfile { "$(Get-AhkIniValue 'wtProfile')" }
 
 # Where the code comes from: the same WINARCHY_REPO / WINARCHY_REF the bootstrap honours.
 function Get-WinarchySource {

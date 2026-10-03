@@ -851,3 +851,17 @@ Describe 'Paths with an apostrophe' {
         ($line -replace "''", '') | Should -Not -Match "O'B"
     }
 }
+
+Describe 'Doctor: Windows Terminal' {
+    BeforeAll { . "$root\lib\doctor.ps1" }
+    It 'names elevation in the defaults or the default profile, and nothing otherwise' {
+        $mk = { param($defaults, $list, $default) [pscustomobject]@{ defaultProfile = $default; profiles = [pscustomobject]@{ defaults = $defaults; list = $list } } }
+        Get-TerminalElevation (& $mk ([pscustomobject]@{ elevate = $true }) @() $null) | Should -Be 'every profile (Defaults)'
+        Get-TerminalElevation (& $mk ([pscustomobject]@{}) @([pscustomobject]@{ guid = '{a}'; name = 'PowerShell'; elevate = $true }) '{a}') | Should -Be 'your default profile (PowerShell)'
+        Get-TerminalElevation (& $mk ([pscustomobject]@{}) @([pscustomobject]@{ guid = '{a}'; name = 'PowerShell' }) '{a}') | Should -BeNullOrEmpty
+    }
+    It 'lists the Omarchy profiles a settings file lacks' {
+        $wt = [pscustomobject]@{ profiles = [pscustomobject]@{ list = @([pscustomobject]@{ guid = $AgentProfile }, [pscustomobject]@{ guid = $ShellProfile }) } }
+        @(Get-MissingTerminalProfiles $wt) | Should -Be @('Omarchy Screensaver', 'Omarchy About')
+    }
+}

@@ -1,5 +1,23 @@
 # winarchy doctor: checks the moving parts and says what to do about each problem.
 
+# What in Terminal's settings runs as administrator: the defaults, or the default profile.
+function Get-TerminalElevation($wt) {
+    if (-not $wt) { return $null }
+    $defaults = if ($wt.profiles -isnot [array]) { $wt.profiles.defaults }
+    if ($defaults.elevate -eq $true) { return 'every profile (Defaults)' }
+    $list = if ($wt.profiles -is [array]) { $wt.profiles } else { $wt.profiles.list }
+    $def = @($list | Where-Object { $_.guid -eq $wt.defaultProfile }) | Select-Object -First 1
+    if ($def.elevate -eq $true) { return "your default profile ($($def.name))" }
+    $null
+}
+
+function Get-MissingTerminalProfiles($wt) {
+    $list = if ($wt.profiles -is [array]) { $wt.profiles } else { $wt.profiles.list }
+    $have = @($list | ForEach-Object { $_.guid })
+    $want = [ordered]@{ 'Omarchy Shell' = $ShellProfile; 'Omarchy Screensaver' = $ScreensaverProfile; 'Omarchy About' = $AboutProfile; 'Omarchy Agent' = $AgentProfile }
+    $want.Keys | Where-Object { $have -notcontains $want[$_] }
+}
+
 function Invoke-Doctor([switch]$Fix) {
     $p = if ($Fix) { Update-Paths } else { Get-Paths }
     $cfg = Get-Config
@@ -22,11 +40,28 @@ function Invoke-Doctor([switch]$Fix) {
     & $check "Flow Launcher  $($p.flow)" ([bool]$p.flow) 'winget install -e --id Flow-Launcher.Flow-Launcher'
     & $check 'JetBrainsMono Nerd Font' ([bool]$p.nerdFont) 'winarchy install (installs it), or install any Nerd Font'
     # Optional, so never a problem (and never something -Fix reinstalls).
-    if ($p.wtSettings) { & $check "Terminal settings  $($p.wtSettings)" $true '' }
+    if ($p.wtSettings) {
+        & $check "Terminal settings  $($p.wtSettings)" $true ''
+        $wt = Read-Json $p.wtSettings
+        $missing = @(Get-MissingTerminalProfiles $wt)
+        & $check "winarchy's Terminal profiles" (-not $missing) "missing: $($missing -join ', '). winarchy apply writes them"
+        # Not a failure: winarchy's own tabs open on Omarchy Shell, which never elevates.
+        if ($why = Get-TerminalElevation $wt) {
+            Write-Host "  note  Terminal runs $why as administrator: winarchy's windows open without it, but a plain new tab still asks for UAC." -ForegroundColor DarkYellow
+            Write-Host "        -> to stop that: Terminal Settings > Defaults (or that profile) > turn off ""Run this profile as Administrator""" -ForegroundColor DarkYellow
+        }
+    } elseif ($p.wt) { & $check 'Terminal settings' $false 'start Windows Terminal once, then: winarchy apply' }
     else { Write-Host '  --    Windows Terminal not found (optional: it gets the terminal theming)' -ForegroundColor DarkGray }
+    # The paths the menu and keys run (winarchy.ini): a moved or removed app shows up here.
+    foreach ($k in 'pwsh', 'ahk', 'wt', 'editor') {
+        $v = Get-AhkIniValue $k
+        if ($v -and $v -match '[\\/]') { & $check "winarchy.ini $k  $v" (Test-Path -LiteralPath $v) 'it moved or was removed: winarchy apply' }
+    }
 
     Write-Host "`nRunning"
-    & $check 'GlazeWM' ([bool](Get-GlazeWmProcess)) "start it: `"$($p.glazewm)`""
+    & $check 'GlazeWM' ([bool](Test-GlazeWmRunning)) "start it: `"$($p.glazewm)`""
+    $wms = @(Get-GlazeWmProcess)
+    if ($wms.Count -gt 1) { & $check "one GlazeWM (found $($wms.Count))" $false 'end every glazewm.exe in Task Manager: winarchy.ahk starts one again within seconds' }
     $build = Get-AnimationBuild
     $running = Get-GlazeWmProcess | Select-Object -First 1
     if ($running) { $running = Get-GlazeWMPath $running $p }
@@ -105,6 +140,18 @@ function Invoke-Doctor([switch]$Fix) {
     $target = if (Test-Path $lnk) { (New-Object -ComObject WScript.Shell).CreateShortcut($lnk).Arguments } else { '' }
     & $check 'starts at login (Startup\winarchy.lnk)' ($target -like "*$Code*") 'winarchy apply'
     & $check 'winarchy on PATH' ((([Environment]::GetEnvironmentVariable('Path', 'User')) -split ';') -contains (Join-Path $Code 'bin')) 'winarchy install'
+    # How the code updates: never a failure, but local edits and own commits explain an
+    # update that doesn't move.
+    if ((Test-Path (Join-Path $Code '.git')) -and (Get-Command git -ErrorAction SilentlyContinue)) {
+        $dirty = @(git -C $Code status --porcelain 2>$null).Count
+        $own = [int](git -C $Code rev-list --count '@{u}..HEAD' 2>$null)
+        $state = @("git checkout ($("$(git -C $Code rev-parse --abbrev-ref HEAD 2>$null)".Trim()))"
+            if ($dirty) { "$dirty file(s) edited (update keeps them in a git stash)" }
+            if ($own) { "$own commit(s) of its own (update can't fast-forward)" }) -join '; '
+        Write-Host "  --    code: $state" -ForegroundColor DarkGray
+    } elseif (Test-Path (Join-Path $Code '.winarchy-files')) {
+        Write-Host "  --    code: installed from the zip; winarchy update downloads the new version (with git installed it becomes a checkout)" -ForegroundColor DarkGray
+    }
 
     # Herdr is optional, so this section only appears once it is installed: nothing here
     # is wrong on a machine that never asked for it.
