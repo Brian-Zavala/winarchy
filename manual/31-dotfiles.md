@@ -54,6 +54,7 @@ It's JSON, so a `\` in a path is written `\\`. A file with a mistake in it is le
 | `weather` | `true` | Weather in the bar |
 | `location` | `null` | `{ "lat": 51.5, "lon": -0.12, "name": "London" }` instead of the guess from your IP address (ipinfo.io) |
 | `backgroundDirs` | `["~\\Pictures\\Wallpapers"]` | Your own backgrounds, shown under _Mine_. See [backgrounds](39-backgrounds.md) |
+| `defaultBackgrounds` | `{ "tokyo-night": "1-quattro.jpg" }` | The background a theme opens on until you pick another (by file name); a theme not listed opens on its first |
 | `backgroundTransition` | `"reveal"` | Omarchy v4's slanted reveal when the background changes; `"none"` for an instant change (skipped while Wallpaper Engine or Lively runs) |
 | `themeTargets.<name>` | `true` | Turn one theme target off: `bar`, `glazewm`, `terminal`, `flow`, `accent`, `neovim`, `vscode`, `claude`, `browser`, `btop` or `herdr`. `neovim` defaults to `"auto"`, which themes only Omarchy-style Neovim configs |
 | `themeTargets.herdr` | `"auto"` | `"auto"` uses the Herdr theme with your Omarchy theme's name (`catppuccin`, `catppuccin-latte`, `tokyo-night`, `dracula`, `nord`, `gruvbox`, `one-dark`, `solarized`, `kanagawa`, `rose-pine`, `vesper`) and otherwise `"terminal"`, which draws Herdr in your terminal's palette, and Winarchy themes the terminal. Name a Herdr theme to pin it, or `false` to keep Herdr on its terminal palette |

@@ -266,6 +266,15 @@ function Get-ThemeBackgrounds([string]$theme) {
     @(Get-ChildItem $dir -File | Where-Object { $ImageExt -contains $_.Extension.ToLower() } | Sort-Object Name | ForEach-Object FullName)
 }
 
+# A theme's first background: config.defaultBackgrounds names one (Tokyo Night opens on
+# Omarchy's own "quattro" wallpaper), else the first by name, as omarchy-theme-set does.
+function Get-DefaultBackground([string]$theme) {
+    $list = @(Get-ThemeBackgrounds $theme)
+    $name = (Get-Config).defaultBackgrounds[$theme]
+    $pick = if ($name) { $list | Where-Object { (Split-Path -Leaf $_) -eq $name } | Select-Object -First 1 }
+    $pick ?? ($list | Select-Object -First 1)
+}
+
 function Invoke-BackgroundNext {
     $s = Read-State
     $list = @(Get-ThemeBackgrounds $s.theme)
@@ -522,7 +531,7 @@ function Invoke-ThemeSet([string]$theme) {
     Write-Status $state -BumpTheme
     # Background: the one last used with this theme, else the theme's first (omarchy-theme-set).
     $bg = $state.perTheme[$theme]
-    if (-not $bg -or -not (Test-Path -LiteralPath $bg)) { $bg = Get-ThemeBackgrounds $theme | Select-Object -First 1 }
+    if (-not $bg -or -not (Test-Path -LiteralPath $bg)) { $bg = Get-DefaultBackground $theme }
     if ($bg) { Set-Background $bg $state }
     & $apply $false
 }

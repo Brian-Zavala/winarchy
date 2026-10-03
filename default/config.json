@@ -19,6 +19,7 @@
     "files": "auto"
   },
   "backgroundDirs": ["~\\Pictures\\Wallpapers"],
+  "defaultBackgrounds": { "tokyo-night": "1-quattro.jpg" },
   "themeTargets": {
     "bar": true,
     "glazewm": true,

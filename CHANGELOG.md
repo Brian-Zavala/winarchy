@@ -6,6 +6,7 @@
 - Fixed: the bar hid when nothing was fullscreen. A maximized window, "Full width" (`Super + Alt + F`), the background change animation, a window on another workspace, and Start, Search or Alt+Tab no longer hide it. Only fullscreen windows and games do.
 - Fixed: a monitor waking up or a display change no longer closes and reopens the bar. Zebar already follows the new layout, and the two together could leave a monitor without a bar. Winarchy still reopens a bar that is missing or out of place. The bar is also repaired while Windows reports an app as "busy", which with the taskbar hidden could last indefinitely.
 - Changing the text size no longer restarts the bar (and Winarchy's keys) when the bar has to grow: the bar is resized where it is, and stays up.
+- Tokyo Night opens on Omarchy's own "quattro" background until you pick another. `defaultBackgrounds` in your settings sets the one any theme opens on (see [dotfiles](manual/31-dotfiles.md)).
 
 ## 0.1.41 — 2026-10-03
 
