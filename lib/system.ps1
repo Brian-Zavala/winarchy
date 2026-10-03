@@ -219,7 +219,7 @@ function Invoke-Transcode([string]$Path, [string]$Format, [string]$Resolution) {
     if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
         Write-Host 'ffmpeg is not installed: installing it (winget)...'
         winget install -e --id Gyan.FFmpeg --accept-package-agreements --accept-source-agreements
-        $env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine')
+        Update-ProcessPath
         if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { throw 'ffmpeg is installed but not on PATH yet: open a new terminal and run this again' }
     }
     if (-not $Path) {

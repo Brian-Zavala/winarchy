@@ -98,17 +98,8 @@ RunPort(name, label) {
 ; logged in, so something installed since (Install > TUI) would look missing.
 FindCommand(name) {
     dirs := [EnvGet("LOCALAPPDATA") "\Microsoft\WinGet\Links"]
-    for root in ["HKCU\Environment", "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment"] {
-        try for d in StrSplit(RegRead(root, "Path"), ";")
-            if d != ""
-                dirs.Push(d)
-    }
+    dirs.Push(RegistryPathDirs()*)
     for d in dirs {
-        if InStr(d, "%") {                    ; REG_EXPAND_SZ entries: %USERPROFILE%\...
-            buf := Buffer(2048 * 2)
-            if DllCall("ExpandEnvironmentStringsW", "str", d, "ptr", buf, "uint", 2048)
-                d := StrGet(buf, "UTF-16")
-        }
         for ext in [".exe", ".cmd", ".bat"]
             if FileExist(p := RTrim(d, "\") "\" name ext)
                 return p

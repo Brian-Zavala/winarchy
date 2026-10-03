@@ -163,9 +163,20 @@ Describe 'Herdr layouts (hdl / hds / hdlm / hsl)' {
         (Get-Runs).Count | Should -Be 0
     }
     It 'hds: runs plain opencode when it is installed' {
-        Mock Test-AgentInstalled { $true } -ParameterFilter { $name -eq 'opencode' }
+        Mock Find-AgentExe { 'opencode.cmd' } -ParameterFilter { $cmd -eq 'opencode' }
         Invoke-HerdrSquare
-        (Get-Runs)[-1][3] | Should -Be 'opencode'
+        (Get-Runs)[-1][3] | Should -Be '& opencode.cmd'
+    }
+    It 'hds: runs it by its full path, which PATH may not have yet' {
+        Mock Find-AgentExe { 'C:\Users\Jo Doe\AppData\Roaming\npm\opencode.cmd' } -ParameterFilter { $cmd -eq 'opencode' }
+        Invoke-HerdrSquare
+        (Get-Runs)[-1][3] | Should -Be "& 'C:\Users\Jo Doe\AppData\Roaming\npm\opencode.cmd'"
+    }
+    It 'hdl: calls a quoted editor path, which on its own would only be a string' {
+        Mock Get-Config { @{ apps = @{ editor = 'C:\Program Files\Neovim\bin\nvim.exe' } } }
+        Get-EditorCommand 'C:\x' | Should -Be "& 'C:\Program Files\Neovim\bin\nvim.exe' ."
+        Mock Get-Config { @{ apps = @{ editor = 'nvim' } } }
+        Get-EditorCommand 'C:\x' | Should -Be 'nvim .'
     }
 }
 

@@ -50,8 +50,8 @@ function Install-BuildTools {
         $r = Invoke-Unattended 'winget' $a 3600
         if (-not $r.Ok -and $r.Code -notin $WingetExitOk) { Log "$($t.name): winget $($r.Reason)" }
     }
-    $env:Path = @([Environment]::GetEnvironmentVariable('Path', 'Machine'), [Environment]::GetEnvironmentVariable('Path', 'User'),
-        (Join-Path $env:USERPROFILE '.cargo\bin')) -join ';'
+    Update-ProcessPath
+    $env:Path += ';' + (Join-Path $env:USERPROFILE '.cargo\bin')
 }
 
 # The build of the pinned commit is installed (built here or downloaded).

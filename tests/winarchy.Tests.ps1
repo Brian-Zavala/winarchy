@@ -841,3 +841,13 @@ Describe 'Terminal launches from AutoHotkey' {
         $envAhk | Should -Match 'Env\("wtProfile"\)'
     }
 }
+
+Describe 'Paths with an apostrophe' {
+    BeforeAll { . "$root\lib\autotile.ps1" }
+    It 'escapes it in the auto-tiling startup command (YAML single quotes)' {
+        $Code = "C:\Users\O'Brien\AppData\Local\winarchy"
+        $line = ConvertTo-AutoTileStartup @{ autoTiling = @{ enabled = $true } } "C:\Users\O'Brien\cli\glazewm.exe"
+        $line | Should -BeLike "*O''Brien*winarchy*autotile-watch.ps1*O''Brien*glazewm.exe*"
+        ($line -replace "''", '') | Should -Not -Match "O'B"
+    }
+}

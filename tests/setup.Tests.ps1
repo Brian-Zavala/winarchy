@@ -306,3 +306,56 @@ Describe 'Zebar settings before GlazeWM installs' {
         $script:order -join ',' | Should -Be 'zebar,glzr-io.glazewm,Flow-Launcher.Flow-Launcher'
     }
 }
+
+Describe 'PATH on a fresh PC' {
+    BeforeEach { $script:savedPath = $env:Path }
+    AfterEach { $env:Path = $script:savedPath }
+    It 'picks up what an install added to the registry, keeping what only this process has' {
+        Mock Get-UserPathRaw { '' }
+        $own = Join-Path $TestDrive 'process-only'
+        $env:Path = "$own;$env:SystemRoot\System32"
+        Update-ProcessPath
+        $parts = $env:Path -split ';'
+        $parts | Should -Contain $own
+        @($parts | Where-Object { $_.TrimEnd('\') -eq "$env:SystemRoot\System32" }).Count | Should -Be 1
+        foreach ($d in ([Environment]::GetEnvironmentVariable('Path', 'User') -split ';' | Where-Object { $_ })) { $parts | Should -Contain $d }
+    }
+    It 'adds to the user PATH as stored, keeping %VARS% unexpanded' {
+        Mock Get-UserPathRaw { '%USERPROFILE%\bin;C:\Tools' }
+        Mock Set-UserPathRaw { $script:written = $value }
+        Edit-UserPath 'C:\winarchy\bin' | Should -BeTrue
+        $script:written | Should -Be '%USERPROFILE%\bin;C:\Tools;C:\winarchy\bin'
+    }
+    It 'adds to an empty user PATH without a stray separator' {
+        Mock Get-UserPathRaw { '' }
+        Mock Set-UserPathRaw { $script:written = $value }
+        Edit-UserPath 'C:\winarchy\bin' | Should -BeTrue
+        $script:written | Should -Be 'C:\winarchy\bin'
+    }
+    It 'takes an entry out, however it was written, and leaves the rest as stored' {
+        Mock Get-UserPathRaw { "%USERPROFILE%\bin;$env:USERPROFILE\herdr\;C:\Tools" }
+        Mock Set-UserPathRaw { $script:written = $value }
+        Edit-UserPath "$env:USERPROFILE\herdr" -Remove | Should -BeTrue
+        $script:written | Should -Be '%USERPROFILE%\bin;C:\Tools'
+        Mock Get-UserPathRaw { 'C:\Tools' }
+        Edit-UserPath "$env:USERPROFILE\herdr" -Remove | Should -BeFalse
+    }
+}
+
+Describe 'Preflight' {
+    BeforeEach {
+        Mock Write-Step {}; Mock Write-Ok {}
+        $script:savedAllow = $env:WINARCHY_ALLOW_ELEVATED
+        $env:WINARCHY_ALLOW_ELEVATED = $null
+    }
+    AfterEach { $env:WINARCHY_ALLOW_ELEVATED = $script:savedAllow }
+    It 'refuses to install from an elevated terminal' {
+        Mock Test-Elevated { $true }
+        { Test-Preflight } | Should -Throw '*Running as administrator*'
+    }
+    It 'lets WINARCHY_ALLOW_ELEVATED override that' {
+        Mock Test-Elevated { $true }
+        $env:WINARCHY_ALLOW_ELEVATED = '1'
+        { Test-Preflight } | Should -Not -Throw
+    }
+}

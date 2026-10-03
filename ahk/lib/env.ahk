@@ -141,6 +141,41 @@ RunWt(args, fallback := "") {
         try Run fallback
 }
 
+; PATH as the registry has it now (Machine, then User), %VARS% expanded.
+RegistryPathDirs() {
+    dirs := []
+    for root in ["HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment", "HKCU\Environment"] {
+        try for d in StrSplit(RegRead(root, "Path"), ";") {
+            if d = ""
+                continue
+            if InStr(d, "%") {                ; REG_EXPAND_SZ entries: %USERPROFILE%\...
+                buf := Buffer(2048 * 2)
+                if DllCall("ExpandEnvironmentStringsW", "str", d, "ptr", buf, "uint", 2048)
+                    d := StrGet(buf, "UTF-16")
+            }
+            dirs.Push(d)
+        }
+    }
+    return dirs
+}
+
+; This script's PATH again from the registry, keeping entries only this process has: a
+; script started at login doesn't see what was installed since (winget, npm), and neither
+; does anything it runs.
+RefreshPath() {
+    seen := Map()
+    seen.CaseSense := false
+    out := ""
+    for list in [RegistryPathDirs(), StrSplit(EnvGet("PATH"), ";")]
+        for d in list
+            if d != "" && !seen.Has(k := RTrim(d, "\")) {
+                seen[k] := true
+                out .= (out = "" ? "" : ";") d
+            }
+    if out != ""
+        EnvSet "PATH", out
+}
+
 ; -p for winarchy's own terminal profile (elevate off, so "Run as administrator" in
 ; Terminal's defaults can't break these tabs), or nothing before `winarchy apply` wrote it.
 WtProfileArg() {

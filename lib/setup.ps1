@@ -32,8 +32,12 @@ function Test-Preflight {
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
         throw 'winget (App Installer) is missing. Install "App Installer" from the Microsoft Store, then run this again.'
     }
-    $admin = Test-Elevated
-    if ($admin) { Write-Warning 'Running as administrator: settings would land in the admin profile. Run from a normal terminal.' }
+    # Elevated, everything this starts (GlazeWM, the bar, AutoHotkey) runs elevated too, and
+    # every terminal it opens asks for UAC; as SYSTEM it would set up a profile nobody uses.
+    if ([Security.Principal.WindowsIdentity]::GetCurrent().IsSystem) { throw 'Running as SYSTEM: run the install from your own account, in a normal terminal.' }
+    if ((Test-Elevated) -and -not $env:WINARCHY_ALLOW_ELEVATED) {
+        throw 'Running as administrator: winarchy installs per user, and everything it starts from here would run elevated. Open a normal (not "Run as administrator") terminal and run it again. (WINARCHY_ALLOW_ELEVATED=1 skips this check.)'
+    }
     Write-Ok "Windows build $build, $env:PROCESSOR_ARCHITECTURE, winget OK"
 }
 
@@ -138,7 +142,7 @@ function Invoke-Winget([string]$verb, [string]$id, [string]$scope) {
         break
     }
     $r | Add-Member Reboot ($r.Code -in $WingetRebootCodes) -Force
-    if ($r.Code -in $WingetExitOk -or $r.Reboot) { $r.Ok = $true; $r.Reason = $null }
+    if ($r.Code -in $WingetExitOk -or $r.Reboot) { $r.Ok = $true; $r.Reason = $null; Update-ProcessPath }
     elseif ($null -ne $r.Code) { $r.Reason = Get-WingetReason $r.Code }
     $r
 }
@@ -295,7 +299,12 @@ function Install-Prerequisites {
     } else { Save-Winget 'AutoHotkey.AutoHotkey' $true; Write-Done "AutoHotkey: $($p.ahk)" }
     if (-not $p.nerdFont) {
         Write-Ok 'installing JetBrainsMono Nerd Font (bar icons + terminal glyphs)'
-        [void](Install-NerdFont 'JetBrainsMono')
+        # A download that fails (offline, GitHub blocked) costs the icons, not the install.
+        try { [void](Install-NerdFont 'JetBrainsMono') }
+        catch {
+            Write-Warn "JetBrainsMono Nerd Font did not install ($($_.Exception.Message))"
+            Add-Unfinished 'Bar icons need the Nerd Font: winarchy font-install JetBrainsMono'
+        }
     } else { Write-Done 'JetBrainsMono Nerd Font: installed' }
 }
 
@@ -488,6 +497,7 @@ function Get-InstallAnswers($p, [switch]$Restoring) {
         # With an input method (Japanese, Chinese, Korean) CapsLock switches modes: leave it.
         if ($p.input.ime) { $cfg.compose = $false }
     }
+    if ($script:TailscaleOffered) { $cfg.tailscaleOffered = $true }
     $wall = Join-Path $p.pictures 'Wallpapers'
     Write-Ok "Your own backgrounds go in $wall (shown as 'Mine' in the picker)."
     New-Item -ItemType Directory -Force $wall | Out-Null
@@ -533,14 +543,15 @@ function Invoke-Taskbar([string]$action) {
 
 function Add-CliToPath {
     $bin = Join-Path $Code 'bin'
-    $cur = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if (($cur -split ';') -contains $bin) { return }
+    if (@((Get-UserPathRaw) -split ';' | Where-Object { [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -eq $bin }).Count) { return }
     [void](Add-JournalEntry @{ kind = 'envpath'; key = "envpath|$bin"; dir = $bin })
-    [Environment]::SetEnvironmentVariable('Path', ($cur.TrimEnd(';') + ";$bin"), 'User')
-    Send-SettingChange 'Environment'
+    [void](Edit-UserPath $bin)
 }
 
 function Start-Everything($p) {
+    # What starts here inherits this PATH: the one from before the install's winget runs
+    # would leave GlazeWM, Zebar and AutoHotkey without the tools installed just now.
+    Update-ProcessPath
     # The animation build is unsigned and built locally: Defender can quarantine it between
     # Update-Paths and here. Re-detect so the official GlazeWM starts instead.
     # Apply again too, so the config and winarchy.ahk's restart guard stop pointing at it.

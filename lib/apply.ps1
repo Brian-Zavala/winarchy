@@ -637,7 +637,7 @@ function Set-TerminalProfiles($p) {
         [ordered]@{
             guid = $AgentProfile; name = 'Omarchy Agent'
             elevate = $false
-            commandline = "`"$pwsh`" -NoLogo -Command `"& '$Code\bin\winarchy.ps1' agent -Inline`""
+            commandline = "`"$pwsh`" -NoLogo -ExecutionPolicy Bypass -Command `"& '$($Code -replace "'", "''")\bin\winarchy.ps1' agent -Inline`""
             tabTitle = 'Omarchy Agent'; suppressApplicationTitle = $true
             font = [ordered]@{ face = $font }; padding = '8'; bellStyle = 'none'
         },

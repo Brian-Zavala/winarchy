@@ -34,19 +34,45 @@ function Find-AutoHotkey {
 # PATH at all. The py launcher knows every python.org install, so ask it first and store
 # the interpreter it names, not the launcher.
 function Find-Python {
+    $reg = Find-PythonRegistry
+    if ($reg) { return $reg }
     $py = Find-First @((Join-Path $env:LOCALAPPDATA 'Programs\Python\Launcher\py.exe'), (Join-Path $env:SystemRoot 'py.exe'))
     if (-not $py) { $py = Find-Program py.exe }
     if ($py) {
+        # In UTF-8 both ways: in the console's code page a user name like "Jösé" comes back
+        # mangled, and the path it names doesn't exist.
+        $enc = [Console]::OutputEncoding
+        $pyEnc = $env:PYTHONIOENCODING
         try {
+            try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
+            $env:PYTHONIOENCODING = 'utf-8'
             $exe = (& $py -3 -c 'import sys; print(sys.executable)' 2>$null | Select-Object -First 1)
             if ($exe -and (Test-Path -LiteralPath $exe.Trim())) { return $exe.Trim() }
-        } catch {}
+        } catch {} finally {
+            try { [Console]::OutputEncoding = $enc } catch {}
+            $env:PYTHONIOENCODING = $pyEnc
+        }
     }
     foreach ($c in @(Get-Command python.exe, python3.exe -CommandType Application -All -ErrorAction SilentlyContinue)) {
         # WindowsApps holds both the Store stub and a real Store (or Install Manager)
         # Python under the same alias name, so ask it rather than go by the path.
         if ($c.Source -like '*\WindowsApps\*' -and -not (Test-RealPython $c.Source)) { continue }
         return $c.Source
+    }
+    $null
+}
+
+# Python's own registration (PEP 514), newest 3.x first: no process to start, and no
+# console code page in the way.
+function Find-PythonRegistry {
+    foreach ($root in 'HKCU:\Software\Python\PythonCore', 'HKLM:\Software\Python\PythonCore') {
+        $vers = @(Get-ChildItem $root -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match '^3\.\d+' } |
+            Sort-Object { [version]($_.PSChildName -replace '^(\d+\.\d+).*$', '$1') } -Descending)
+        foreach ($v in $vers) {
+            $ip = Get-ItemProperty (Join-Path $v.PSPath 'InstallPath') -ErrorAction SilentlyContinue
+            $exe = if ($ip.ExecutablePath) { $ip.ExecutablePath } elseif ($ip.'(default)') { Join-Path $ip.'(default)' 'python.exe' }
+            if ($exe -and (Test-Path -LiteralPath $exe)) { return $exe }
+        }
     }
     $null
 }
@@ -210,8 +236,8 @@ function Update-Paths {
         browserName    = $browser.name
         browserPrivate = $browser.private
         screenshots    = Get-KnownFolder 'b7bede81-df94-4682-a7d8-57a52620b86f'
-        pictures       = [Environment]::GetFolderPath('MyPictures')
-        startup        = [Environment]::GetFolderPath('Startup')
+        pictures       = [Environment]::GetFolderPath('MyPictures', 'Create')
+        startup        = [Environment]::GetFolderPath('Startup', 'Create')
         # The keys your own Startup scripts bind: winarchy's leave them to you (lib/keys.ps1).
         userHotkeys    = Get-UserHotkeys
         clock24        = $culture.DateTimeFormat.ShortTimePattern -cmatch 'H'

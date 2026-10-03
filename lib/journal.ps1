@@ -366,9 +366,7 @@ function Restore-JournalEntry($e, [string]$dir) {
                 ForEach-Object { Write-Host "  removing Run\$($_.Name)"; Remove-ItemProperty $runKey -Name $_.Name }
         }
         'envpath' {
-            $cur = [Environment]::GetEnvironmentVariable('Path', 'User')
-            $new = ($cur -split ';' | Where-Object { $_ -and $_.TrimEnd('\') -ne $e.dir.TrimEnd('\') }) -join ';'
-            [Environment]::SetEnvironmentVariable('Path', $new, 'User')
+            [void](Edit-UserPath $e.dir -Remove)
         }
         # Herdr came from its own installer, not winget, so uninstalling it is our job.
         # The envpath entry recorded beside this one takes its PATH entry back out.

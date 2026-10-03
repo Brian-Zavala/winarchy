@@ -117,6 +117,8 @@ $VerbLibs = @{
     'version'       = @('common')
 }
 foreach ($lib in ($VerbLibs[$Verb] ?? $AllLibs)) { . "$PSScriptRoot\..\lib\$lib.ps1" }
+# Started by the bar, a key or an old terminal, this PATH can be from before an install.
+Update-ProcessPath
 
 $version = (Get-Content -Raw (Join-Path $Code 'VERSION') -ErrorAction SilentlyContinue)?.Trim()
 

@@ -61,6 +61,7 @@ function Install-NpmGlobal([string]$Package, [string]$Label) {
     if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw "$Label installs with npm: install Node.js first (Install > Development > Node.js)" }
     & npm install -g $Package
     if ($LASTEXITCODE -ne 0) { throw "npm could not install $Label; try: npm install -g $Package" }
+    Update-ProcessPath
 }
 function Uninstall-NpmGlobal([string]$Package, [string]$Label) {
     & npm uninstall -g $Package

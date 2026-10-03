@@ -8,6 +8,9 @@
 #Include lib\widgets.ahk
 #Include lib\power.ahk
 OnError ScriptLogError
+; Zebar and winarchy.ahk started this with their PATH from login: an agent or tool
+; installed since would look missing to the terminals and verbs below.
+RefreshPath()
 ; Action dispatcher for the Zebar bar + Omarchy menu widget (whitelisted in zpack.json),
 ; and for winarchy.ahk hotkeys that open the menu.
 ;   menu.ahk open <route>        open/toggle the Omarchy menu (root, system, keys, background, theme, ...)

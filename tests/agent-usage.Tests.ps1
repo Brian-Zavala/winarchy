@@ -49,6 +49,7 @@ BeforeAll {
 }
 
 Describe 'Python' {
+    BeforeEach { Mock Find-PythonRegistry { $null } }
     It 'never picks the Microsoft Store stub' {
         Mock Find-First { $null }
         Mock Find-Program { $null }

@@ -124,6 +124,14 @@ SetTimer BarGuard, 5000
 ; OnExit arrow that used to return UnhookWinEvent's 1 - see UnhookMinimize.
 OnMessage DllCall("RegisterWindowMessage", "Str", "TaskbarCreated", "UInt"), (*) => SetTimer(RestartBar, -3000)
 OnMessage 0x007E, (*) => SetTimer(OnDisplayChange, -3000)    ; WM_DISPLAYCHANGE
+; WM_SETTINGCHANGE "Environment" (an installer changed PATH): what this script starts
+; from now on (terminals, Zebar, GlazeWM) gets the new PATH.
+OnMessage 0x001A, OnSettingChange
+
+OnSettingChange(wParam, lParam, *) {
+    if lParam && StrGet(lParam) = "Environment"
+        SetTimer(RefreshPath, -500)
+}
 ; Commands from menu.ahk (menu widget actions that need this script's state).
 OnMessage 0x5555, OnMenuCommand
 ; GlazeWM keys pressed while an admin window was in front, relayed by the admin game
