@@ -840,7 +840,7 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Respli
     try { Write-WebAppIni $p } catch { Log "web app keys FAILED: $($_.Exception.Message)" }
     Write-ZebarPack $p $cfg
     # Window animations on/off switches between the official GlazeWM and the animation build.
-    Switch-GlazeWM $p
+    Switch-GlazeWM $p -NoRestart:$NoRestart
     Set-Autostart $p $cfg
     Set-WindowsScreensaver $cfg
     try { Set-DisallowShaking $cfg } catch { Log "Aero Shake setting FAILED: $($_.Exception.Message)" }

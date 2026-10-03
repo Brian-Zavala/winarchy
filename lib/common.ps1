@@ -640,14 +640,32 @@ function Get-GlazeWmProcess {
     })
 }
 
+# GlazeWM's single-instance mutex (wm-platform's single_instance.rs, the same in 3.9 and
+# 3.10). A second GlazeWM shows "Another instance of the application is already running"
+# and exits, so this is the check that counts: the process list misses a GlazeWM that is
+# still starting. Access denied means it exists (a GlazeWM running elevated).
+$GlazeWmMutex = 'Global\325d0ed7-7f60-4925-8d1b-aa287b26b218'
+function Test-GlazeWmMutex {
+    try {
+        $m = $null
+        if ([Threading.Mutex]::TryOpenExisting($GlazeWmMutex, [ref]$m)) { $m.Dispose(); return $true }
+    } catch [UnauthorizedAccessException] { return $true } catch {}
+    $false
+}
+
+function Test-GlazeWmRunning { (Test-GlazeWmMutex) -or [bool](Get-GlazeWmProcess) }
+
 # GlazeWM starts glazewm-watcher as a child, and the child inherits GlazeWM's IPC socket.
 # If the WM dies and the watcher stays, the watcher keeps 127.0.0.1:6123 held. The next
 # GlazeWM then fails with "Fatal error ... (os error 10048)". So stop any leftover watcher
 # before starting GlazeWM, but only when no WM is running (a live WM's watcher is doing its job).
 # A watcher stuck while exiting can't be killed, and only a reboot frees the port. In that
 # case say so instead of starting a GlazeWM that can only fail.
+# Never a second one: install, apply, doctor -Fix and winarchy.ahk's guard can all get
+# here, and a second GlazeWM is an error dialog.
 function Start-GlazeWM([string]$exe) {
     if (-not $exe) { return }
+    if (Test-GlazeWmRunning) { Log 'GlazeWM: already running'; return }
     if (-not (Get-GlazeWmProcess)) {
         Get-Process glazewm-watcher -ErrorAction SilentlyContinue | ForEach-Object {
             Log "GlazeWM: stopping leftover glazewm-watcher $($_.Id) (it holds the IPC port)"
@@ -667,4 +685,7 @@ function Start-GlazeWM([string]$exe) {
         }
     }
     Start-InteractiveProcess -FilePath $exe -WorkingDirectory (Split-Path $exe)
+    # Until it holds its mutex, so the next caller (Start-Everything right after apply,
+    # winarchy.ahk's guard) sees it running.
+    for ($i = 0; $i -lt 25 -and -not (Test-GlazeWmMutex); $i++) { Start-Sleep -Milliseconds 200 }
 }

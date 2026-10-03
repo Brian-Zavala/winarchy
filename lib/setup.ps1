@@ -550,7 +550,7 @@ function Start-Everything($p) {
         Use-Lock { Invoke-Apply -NoRestart }
         $p = Get-Paths
     }
-    if ($p.glazewm -and -not (Get-GlazeWmProcess)) { Start-GlazeWM $p.glazewm }
+    if ($p.glazewm -and -not (Test-GlazeWmRunning)) { Start-GlazeWM $p.glazewm }
     if ($p.flow -and -not (Get-Process Flow.Launcher -ErrorAction SilentlyContinue)) { Start-InteractiveProcess $p.flow }
     Restart-Bar $p
     Restart-OmarchyAhk $p
