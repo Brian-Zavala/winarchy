@@ -26,6 +26,10 @@ BeforeAll {
     function winget { $script:WingetCalls.Add(($args -join ' ')); $global:LASTEXITCODE = [int]$script:WingetExit }
     function Invoke-Elevated([string]$Script) { $script:ElevatedCalls.Add($Script); if ($script:ElevatedFails) { throw 'the elevated step failed (exit 1603)' } }
     function Restore-JournalEntry($e, $dir) { $script:Restored.Add("$($e.kind)|$($e.id)$($e.dir)") }
+    # The lock screen as Windows reports it, and what uninstall set it to: never the real one.
+    function Get-LockScreenImage { $script:LockImage }
+    function Set-LockScreenImage([string]$Path) { $script:LockSet.Add($Path); if (-not $script:LockStuck) { $script:LockImage = $Path } }
+    $script:LockImage = $null
     # Real reminders on this PC are the person's: the tests see only these.
     function Get-ScheduledTask { @($script:FakeTasks) }
     function Unregister-ScheduledTask { process { $script:Unregistered.Add($_.TaskName) } }
@@ -68,6 +72,9 @@ BeforeEach {
     $script:Restored = [Collections.Generic.List[string]]::new()
     $script:Unregistered = [Collections.Generic.List[string]]::new()
     $script:FakeTasks = @()
+    $script:LockImage = $null
+    $script:LockSet = [Collections.Generic.List[string]]::new()
+    $script:LockStuck = $false
     $env:WINARCHY_YES = $null
     # An earlier -Yes run leaves this set, and Read-YesNo would stop asking.
     $script:AssumeYes = $false
@@ -164,6 +171,68 @@ Describe 'Uninstall' {
         $script:WingetCalls.Count | Should -Be 0
         Test-Path (Join-Path $Data 'restore.json') | Should -BeFalse
         Test-Path (Join-Path $script:JournalDir 'journal.json') | Should -BeTrue
+    }
+}
+
+Describe 'Uninstall leaves no winarchy lock screen' {
+    BeforeEach {
+        $script:WingetCalls = [Collections.Generic.List[string]]::new()
+        $script:Restored = [Collections.Generic.List[string]]::new()
+        $script:LockSet = [Collections.Generic.List[string]]::new()
+        $script:LockStuck = $false
+        $script:WingetExit = 0
+        $script:FakeTasks = @()
+        Mock Get-DefaultLockScreenImage { 'C:\Windows\Web\Screen\img100.jpg' }
+        New-TestData; New-TestJournal @()
+        $own = Join-Path $TestDrive 'Pictures\mine.jpg'
+        New-Item -ItemType File -Force $own | Out-Null
+    }
+    It 'puts Windows'' picture back when the lock screen still shows a winarchy background' {
+        $script:LockImage = Join-Path $Data 'wallpapers\tokyo-night\0-winding-road.jpg'
+        $out = Invoke-Uninstall -Yes 6>&1 | Out-String
+        @($script:LockSet) | Should -Be @('C:\Windows\Web\Screen\img100.jpg')
+        $out | Should -Match 'Done\.'
+    }
+    It 'counts the older omarchy-win backgrounds and backup copies as winarchy''s' {
+        Test-WinarchyImage 'C:\Users\x\.omarchy-win\wallpapers\a.jpg' | Should -BeTrue
+        Test-WinarchyImage 'D:\old\.winarchy-backup\wallpapers\a.jpg' | Should -BeTrue
+        Test-WinarchyImage (Join-Path $Code 'themes\nord\backgrounds\1.png') | Should -BeTrue
+        Test-WinarchyImage $own | Should -BeFalse
+        Test-WinarchyImage 'C:\Windows\Web\Screen\img100.jpg' | Should -BeFalse
+    }
+    It 'leaves a lock screen picture of your own alone' {
+        $script:LockImage = $own
+        Invoke-Uninstall -Yes 6>$null
+        $script:LockSet.Count | Should -Be 0
+    }
+    It 'says so, instead of "Done.", when Windows keeps winarchy''s picture' {
+        $script:LockImage = Join-Path $Data 'wallpapers\nord\1.jpg'
+        $script:LockStuck = $true
+        $out = Invoke-Uninstall -Yes 3>$null 6>&1 | Out-String
+        $out | Should -Match 'step\(s\) failed'
+        $out | Should -Match 'Settings > Personalization > Lock screen'
+        $out | Should -Not -Match 'Done\.'
+    }
+    It '-DryRun only says it would' {
+        $script:LockImage = Join-Path $Data 'wallpapers\nord\1.jpg'
+        $out = Invoke-Uninstall -Yes -DryRun 6>&1 | Out-String
+        $script:LockSet.Count | Should -Be 0
+        $out | Should -Match '\[dry-run\] Restore default Windows lock screen'
+    }
+    It 'restores your own original, but never a winarchy picture or one that is gone' {
+        Restore-LockScreen $own
+        Restore-LockScreen (Join-Path $Data 'wallpapers\nord\1.jpg')
+        Restore-LockScreen (Join-Path $TestDrive 'Pictures\deleted.jpg')
+        Restore-LockScreen
+        @($script:LockSet) | Should -Be @($own, 'C:\Windows\Web\Screen\img100.jpg', 'C:\Windows\Web\Screen\img100.jpg', 'C:\Windows\Web\Screen\img100.jpg')
+    }
+    It 'records no original when the lock screen is already winarchy''s (an earlier uninstall left it)' {
+        $script:LockImage = Join-Path $Data 'wallpapers\nord\1.jpg'
+        New-Item -ItemType File -Force $script:LockImage | Out-Null
+        Save-LockScreen
+        $e = @((Read-Journal).entries | Where-Object kind -eq 'lockscreen')
+        $e.Count | Should -Be 1
+        Test-WinarchyImage $e[0].path | Should -BeFalse
     }
 }
 

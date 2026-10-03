@@ -121,25 +121,14 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
         & $step 'Stop screenshot auto-copy' { Stop-ScreenshotWatcher }
     }
 
-    # If the lock screen or wallpaper is still pointing to winarchy's folder, restore the Windows default.
-    $curLock = try {
-        $ps = (Get-Paths).powershell ?? 'powershell.exe'
-        $res = & $ps -NoProfile -ExecutionPolicy Bypass -Command @'
-            try {
-                [void][Windows.System.UserProfile.LockScreen, Windows.System.UserProfile, ContentType = WindowsRuntime]
-                $uri = [Windows.System.UserProfile.LockScreen]::OriginalImageFile
-                if ($uri -and $uri.LocalPath) { $uri.LocalPath }
-            } catch {}
-'@
-        if ($res) { $res.Trim() }
-    } catch {}
-    if ($curLock -and ($curLock -like "*$Data*" -or $curLock -like "*winarchy*")) {
+    # Whatever the journal had (or didn't: a journal from before backgrounds, a restore that
+    # failed), the lock screen must not keep one of winarchy's backgrounds: Windows keeps
+    # its own copy of the picture, so it would outlive the uninstall and even -Purge.
+    if (Test-WinarchyImage (Get-LockScreenImage)) {
         & $step 'Restore default Windows lock screen' {
-            $lockScript = Join-Path $Code 'ps51\lockscreen.ps1'
-            $defScreen = "$env:SystemRoot\Web\Screen\img100.jpg"
-            if ((Test-Path $defScreen) -and (Test-Path $lockScript)) {
-                $ps = (Get-Paths).powershell ?? 'powershell.exe'
-                & $ps -NoProfile -ExecutionPolicy Bypass -File $lockScript -Path $defScreen
+            Restore-LockScreen
+            if (Test-WinarchyImage (Get-LockScreenImage)) {
+                throw "it still shows winarchy's background; pick another in Settings > Personalization > Lock screen"
             }
         }
     }

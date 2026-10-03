@@ -80,6 +80,9 @@ Describe 'Stopping winarchy on uninstall' {
         Mock Read-State { @{} }
         Mock Restore-WindowFrames { 0 }
         Mock Stop-ScreenshotWatcher {}
+        # Never the real lock screen.
+        Mock Get-LockScreenImage {}
+        Mock Set-LockScreenImage {}
     }
     It 'closes winarchy.ahk gracefully, then restores what a force-stop left behind' {
         Mock Get-OmarchyAhk { [pscustomobject]@{ ProcessId = 4242 } }

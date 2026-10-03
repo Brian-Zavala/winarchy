@@ -127,20 +127,8 @@ function Save-Wallpaper {
 
 function Save-LockScreen {
     if (Test-Journaled 'lockscreen') { return }
-    $img = $null
-    try {
-        $ps = (Get-Paths).powershell ?? 'powershell.exe'
-        $res = & $ps -NoProfile -ExecutionPolicy Bypass -Command @'
-            try {
-                [void][Windows.System.UserProfile.LockScreen, Windows.System.UserProfile, ContentType = WindowsRuntime]
-                $uri = [Windows.System.UserProfile.LockScreen]::OriginalImageFile
-                if ($uri -and $uri.LocalPath -and (Test-Path -LiteralPath $uri.LocalPath)) {
-                    $uri.LocalPath
-                }
-            } catch {}
-'@
-        if ($res) { $img = $res.Trim() }
-    } catch {}
+    $img = Get-LockScreenImage
+    if ($img -and -not (Test-Path -LiteralPath $img)) { $img = $null }
 
     if (-not $img) {
         $creative = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Lock Screen\Creative' -ErrorAction SilentlyContinue).LandscapeAssetPath
@@ -150,7 +138,69 @@ function Save-LockScreen {
         $csp = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP' -ErrorAction SilentlyContinue).LockScreenImagePath
         if ($csp -and (Test-Path -LiteralPath $csp)) { $img = $csp }
     }
+    # Still one of ours (an earlier uninstall that couldn't put it back): that is no
+    # original to return to, so the uninstall goes to Windows' default instead.
+    if (Test-WinarchyImage $img) { $img = $null }
     [void](Add-JournalEntry @{ kind = 'lockscreen'; key = 'lockscreen'; path = $img })
+}
+
+# The picture the lock screen shows, as the file it was set from (WinRT, so Windows
+# PowerShell 5.1); $null when Windows won't say.
+function Get-LockScreenImage {
+    try {
+        $ps = (Get-Paths).powershell ?? 'powershell.exe'
+        $res = & $ps -NoProfile -ExecutionPolicy Bypass -Command @'
+            try {
+                [void][Windows.System.UserProfile.LockScreen, Windows.System.UserProfile, ContentType = WindowsRuntime]
+                $uri = [Windows.System.UserProfile.LockScreen]::OriginalImageFile
+                if ($uri -and $uri.LocalPath) { $uri.LocalPath }
+            } catch {}
+'@
+        if ($res) { return "$res".Trim() }
+    } catch {}
+    $null
+}
+
+# A picture winarchy put there: its backgrounds, its code and data folders, and the older
+# omarchy-win ones (or a backup copy of them).
+function Test-WinarchyImage([string]$Path) {
+    if (-not $Path) { return $false }
+    foreach ($root in $Data, $Code) {
+        if ($root -and $Path.StartsWith($root.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    $Path -match '(?i)[\\/]\.?(winarchy|omarchy)[^\\/]*[\\/]'
+}
+
+# Windows' own lock screen picture: img100.jpg, or whichever one this Windows ships.
+function Get-DefaultLockScreenImage {
+    $dir = Join-Path $env:SystemRoot 'Web\Screen'
+    $def = Join-Path $dir 'img100.jpg'
+    if (Test-Path -LiteralPath $def) { return $def }
+    Get-ChildItem -LiteralPath $dir -File -ErrorAction SilentlyContinue |
+        Where-Object Extension -in '.jpg', '.jpeg', '.png' | Sort-Object Name | Select-Object -First 1 -ExpandProperty FullName
+}
+
+# Sets the lock screen now (ps51\lockscreen.ps1), throwing when Windows refused. A background
+# picked just before is still on its way (lockscreen.ps1 -StateFile, detached): it goes
+# first, or it would land after this and put winarchy's picture back.
+function Set-LockScreenImage([string]$Path) {
+    Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -like '*lockscreen.ps1*-StateFile*' } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    $script = Join-Path $Code 'ps51\lockscreen.ps1'
+    if (-not (Test-Path -LiteralPath $script)) { throw "$script is missing" }
+    $ps = (Get-Paths).powershell ?? 'powershell.exe'
+    $global:LASTEXITCODE = 0
+    & $ps -NoProfile -ExecutionPolicy Bypass -File $script -Path $Path
+    if ($LASTEXITCODE) { throw "Windows did not take $Path as the lock screen (the log says why)" }
+}
+
+# The lock screen as it was before winarchy, or Windows' default when that picture is gone
+# or was winarchy's own: never one of winarchy's backgrounds.
+function Restore-LockScreen([string]$Original) {
+    $target = if ($Original -and -not (Test-WinarchyImage $Original) -and (Test-Path -LiteralPath $Original)) { $Original } else { Get-DefaultLockScreenImage }
+    if (-not $target) { throw 'no Windows lock screen picture found; pick one in Settings > Personalization > Lock screen' }
+    Set-LockScreenImage $target
 }
 
 # $source 'menu' = the person picked it from the menu's Install section (theirs to keep
@@ -340,22 +390,7 @@ function Restore-JournalEntry($e, [string]$dir) {
             }
             [void][Winarchy.Native]::SystemParametersInfo(0x14, 0, $wp, 3)
         }
-        'lockscreen' {
-            $target = if ($e.path -and (Test-Path -LiteralPath $e.path)) {
-                $e.path
-            } elseif (Test-Path "$env:SystemRoot\Web\Screen\img100.jpg") {
-                "$env:SystemRoot\Web\Screen\img100.jpg"
-            } else {
-                $null
-            }
-            $lockScript = Join-Path $Code 'ps51\lockscreen.ps1'
-            if ($target -and (Test-Path $lockScript)) {
-                $ps = (Get-Paths).powershell ?? 'powershell.exe'
-                & $ps -NoProfile -ExecutionPolicy Bypass -File $lockScript -Path $target
-            } elseif (-not $target) {
-                Write-Warning "  could not find default lock screen image; set one in Settings > Personalization > Lock screen"
-            }
-        }
+        'lockscreen' { Restore-LockScreen $e.path }
         'taskbar' { Restore-Taskbar $e }
         'runkeys' {
             # Only what the apps winarchy set up added at login: anything else installed
