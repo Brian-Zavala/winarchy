@@ -55,6 +55,35 @@ Describe 'Invoke-Unattended' {
     }
 }
 
+Describe 'A UAC prompt waiting behind the terminal' {
+    BeforeAll { function Write-Warn([string]$msg) {} }
+    It 'says nothing while no prompt is open' {
+        Mock Get-Process { }
+        Mock Write-Warn { }
+        $shown = @{}
+        Show-ParkedUac $shown
+        Should -Invoke Write-Warn -Times 0
+    }
+    It 'says once that Windows is asking, whether or not the prompt can be brought up' {
+        # A pid with no windows: the notice still shows, and nothing is switched to.
+        Mock Get-Process { [pscustomobject]@{ Id = 1 } } -ParameterFilter { $Name -eq 'consent' }
+        Mock Write-Warn { }
+        $shown = @{}
+        Show-ParkedUac $shown
+        Show-ParkedUac $shown
+        Should -Invoke Write-Warn -Times 1 -ParameterFilter { $msg -match 'UAC' }
+    }
+    It 'says it again for the next prompt' {
+        Mock Write-Warn { }
+        $shown = @{ notice = $true }
+        Mock Get-Process { }
+        Show-ParkedUac $shown
+        Mock Get-Process { [pscustomobject]@{ Id = 1 } } -ParameterFilter { $Name -eq 'consent' }
+        Show-ParkedUac $shown
+        Should -Invoke Write-Warn -Times 1
+    }
+}
+
 Describe 'Invoke-Winget' {
     It 'counts "already current" as done' {
         Mock Invoke-Unattended { [pscustomobject]@{ Ok = $false; Code = -1978335189; Reason = 'exit code 0x8A15002B' } }

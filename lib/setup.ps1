@@ -69,19 +69,42 @@ function Invoke-Unattended([string]$file, [string[]]$arguments, [int]$timeoutSec
 # An installer that elevates from behind the terminal (GlazeWM's bundle does) gets its
 # UAC prompt parked: Windows shows only a flashing taskbar button, which is easy to miss
 # and invisible once the taskbar is hidden, and the install waits minutes on it. The
-# placeholder is a visible consent.exe window of this class; SwitchToThisWindow opens the
-# prompt, as clicking the button would (winarchy.ahk ShowUacPrompt does the same).
+# placeholder is a visible window of consent.exe (class "$$$Secure UAP Dummy Window Class
+# For Interim Dialog" so far, but any visible window of it counts); SwitchToThisWindow opens
+# the prompt, as clicking the button would (winarchy.ahk ShowUacPrompt does the same).
+# Whether or not that works, the window says so, with a bell: a prompt nobody sees reads
+# as a hung install.
 function Show-ParkedUac([hashtable]$shown) {
     try {
+        $consent = @(Get-Process consent -ErrorAction SilentlyContinue | ForEach-Object Id)
+        if (-not $consent) { $shown.Remove('notice'); return }
         Add-NativeType Uac @'
-[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string name);
+public delegate bool EnumProc(IntPtr h, IntPtr l);
+[DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr l);
+[DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
 [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
 [DllImport("user32.dll")] public static extern void SwitchToThisWindow(IntPtr h, bool altTab);
+public static IntPtr FindVisible(uint[] pids) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows((h, l) => {
+        uint pid; GetWindowThreadProcessId(h, out pid);
+        if (Array.IndexOf(pids, pid) >= 0 && IsWindowVisible(h)) { found = h; return false; }
+        return true;
+    }, IntPtr.Zero);
+    return found;
+}
 '@
-        $hwnd = [Winarchy.Uac]::FindWindow('$$$Secure UAP Dummy Window Class For Interim Dialog', $null)
-        if ($hwnd -eq [IntPtr]::Zero -or $shown.ContainsKey($hwnd) -or -not [Winarchy.Uac]::IsWindowVisible($hwnd)) { return }
-        $shown[$hwnd] = $true
-        Write-Ok 'Windows is asking for admin permission: answer the prompt to carry on.'
+        if (-not $shown.ContainsKey('notice')) {
+            $shown['notice'] = $true
+            Write-Host -NoNewline "`a"
+            Write-Warn 'Windows is asking for admin permission (UAC): answer the prompt to carry on. No prompt? Click the flashing shield on the taskbar.'
+        }
+        # A placeholder still there a few seconds after the last try gets another one.
+        $hwnd = [Winarchy.Uac]::FindVisible([uint32[]]$consent)
+        if ($hwnd -eq [IntPtr]::Zero) { return }
+        $now = [DateTime]::UtcNow
+        if ($shown.ContainsKey($hwnd) -and ($now - $shown[$hwnd]).TotalSeconds -lt 5) { return }
+        $shown[$hwnd] = $now
         [Winarchy.Uac]::SwitchToThisWindow($hwnd, $true)
     } catch {}
 }

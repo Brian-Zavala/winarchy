@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed: an app installer asking for admin permission from behind the terminal (GlazeWM's does) left its UAC prompt parked on the taskbar, and the install looked stuck. The install now rings the bell, says Windows is asking, and brings the prompt up; if it can't, it says to click the flashing shield on the taskbar.
+
 ## 0.1.36 — 2026-10-03
 
 - Fixed: with _Run this profile as Administrator_ on in Windows Terminal, every window Winarchy opened (Sign in, Install, Doctor, Update, Herdr, Neovim, terminal apps) asked for UAC, then failed with `0x80070002 ... The system cannot find the file specified`. They now open on Winarchy's own hidden _Omarchy Shell_ profile, which never runs elevated. On a PC where Terminal has never been opened, Winarchy now writes its settings instead of skipping its profiles, and sets the Nerd Font as Terminal's font when none is set.
