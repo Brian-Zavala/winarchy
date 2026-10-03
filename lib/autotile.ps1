@@ -32,5 +32,8 @@ function ConvertTo-AutoTileStartup($cfg, [string]$cli) {
     # A YAML single-quoted string: an apostrophe in a path (a user name like O'Brien) is ''.
     $script = (Join-Path $Code 'lib\autotile-watch.ps1') -replace "'", "''"
     $cli = $cli -replace "'", "''"
-    ", 'shell-exec pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File ""$script"" -Cli ""$cli""'"
+    # conhost --headless: started plainly, pwsh gets handed to the default terminal (Windows
+    # Terminal), whose window -WindowStyle Hidden can't hide -- and the watcher never exits,
+    # so it sat on screen showing "autotile: watching". Headless conhost makes no window at all.
+    ", 'shell-exec conhost.exe --headless pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File ""$script"" -Cli ""$cli""'"
 }

@@ -2913,7 +2913,7 @@ AutoTileGuard() {
     if starts.Length >= 5                    ; dying in a loop: stop fighting it
         return
     starts.Push(now)
-    Run('"' Env("pwsh", "pwsh.exe") '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "' Env("code") '\lib\autotile-watch.ps1" -Cli "' GlazeCli '"', , "Hide")
+    Run('conhost.exe --headless "' Env("pwsh", "pwsh.exe") '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "' Env("code") '\lib\autotile-watch.ps1" -Cli "' GlazeCli '"', , "Hide")
 }
 
 ; lib/autotile-watch.ps1 holds this mutex for as long as it runs. (Matching every pwsh's

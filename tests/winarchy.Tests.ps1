@@ -905,6 +905,8 @@ Describe 'Paths with an apostrophe' {
         $line = ConvertTo-AutoTileStartup @{ autoTiling = @{ enabled = $true } } "C:\Users\O'Brien\cli\glazewm.exe"
         $line | Should -BeLike "*O''Brien*winarchy*autotile-watch.ps1*O''Brien*glazewm.exe*"
         ($line -replace "''", '') | Should -Not -Match "O'B"
+        # Never a visible console: Windows Terminal would otherwise hold it on screen.
+        $line | Should -BeLike "*shell-exec conhost.exe --headless pwsh *"
     }
 }
 
