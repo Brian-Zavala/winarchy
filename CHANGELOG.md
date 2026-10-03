@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.36 — 2026-10-03
+
 - Fixed: with _Run this profile as Administrator_ on in Windows Terminal, every window Winarchy opened (Sign in, Install, Doctor, Update, Herdr, Neovim, terminal apps) asked for UAC, then failed with `0x80070002 ... The system cannot find the file specified`. They now open on Winarchy's own hidden _Omarchy Shell_ profile, which never runs elevated. On a PC where Terminal has never been opened, Winarchy now writes its settings instead of skipping its profiles, and sets the Nerd Font as Terminal's font when none is set.
 - Fixed: a reinstall could show GlazeWM's "Another instance of the application is already running". GlazeWM is now started once, at the end of the install, and nothing starts a second one while the first is still starting.
 - Coding agents on a fresh PC. Claude Code and Codex install with winget, so _Install > AI Agents_ no longer needs Node.js first (npm stays the fallback). _Sign in_ finds an agent installed after the bar started. Agent windows open in your home folder, not in Winarchy's own code folder, and the agent key says so when the agent can't start.
