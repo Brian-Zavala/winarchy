@@ -418,3 +418,70 @@ Describe 'Updating a zip install' {
         Should -Invoke Invoke-WebRequest -ParameterFilter { $Uri -like '*/archive/refs/heads/main.zip' }
     }
 }
+
+Describe 'Gaming step (the admin game helper is on by default)' {
+    BeforeAll {
+        # lib/targets.ps1 is not loaded here: stand-ins so they can be mocked.
+        function Get-GameHelper {}
+        function Test-GameHelperCurrent {}
+        function Enable-GameHelper {}
+    }
+    BeforeEach {
+        $global:TestCfg = @{ gameMode = $true; gameHelper = $true }
+        $global:TestState = @{}
+        $global:TestTask = $null
+        $global:TestCurrent = $false
+        Mock Get-Config { $global:TestCfg }
+        Mock Read-State { $global:TestState }
+        Mock Save-State { $global:TestState = $s }
+        Mock Get-GameHelper { @{ task = $global:TestTask } }
+        Mock Test-GameHelperCurrent { $global:TestCurrent }
+        Mock Enable-GameHelper {}
+        Mock Write-Host {}
+        Mock Log {}
+        $script:Unfinished.Clear()
+    }
+    AfterAll { Remove-Variable TestCfg, TestTask, TestCurrent -Scope Global -ErrorAction SilentlyContinue }
+
+    It 'sets the helper up during the install, without asking' {
+        Invoke-GamingStep
+        Should -Invoke Enable-GameHelper -Times 1 -Exactly
+        $global:TestState.gameHelperOffered | Should -BeTrue
+        $script:Unfinished.Count | Should -Be 0
+    }
+    It 'leaves a helper that is already current alone' {
+        $global:TestTask = 'task'; $global:TestCurrent = $true
+        Invoke-GamingStep
+        Should -Invoke Enable-GameHelper -Times 0 -Exactly
+    }
+    It 'skips it when <name> is off in the settings' -ForEach @(@{ name = 'gameHelper' }, @{ name = 'gameMode' }) {
+        $global:TestCfg[$name] = $false
+        Invoke-GamingStep
+        Should -Invoke Enable-GameHelper -Times 0 -Exactly
+    }
+    It 'a declined admin prompt does not stop the install, and says how to try again' {
+        Mock Enable-GameHelper { throw 'the game helper task was not created (permission declined?)' }
+        { Invoke-GamingStep } | Should -Not -Throw
+        $script:Unfinished[0] | Should -Match 'winarchy game-setup'
+    }
+    It 'update brings an out-of-date helper up to date' {
+        $global:TestTask = 'task'; $global:TestState.gameHelperOffered = $true
+        Invoke-GamingStep -Update
+        Should -Invoke Enable-GameHelper -Times 1 -Exactly
+    }
+    It 'update sets it up once on a PC installed before the gaming step' {
+        Invoke-GamingStep -Update
+        Invoke-GamingStep -Update
+        Should -Invoke Enable-GameHelper -Times 1 -Exactly
+    }
+    It 'update does not ask again after a declined prompt' {
+        $global:TestState.gameHelperOffered = $true
+        Invoke-GamingStep -Update
+        Should -Invoke Enable-GameHelper -Times 0 -Exactly
+    }
+    It 'update says nothing when there is nothing to do' {
+        $global:TestTask = 'task'; $global:TestCurrent = $true
+        Invoke-GamingStep -Update
+        Should -Invoke Write-Host -Times 0 -Exactly
+    }
+}

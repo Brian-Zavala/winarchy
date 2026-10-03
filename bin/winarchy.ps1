@@ -51,7 +51,8 @@
                                           refresh the bar's agent usage (limits, tokens by
                                           day and model); runs by itself every 15 minutes
   winarchy browser-setup               tint Chrome/Brave's toolbar with the theme (one admin prompt)
-  winarchy game-setup [remove]         let Super+W / the bar close games that run as administrator
+  winarchy game-setup [remove]         the admin game helper (the install sets it up): Super+W / the bar
+                                          close, minimize and restore games that run as administrator
                                           (one admin prompt: a small helper that runs as admin)
   winarchy game-add <name>             add a game process name to config.json (Super+Ctrl+G does
                                           this for the focused window, then applies it)
@@ -150,7 +151,18 @@ switch ($Verb) {
     }
     'bg-next' { Use-Lock { Invoke-BackgroundNext } }
     'browser-setup' { Enable-BrowserPolicy }
-    'game-setup' { if ($Arg -eq 'remove') { Disable-GameHelper } else { Enable-GameHelper } }
+    'game-setup' {
+        switch ($Arg) {
+            # Taken away by hand: stays away (update and doctor follow config gameHelper).
+            'remove' { Disable-GameHelper; Set-ConfigValue 'gameHelper' $false }
+            'update' {                                 # what winarchy update runs
+                Invoke-GamingStep -Update
+                Write-Unfinished
+                if ($script:Unfinished.Count) { throw 'the game helper was not set up' }
+            }
+            default { Enable-GameHelper; if ((Get-Config).gameHelper -eq $false) { Set-ConfigValue 'gameHelper' $true } }
+        }
+    }
     'game-add' {
         if (-not $Arg) { throw 'usage: winarchy game-add <process name>' }
         Use-Lock { Add-ConfigGame $Arg; Invoke-Apply -MonitorsOnly }

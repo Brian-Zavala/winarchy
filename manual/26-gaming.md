@@ -33,13 +33,14 @@ That's also what keeps a streamed session (Sunshine or Apollo, with a virtual di
 
 Many games are set to "Run this program as an administrator". Windows then keeps normal programs away from them, so `Super + W` would reach Windows (it opens Widgets) and nothing could close them.
 
-Run `winarchy game-setup` once (one admin prompt). A small helper then runs as administrator at login and does just this:
+So the install sets up a small helper for them, with one admin prompt (its _Gaming_ step). It runs as administrator at login and does just this:
 
 - `Super + W` and `Super + Q` close admin windows, and closing from the bar works.
+- An admin game is minimized when you switch away from its workspace, and comes back when you return.
 - `Super` alone doesn't open Start in front of them.
 - GlazeWM's own keys keep working in front of any admin window: `Super + 1..0`, `Super + Shift (+ Alt) + 1..0`, `Super (+ Shift) + Arrows`, `Super + Tab`, `Super + S` and `Super + F`.
 
-The helper never runs anything from your user folder, since nothing you can write to may run as administrator. See [security](48-security.md). `winarchy doctor` says when the helper is needed or out of date, and `winarchy game-setup remove` (or uninstalling) takes it away.
+The helper never runs anything from your user folder, since nothing you can write to may run as administrator. See [security](48-security.md). `winarchy update` keeps it up to date. If you said no to the admin prompt, `winarchy game-setup` sets it up later, and `winarchy doctor` says when it's missing or out of date. `winarchy game-setup remove` takes it away for good (it sets `"gameHelper": false`); uninstalling removes it too.
 
 ### Gamepad
 

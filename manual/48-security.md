@@ -8,7 +8,7 @@ Winarchy runs as you, not as administrator. Everything it installs goes into you
 |---|---|---|
 | Installing apps with winget | Install, update, and _Install_ in the menu | Some installers (GlazeWM, for one) install for every user. Apps that need it are retried together, in one prompt |
 | The browser toolbar color | `winarchy browser-setup`, once | Chrome and Brave only take a toolbar color as a browser policy, which lives in the machine-wide registry. Chrome then says "Managed by your organization" |
-| The admin games helper | `winarchy game-setup`, once | Windows keeps normal programs away from games that run as administrator. See [gaming](26-gaming.md) |
+| The admin games helper | The install (its _Gaming_ step), or `winarchy game-setup` | Windows keeps normal programs away from games that run as administrator. See [gaming](26-gaming.md) |
 
 Both one-time setups install a scheduled task that runs at the highest level for your account only. You can take them away with `winarchy game-setup remove`, or by uninstalling.
 

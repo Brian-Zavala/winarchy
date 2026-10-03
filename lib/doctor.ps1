@@ -93,7 +93,8 @@ function Invoke-Doctor([switch]$Fix) {
     & $check 'winarchy.ahk (keys, bar space, panels)' ($ahk.Count -eq 1) $(if ($ahk.Count -gt 1) { 'more than one copy is running: winarchy apply' } else { 'winarchy apply (starts it)' })
     $old = @($ahk | Where-Object { $_.CommandLine -notlike "*$Code*" })
     & $check 'running from this code folder' ($old.Count -eq 0) 'an old copy is running: winarchy apply'
-    # Games set to "Run as administrator" need the admin game helper to be closed by Super+W / the bar.
+    # Games set to "Run as administrator" need the admin game helper to be closed by Super+W /
+    # the bar, and parked/restored with their workspace. On by default (config gameHelper).
     $gh = Get-GameHelper
     if ($gh.task) {
         & $check 'admin game helper (closes admin games; carries the workspace keys over them)' (Test-GameHelperCurrent) 'winarchy game-setup (the installed copy is out of date)'
@@ -101,7 +102,10 @@ function Invoke-Doctor([switch]$Fix) {
         $games = @(Get-GameProcesses (Get-Config))
         $admin = @((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers' -ErrorAction SilentlyContinue).PSObject.Properties |
             Where-Object { $_.Value -match 'RUNASADMIN' -and $games -contains [IO.Path]::GetFileNameWithoutExtension($_.Name) })
-        if ($admin) { & $check "admin game helper: $($admin.Count) game(s) run as administrator" $false 'winarchy game-setup (one admin prompt), so Super+W and the bar can close them' }
+        if ($cfg.gameMode -ne $false -and $cfg.gameHelper -ne $false) {
+            $why = if ($admin) { ": $($admin.Count) of your games run as administrator" }
+            & $check "admin game helper (on by default)$why" $false 'winarchy game-setup (one admin prompt); "gameHelper": false in config.json if you don''t want it'
+        } elseif ($admin) { & $check "admin game helper: $($admin.Count) game(s) run as administrator" $false 'winarchy game-setup (one admin prompt), so Super+W and the bar can close them' }
     }
 
     # Your own Startup scripts' keys: winarchy's leave those to you (lib/keys.ps1). Only

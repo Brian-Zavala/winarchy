@@ -527,6 +527,36 @@ function Get-InstallAnswers($p, [switch]$Restoring) {
     $cfg
 }
 
+# Gamers first. Most games are set to "Run as administrator", and Windows keeps normal
+# programs away from those: without the admin game helper, winarchy can't close one
+# (Super+W, the bar's gamepad icon), minimize it when you leave its workspace or bring it
+# back when you return, or give it the foreground back. So it is on by default (config
+# "gameHelper"), set up here with one UAC prompt rather than left to `winarchy game-setup`.
+# Not asked: the UAC prompt is the question. -Update (winarchy update): only brings an
+# installed helper up to date, or sets it up once on a PC installed before this step.
+function Invoke-GamingStep([switch]$Update) {
+    $cfg = Get-Config
+    $off = $cfg.gameMode -eq $false -or $cfg.gameHelper -eq $false
+    $gh = Get-GameHelper
+    $current = $gh.task -and (Test-GameHelperCurrent)
+    $s = Read-State
+    if ($Update -and ($off -or $current -or (-not $gh.task -and $s.gameHelperOffered))) { return }
+    Write-Step 'Gaming'
+    if ($off) { Write-Ok "Game mode or the game helper is off in your settings: skipped (winarchy game-setup turns it on)."; return }
+    if ($current) { Write-Done 'Games: ready (the admin game helper is already set up)'; return }
+    Write-Ok 'Games that run as administrator need a small helper, so Winarchy can close them, minimize'
+    Write-Ok 'them when you switch workspace and bring them back when you return.'
+    # Asked once: a declined prompt is not asked again by every update (doctor still says).
+    $s.gameHelperOffered = $true; Save-State $s
+    try {
+        Enable-GameHelper
+        Write-Done 'Games: ready (Super+W or a right-click on the bar''s gamepad icon closes one)'
+    } catch {
+        Log "game helper: FAILED: $($_.Exception.Message)"
+        Add-Unfinished "game helper not set up ($($_.Exception.Message)): games that run as administrator can't be closed or minimized by Winarchy. winarchy game-setup tries again (one admin prompt)"
+    }
+}
+
 # Auto-hide is byte 8 of StuckRects3 (3 = on). $state puts back another value: the one the
 # journal saved, when hiding the taskbar is turned off again.
 function Set-TaskbarAutoHide([int]$state = 3) {
@@ -650,6 +680,7 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     Add-CliToPath
     Use-Lock { Invoke-Apply -NoRestart }
     Write-Done 'GlazeWM, bar, menus, keys and autostart configured'
+    Invoke-GamingStep
 
     Write-Step 'Omarchy themes and backgrounds'
     if ($themeOnline) {
@@ -908,6 +939,10 @@ function Invoke-Update {
         $applyArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Code 'bin\winarchy.ps1'), 'apply') + $(if (-not $restart) { '-NoRestart' })
         & $p.pwsh @applyArgs
         if ($LASTEXITCODE) { Add-Unfinished "applying failed: see $LogFile" }
+        # The game helper is a copy of ahk\game-helper.ahk: a new one in the code just pulled
+        # goes there too. A fresh process, so the step itself is the new code's.
+        & $p.pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Code 'bin\winarchy.ps1') game-setup update
+        if ($LASTEXITCODE) { Add-Unfinished 'game helper not set up or updated (see above); winarchy game-setup tries again (one admin prompt)' }
 
         Write-Step 'Checking again'
         Invoke-UpdateCheck

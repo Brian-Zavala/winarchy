@@ -73,6 +73,7 @@ It's JSON, so a `\` in a path is written `\\`. A file with a mistake in it is le
 | `games` | `[]` | More game process names, e.g. `["MyGame"]` |
 | `gameDirs` | `[]` | Folders your games live in, e.g. `["C:\\Games", "G:\\"]` |
 | `gameFocusGuard` | `true` | A game that loses the foreground without you asking gets it straight back |
+| `gameHelper` | `true` | The install sets up the helper for games that run as administrator (one admin prompt), so Winarchy can close, minimize and restore them. `false` keeps it off. See [gaming](26-gaming.md) |
 
 ### Agent usage
 

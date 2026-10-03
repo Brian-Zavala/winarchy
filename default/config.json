@@ -44,6 +44,7 @@
   "blockMinimize": true,
   "minimizeAllowed": [],
   "gameFocusGuard": true,
+  "gameHelper": true,
   "openOnHoveredMonitor": true,
   "glazewmManaged": true,
   "focusFollowsCursor": true,

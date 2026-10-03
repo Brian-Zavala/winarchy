@@ -132,7 +132,8 @@ function Write-UiFinish {
     $keys = @(
         @('Super + K', 'all keybindings'), @('Super + Space', 'Omarchy menu'),
         @('Super + Alt + Space', 'app launcher'), @('Super + Return', 'terminal'),
-        @('Super + 1..0', 'workspaces'), @('winarchy doctor', 'check the setup'),
+        @('Super + 1..0', 'workspaces'), @('Super + Ctrl + G', 'mark a window as a game'),
+        @('winarchy doctor', 'check the setup'),
         @('winarchy uninstall', 'undo everything')
     )
     foreach ($k in $keys) { Write-Host "      $(Format-Ui $k[0].PadRight(21) 'cyan') $(Format-Ui $k[1] 'fg')" }
