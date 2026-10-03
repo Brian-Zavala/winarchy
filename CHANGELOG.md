@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.45 — 2026-10-03
+
 - Gamers first: the install now sets up the admin game helper by itself (one admin prompt, in a new _Gaming_ step) instead of leaving it to `winarchy game-setup`. Most games run as administrator, and without the helper Winarchy couldn't close them, minimize one when you switch workspace or bring it back when you return. `winarchy update` keeps the helper up to date and sets it up once on a PC installed before this. `"gameHelper": false` in your settings, or `winarchy game-setup remove`, keeps it off. Game mode, minimize blocking and the bar's gamepad icon were already on by default and still are.
 
 ## 0.1.42 — 2026-10-03
