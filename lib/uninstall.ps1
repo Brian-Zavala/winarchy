@@ -43,6 +43,18 @@ function Remove-WingetApp([string]$Id) {
     Invoke-Elevated "winget uninstall $($args1 -join ' ')"
 }
 
+# The desktop wallpaper as Windows has it, and Windows' own picture put back. Their own
+# functions so the tests can stand in for them: the real ones change the running desktop.
+function Get-CurrentWallpaper { (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -ErrorAction SilentlyContinue).WallPaper }
+
+function Restore-DefaultWallpaper {
+    $default = "$env:SystemRoot\Web\Wallpaper\Windows\img0.jpg"
+    if (Test-Path $default) {
+        Initialize-Native
+        [void][Winarchy.Native]::SystemParametersInfo(0x14, 0, $default, 3)
+    }
+}
+
 function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [switch]$Yes) {
     $script:AssumeYes = $Yes -or [bool]$env:WINARCHY_YES
     $dir = Get-JournalDir
@@ -133,14 +145,9 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
         }
     }
 
-    $curWp = (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -ErrorAction SilentlyContinue).WallPaper
+    $curWp = Get-CurrentWallpaper
     if ($curWp -and ($curWp -like "*$Data*" -or $curWp -like "*winarchy*")) {
-        & $step 'Restore default Windows wallpaper' {
-            if (Test-Path "$env:SystemRoot\Web\Wallpaper\Windows\img0.jpg") {
-                Initialize-Native
-                [void][Winarchy.Native]::SystemParametersInfo(0x14, 0, "$env:SystemRoot\Web\Wallpaper\Windows\img0.jpg", 3)
-            }
-        }
+        & $step 'Restore default Windows wallpaper' { Restore-DefaultWallpaper }
     }
 
     # What winarchy runs on (GlazeWM, Flow, AutoHotkey, ...) goes unless -KeepApps; the

@@ -30,6 +30,12 @@ BeforeAll {
     function Get-LockScreenImage { $script:LockImage }
     function Set-LockScreenImage([string]$Path) { $script:LockSet.Add($Path); if (-not $script:LockStuck) { $script:LockImage = $Path } }
     $script:LockImage = $null
+    # The same for the desktop wallpaper: a run on a PC showing a winarchy background used
+    # to put Windows' own picture on the real desktop.
+    function Get-CurrentWallpaper { $script:Wallpaper }
+    function Restore-DefaultWallpaper { $script:WallpaperResets++ }
+    $script:Wallpaper = $null
+    $script:WallpaperResets = 0
     # Real reminders on this PC are the person's: the tests see only these.
     function Get-ScheduledTask { @($script:FakeTasks) }
     function Unregister-ScheduledTask { process { $script:Unregistered.Add($_.TaskName) } }
@@ -186,6 +192,16 @@ Describe 'Uninstall leaves no winarchy lock screen' {
         New-TestData; New-TestJournal @()
         $own = Join-Path $TestDrive 'Pictures\mine.jpg'
         New-Item -ItemType File -Force $own | Out-Null
+    }
+    It 'puts Windows'' wallpaper back only when the desktop shows a winarchy background' {
+        $script:WallpaperResets = 0
+        $script:Wallpaper = 'C:\Users\x\Pictures\mine.jpg'
+        Invoke-Uninstall -Yes 6>$null
+        $script:WallpaperResets | Should -Be 0
+        $script:Wallpaper = Join-Path $Data 'wallpapers\nord\1.jpg'
+        Invoke-Uninstall -Yes 6>$null
+        $script:WallpaperResets | Should -Be 1
+        $script:Wallpaper = $null
     }
     It 'puts Windows'' picture back when the lock screen still shows a winarchy background' {
         $script:LockImage = Join-Path $Data 'wallpapers\tokyo-night\0-winding-road.jpg'

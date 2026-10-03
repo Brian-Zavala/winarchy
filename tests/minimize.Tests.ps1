@@ -80,9 +80,14 @@ Describe 'Stopping winarchy on uninstall' {
         Mock Read-State { @{} }
         Mock Restore-WindowFrames { 0 }
         Mock Stop-ScreenshotWatcher {}
-        # Never the real lock screen.
+        # Never the real lock screen, wallpaper or reminders: uninstall reads them from this PC,
+        # and a winarchy background on the desktop was put back to Windows' own picture.
         Mock Get-LockScreenImage {}
         Mock Set-LockScreenImage {}
+        Mock Get-CurrentWallpaper {}
+        Mock Restore-DefaultWallpaper {}
+        Mock Get-ScheduledTask {}
+        Mock Unregister-ScheduledTask {}
     }
     It 'closes winarchy.ahk gracefully, then restores what a force-stop left behind' {
         Mock Get-OmarchyAhk { [pscustomobject]@{ ProcessId = 4242 } }
@@ -92,6 +97,7 @@ Describe 'Stopping winarchy on uninstall' {
         Should -Invoke Close-AhkGracefully -Times 1 -ParameterFilter { $processIds -contains 4242 }
         Should -Invoke Restore-MinimizeBoxes -Times 1
         Should -Invoke Restore-WindowFrames -Times 1
+        Should -Invoke Restore-DefaultWallpaper -Times 0
     }
     It 'restores them even when winarchy.ahk is not running' {
         Mock Get-OmarchyAhk {}
