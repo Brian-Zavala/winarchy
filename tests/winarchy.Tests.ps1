@@ -836,8 +836,10 @@ Describe 'Windows Terminal profiles' {
 Describe 'Terminal launches from AutoHotkey' {
     BeforeAll { $envAhk = Get-Content -Raw (Join-Path $root 'ahk\lib\env.ahk') }
     It 'opens every tab on the Omarchy Shell profile' {
-        $envAhk | Should -Match "(?s)RunInTerminal\(.*?new-tab' WtProfileArg\(\)"
-        $envAhk | Should -Match '(?s)RunWt\(.*?WtProfileArg\(\)'
+        $envAhk | Should -Match '(?s)RunInTerminal\(.*?Run TerminalTabLine\('
+        $envAhk | Should -Match "(?s)TerminalTabLine\(title.*?new-tab' WtProfileArg\(\)"
+        $envAhk | Should -Match '(?s)RunWt\(.*?Run WtLine\(args\)'
+        $envAhk | Should -Match '(?s)WtLine\(args\) \{.*?WtProfileArg\(\)'
         $envAhk | Should -Match 'Env\("wtProfile"\)'
     }
 }

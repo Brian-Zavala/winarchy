@@ -6,6 +6,10 @@ Run `winarchy doctor`. It checks every moving part (the apps, what's running, th
 
 The log is in `%USERPROFILE%\.winarchy\logs\winarchy.log`, and says what Winarchy did and what failed.
 
+### Every terminal Winarchy opens asks for UAC, then says "The system cannot find the file specified"
+
+That's error `0x80070002` from Windows Terminal, and it comes from _Run this profile as Administrator_ being on in Terminal's settings (under _Defaults_, or your default profile). Terminal re-launches the tab elevated, and on the way it loses track of the command. Winarchy's windows open on its own _Omarchy Shell_ profile, which never runs elevated: run `winarchy update` (or `winarchy apply`) to get it. `winarchy doctor` says when a profile runs as administrator. To stop the UAC prompt for your own new tabs too, turn that setting off in _Terminal Settings > Defaults_.
+
 ### My settings don't take effect
 
 A `config.json` with a typing mistake is left alone rather than overwritten, and Winarchy runs on the defaults until it's fixed. `winarchy doctor` says where the mistake is. The usual one is a single `\` in a path: in JSON it has to be written `\`, as in `"C:\Games"`.

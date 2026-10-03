@@ -118,27 +118,35 @@ OmarchyCmdLine(args*) {
 RunInTerminal(title, command, dir := EnvGet("USERPROFILE")) {
     if Env("wt") {
         try {
-            ; wt splits tabs on ; (escaped as \;, like Start-AgentTerminal does).
-            Run 'wt.exe new-tab' WtProfileArg() ' --title "' title '" -d "' dir '" ' StrReplace(command, ";", "\;")
+            Run TerminalTabLine(title, command, dir)
             return
         }
     }
     Run command, dir
 }
 
+; wt splits tabs on ; (escaped as \;, like Start-AgentTerminal does).
+TerminalTabLine(title, command, dir) {
+    return 'wt.exe new-tab' WtProfileArg() ' --title "' title '" -d "' dir '" ' StrReplace(command, ";", "\;")
+}
+
 ; Windows Terminal with these arguments, or the fallback command line without it.
 RunWt(args, fallback := "") {
     if Env("wt") {
-        ; No profile of its own: Omarchy Shell, placed after the window options (-w, --size...).
-        if !RegExMatch(args, "(^|\s)(-p|--profile)\s")
-            args := RegExReplace(args, "^((?:(?:-w|--window|--size|--pos)\s+\S+\s*|(?:--fullscreen|--maximized|--focus|-F|-M|-f)\s+)*)", "$1" LTrim(WtProfileArg()) " ", , 1)
         try {
-            Run 'wt.exe ' Trim(args)
+            Run WtLine(args)
             return
         }
     }
     if fallback
         try Run fallback
+}
+
+; No profile of its own: Omarchy Shell, placed after the window options (-w, --size...).
+WtLine(args) {
+    if WtProfileArg() && !RegExMatch(args, "(^|\s)(-p|--profile)\s")
+        args := RegExReplace(args, "^((?:(?:-w|--window|--size|--pos)\s+\S+\s*|(?:--fullscreen|--maximized|--focus|-F|-M|-f)\s+)*)", "$1" LTrim(WtProfileArg()) " ", , 1)
+    return 'wt.exe ' Trim(args)
 }
 
 ; PATH as the registry has it now (Machine, then User), %VARS% expanded.

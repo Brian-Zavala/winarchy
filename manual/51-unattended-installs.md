@@ -16,7 +16,8 @@ The one thing an unattended install skips is Herdr. It installs from outside win
 |------|----------|---------|
 | `WINARCHY_YES` | not set | Take every recommended answer; also makes `winarchy uninstall` keep your apps and settings without asking |
 | `WINARCHY_REPO` | `Brian-Zavala/winarchy` | The GitHub repo to install from, for a fork |
-| `WINARCHY_REF` | `main` | The branch to install from |
+| `WINARCHY_REF` | `main` | The branch to install from; an existing copy switches to it. `winarchy update` follows it too |
+| `WINARCHY_ALLOW_ELEVATED` | not set | Install from a window running as administrator anyway. Everything Winarchy starts from it then runs elevated |
 
 Winarchy goes into `%LOCALAPPDATA%\winarchy`: a git clone when git is installed, otherwise the branch's zip.
 
