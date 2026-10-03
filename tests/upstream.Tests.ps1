@@ -66,7 +66,8 @@ Describe 'Invoke-UpstreamCheck -Write' {
         $UpstreamLog = "$Code\docs\upstream.md"
         $state | ConvertTo-Json | Set-Content $UpstreamFile
         Set-Content "$Code\default\config.json" '{ "omarchyTag": "v4.0.4", "gap": 10 }'
-        Set-Content "$Code\README.md" 'Tracks Omarchy v4.0.4.'
+        Set-Content "$Code\README.md" 'Follows [`quattro`](https://github.com/omacom/omarchy/tree/quattro). Tracks Omarchy v4.0.4.'
+        Mock Invoke-GitHubApi { [pscustomobject]@{ default_branch = 'quattro' } } -ParameterFilter { $path -eq 'repos/omacom/omarchy' }
         Mock Invoke-GitHubApi { $compare } -ParameterFilter { $path -like '*/compare/*' }
         Mock Invoke-GitHubApi { [pscustomobject]@{ tag_name = 'v4.1.0' } } -ParameterFilter { $path -like '*/releases/latest' }
     }
@@ -78,6 +79,21 @@ Describe 'Invoke-UpstreamCheck -Write' {
         (Get-Content -Raw "$Code\default\config.json" | ConvertFrom-Json).omarchyTag | Should -Be 'v4.1.0'
         Get-Content -Raw "$Code\README.md" | Should -Match 'Tracks Omarchy v4\.1\.0'
         Get-Content -Raw $UpstreamLog | Should -Match '(?s)^# Upstream.*## \d{4}-\d\d-\d\d'
+    }
+    It 'follows Omarchy to a new development branch' {
+        Mock Invoke-GitHubApi { [pscustomobject]@{ default_branch = 'cinque' } } -ParameterFilter { $path -eq 'repos/omacom/omarchy' }
+        Mock Invoke-GitHubApi { $compare } -ParameterFilter { $path -like '*/compare/*...cinque' }
+        $out = Invoke-UpstreamCheck -Write
+        $out | Should -Match "development branch moved: quattro -> cinque"
+        (Get-Content -Raw $UpstreamFile | ConvertFrom-Json).branch | Should -Be 'cinque'
+        Get-Content -Raw "$Code\README.md" | Should -Match ([regex]::Escape('[`cinque`](https://github.com/omacom/omarchy/tree/cinque)'))
+        Should -Invoke Invoke-GitHubApi -ParameterFilter { $path -like '*/compare/*...cinque' } -Times 1
+    }
+    It 'keeps the branch when the lookup fails' {
+        Mock Invoke-GitHubApi { throw 'offline' } -ParameterFilter { $path -eq 'repos/omacom/omarchy' }
+        Invoke-UpstreamCheck -Write | Out-Null
+        (Get-Content -Raw $UpstreamFile | ConvertFrom-Json).branch | Should -Be 'quattro'
+        Get-Content -Raw "$Code\README.md" | Should -Match 'tree/quattro\)'
     }
     It 'puts the newest report first' {
         Set-Content $UpstreamLog "# Upstream`n`nIntro.`n`n## 2026-01-01`n`nOld.`n"

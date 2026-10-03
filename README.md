@@ -12,7 +12,10 @@ This is omakase. No forty-plugin shopping list. No weekend lost to YAML. One com
 
 Winarchy won't turn Windows into Linux, and it isn't pretending to. It just makes the hours you spend there a whole lot nicer. Enjoy!
 
-*Unofficial, and not affiliated with Omarchy or 37signals. Tracks Omarchy v4.0.4.*
+> [!NOTE]
+> **Cutting edge.** Winarchy stays in sync with [`quattro`](https://github.com/omacom/omarchy/tree/quattro), Omarchy's development branch, not just its tagged releases. New upstream commits are checked daily and ported after review, so you get Omarchy's features as they land, sometimes before Omarchy itself ships them. Themes and backgrounds come from the latest release. Tracks Omarchy v4.0.4.
+
+*Unofficial, and not affiliated with Omarchy or 37signals.*
 
 ## Install
 

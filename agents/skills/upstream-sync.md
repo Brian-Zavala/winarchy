@@ -8,7 +8,7 @@ Use this when porting what the daily `upstream` pull request reports: Omarchy co
 2. For each area with Winarchy files to review, read the upstream diff (the commit links), then the Winarchy files the report names. Decide per change: port it, adapt it to Windows, or skip it because Windows has no equivalent.
 3. Port each change as its own commit, in the repo's usual style, with its manual chapter updated in the same commit. Mention the upstream commit in the message (`Omarchy <sha7>`).
 4. A change Windows can't follow goes in the chapter's "Windows limits" note when it's user-visible, so the difference is stated rather than silent.
-5. Merge the `upstream-sync` pull request last. That moves `reviewedCommit` and, on a new release, `omarchyTag`, so the next report starts after it.
+5. Merge the `upstream-sync` pull request last. That moves `reviewedCommit` and, on a new release, `omarchyTag`, so the next report starts after it. The check follows Omarchy's default branch (its development line, `quattro` for v4); when that changes, the report says so and merging moves `branch` and the README's link with it.
 
 ## Where things map
 

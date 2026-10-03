@@ -52,16 +52,21 @@ function Invoke-GitHubApi([string]$path) {
 
 # The report, as markdown: the new release if there is one, the changed areas with the
 # Winarchy files to review, and the commits. $compare is GitHub's compare API response.
-function ConvertTo-UpstreamReport($compare, $state, [string]$latestRelease, [string]$date) {
+function ConvertTo-UpstreamReport($compare, $state, [string]$latestRelease, [string]$date, [string]$branch) {
     $commits = @($compare.commits)
     $head = if ($commits) { $commits[-1].sha } else { $state.reviewedCommit }
     $lines = [Collections.Generic.List[string]]::new()
     $lines.Add("## $date")
     $lines.Add('')
-    $lines.Add("$($compare.total_commits) new commit(s) on $($state.repo)@$($state.branch), [$($state.reviewedCommit.Substring(0, 7))...$($head.Substring(0, 7))]($($compare.html_url)).")
+    if (-not $branch) { $branch = $state.branch }
+    $lines.Add("$($compare.total_commits) new commit(s) on $($state.repo)@$branch, [$($state.reviewedCommit.Substring(0, 7))...$($head.Substring(0, 7))]($($compare.html_url)).")
     if ($compare.total_commits -gt $commits.Count) {
         $lines.Add('')
         $lines.Add("Only the first $($commits.Count) commits and $(@($compare.files).Count) files fit in one comparison: follow the link for the rest.")
+    }
+    if ($branch -ne $state.branch) {
+        $lines.Add('')
+        $lines.Add("**Omarchy's development branch moved: $($state.branch) -> $branch.** Winarchy follows it from here, and the README says so.")
     }
     if ($latestRelease -and $latestRelease -ne $state.release) {
         $lines.Add('')
@@ -98,14 +103,17 @@ function Invoke-UpstreamCheck([string]$Since, [switch]$Json, [switch]$Write) {
     $state = Read-Json $UpstreamFile
     if (-not $state) { throw "no $UpstreamFile" }
     $from = if ($Since) { $Since } else { $state.reviewedCommit }
-    $compare = Invoke-GitHubApi "repos/$($state.repo)/compare/$from...$($state.branch)"
+    # Winarchy follows Omarchy's default branch, its development line (quattro for v4).
+    $branch = try { (Invoke-GitHubApi "repos/$($state.repo)").default_branch } catch { $null }
+    if (-not $branch) { $branch = $state.branch }
+    $compare = Invoke-GitHubApi "repos/$($state.repo)/compare/$from...$branch"
     $release = try { (Invoke-GitHubApi "repos/$($state.repo)/releases/latest").tag_name } catch { $null }
     $state.reviewedCommit = $from
     $date = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')
-    $report = ConvertTo-UpstreamReport $compare $state $release $date
-    $changed = [bool]$compare.total_commits -or ($release -and $release -ne $state.release)
+    $report = ConvertTo-UpstreamReport $compare $state $release $date $branch
+    $changed = [bool]$compare.total_commits -or ($release -and $release -ne $state.release) -or $branch -ne $state.branch
     if ($Json) {
-        [ordered]@{ changed = $changed; commits = $compare.total_commits; head = $report.head; release = $release; areas = $report.areas; report = $report.text } | ConvertTo-Json -Depth 5
+        [ordered]@{ changed = $changed; branch = $branch; commits = $compare.total_commits; head = $report.head; release = $release; areas = $report.areas; report = $report.text } | ConvertTo-Json -Depth 5
     } else { $report.text }
     if (-not $Write -or -not $changed) { return }
 
@@ -114,20 +122,21 @@ function Invoke-UpstreamCheck([string]$Since, [switch]$Json, [switch]$Write) {
     $log = if ($at -ge 0) { $log.Substring(0, $at + 1) + $report.text + "`n" + $log.Substring($at + 1) } else { $log.TrimEnd() + "`n`n" + $report.text }
     Write-Utf8 $UpstreamLog $log
 
-    $new = [ordered]@{ repo = $state.repo; branch = $state.branch; reviewedCommit = $report.head; reviewedAt = $date; release = $state.release }
+    $new = [ordered]@{ repo = $state.repo; branch = $branch; reviewedCommit = $report.head; reviewedAt = $date; release = $state.release }
     if ($release -and $release -ne $state.release) {
         $new.release = $release
         # The themes and backgrounds come from the release Winarchy tracks.
         $cfgFile = Join-Path $Code 'default\config.json'
         $cfg = Get-Content -Raw $cfgFile
         Write-Utf8 $cfgFile ($cfg -replace '("omarchyTag":\s*")[^"]*(")', "`${1}$release`${2}")
-        $readme = Join-Path $Code 'README.md'
-        if (Test-Path $readme) {
-            $t = Get-Content -Raw $readme
-            # Digits and inner dots only: the sentence's own full stop stays.
-            $n = $t -replace 'Tracks Omarchy v\d+(\.\d+)*', "Tracks Omarchy $release"
-            if ($n -ne $t) { Write-Utf8 $readme $n }
-        }
+    }
+    $readme = Join-Path $Code 'README.md'
+    if (Test-Path $readme) {
+        $t = Get-Content -Raw $readme
+        # Digits and inner dots only: the sentence's own full stop stays.
+        $n = $t -replace 'Tracks Omarchy v\d+(\.\d+)*', "Tracks Omarchy $($new.release)"
+        $n = $n -replace "\[``[^``]+``\]\(https://github\.com/$([regex]::Escape($state.repo))/tree/[^)]+\)", "[``$branch``](https://github.com/$($state.repo)/tree/$branch)"
+        if ($n -ne $t) { Write-Utf8 $readme $n }
     }
     Write-Utf8 $UpstreamFile (($new | ConvertTo-Json) + "`n")
 }
