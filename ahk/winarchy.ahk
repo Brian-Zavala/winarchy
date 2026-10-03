@@ -109,6 +109,7 @@ Games := Map()            ; game windows seen in front: hwnd -> process name
 GameHome := Map()         ; hwnd -> name of the workspace the game belongs to (HomeWorkspace)
 GameParked := Map()       ; hwnd -> tick: minimized by GameWorkspaceSync (its workspace was left)
 BusyUntil := 0            ; a game / fullscreen app was in front until a moment ago
+BarBusyUntil := 0         ; the same, for repairing the bar: see BarHeldBack
 DisplayPending := false   ; a display change (or bar restart) waits for it to close
 BlockMinimize := Env("blockMinimize", "1") = "1"
 LastPad := 0              ; A_TickCount of the last gamepad input
@@ -116,8 +117,10 @@ SetTimer FullscreenWatch, 400
 OnExit ShowHiddenBars
 if !BarEnabled                        ; bar turned off: no strip kept free for it
     SetTimer () => ApplyGaps(GapsOn(), false), -3000
-; Bring the bar back if Zebar dies or a monitor lost its bar; reopen the bars
-; after Explorer restarts or the display layout changes (monitor wake, dock).
+; Bring the bar back if Zebar or its page dies or a monitor lost its bar, and keep it
+; at winarchy.ini's height; reopen the bars after Explorer restarts. A display layout
+; change (monitor wake, dock) Zebar follows by itself: BarGuard repairs what it misses.
+RefreshEnv()
 SetTimer BarGuard, 5000
 ; Keep these arrow bodies value-less: an arrow returns what its body evaluates to, and a
 ; non-empty OnMessage return swallows the message (SetTimer answers ""). Same trap as the
@@ -906,13 +909,25 @@ WmLog(msg) {
 
 BarGuard() {
     global BarEnabled, Zebar
-    static lastRestart := 0, lastRepair := 0
-    if !BarEnabled || Busy()      ; a game changing display modes: see FullscreenWatch
+    static lastRestart := 0, lastRepair := 0, deadSince := 0, badSince := 0
+    if !BarEnabled || BarHeldBack()   ; a game changing display modes: see FullscreenWatch
         return
+    RefreshEnv()                      ; the text size changed the bar height, no restart
     if !ProcessExist("zebar.exe") {
         try Run('"' Zebar '" startup', , "Hide")
         return
     }
+    ; Zebar running with no page in its bars: they stay up, topmost and empty, so the bar
+    ; is simply gone. A few seconds' grace first: Zebar starts its webview after itself.
+    if !ZebarPageAlive() {
+        deadSince := deadSince || A_TickCount
+        if A_TickCount - deadSince >= 10000 {
+            deadSince := 0, lastRestart := A_TickCount
+            RestartZebar("its page stopped (the WebView2 process behind it is gone)")
+        }
+        return
+    }
+    deadSince := 0
     ; Zebar's generic starter bar: its settings.json was reset (Zebar writes that bar in
     ; when it finds none), so restarting Zebar alone would only bring it back. Apply
     ; points the settings at winarchy's bar again and restarts Zebar.
@@ -924,10 +939,127 @@ BarGuard() {
         }
         return
     }
-    if BarWindows().Count < MonitorGetCount() && A_TickCount - lastRestart > 20000 {
-        lastRestart := A_TickCount
-        RestartBar()
+    ; A monitor without its bar, or with one sized for an old layout. Zebar reopens its
+    ; bars itself when the monitors change (it looks every 4 s), so only what stays wrong
+    ; across two looks here is reopened; one reopen racing Zebar's own could lose a bar.
+    if !BarLayoutOk() {
+        badSince := badSince || A_TickCount
+        if A_TickCount - badSince >= 8000 && A_TickCount - lastRestart > 20000 {
+            badSince := 0, lastRestart := A_TickCount
+            WmLog("bar: missing or out of place on a monitor: reopening it")
+            RestartBar()
+        }
+        return
     }
+    badSince := 0
+    FixBarHeights()
+}
+
+; A game or fullscreen window is in front, or was a moment ago: no new bar windows over it
+; (see "Games and fullscreen apps"). Not Windows' own busy state (FullscreenState's 2):
+; with the taskbar hidden it can stay on while nothing covers the bar, and the bar would
+; never be repaired. An exclusive-fullscreen Direct3D game (3) still counts.
+BarHeldBack() {
+    global BarBusyUntil
+    PerMonitorDpi()
+    return A_TickCount < BarBusyUntil || GameRunning() || D3DFullscreen() || CoveredMonitors().Count > 0
+}
+
+D3DFullscreen() {
+    state := 0
+    try DllCall("shell32\SHQueryUserNotificationState", "int*", &state)
+    return state = 3
+}
+
+; Zebar draws its widgets in WebView2: a browser process under zebar.exe, and the page in
+; a renderer under that. Either can go (a GPU reset, a crash, something stopping it) while
+; zebar.exe and its windows stay. The browser is in every process snapshot; telling the
+; renderer from the GPU and utility processes takes WMI, which can stall this script, so
+; that is looked at every 30 s, and at each check while it was missing (a new browser
+; process starts its renderer a moment later: BarGuard's grace covers that).
+ZebarPageAlive() {
+    static browser := 0, rendererOk := true, lastLook := 0
+    zebars := Map(), found := 0
+    for p in ProcessSnapshot(true)
+        if p.name = "zebar.exe"
+            zebars[p.pid] := true
+    for p in ProcessSnapshot()
+        if p.name = "msedgewebview2.exe" && zebars.Has(p.ppid)
+            found := p.pid
+    if !found
+        return false
+    if found != browser || !rendererOk || A_TickCount - lastLook > 30000 {
+        browser := found, lastLook := A_TickCount
+        try rendererOk := ComObjGet("winmgmts:").ExecQuery("SELECT ProcessId FROM Win32_Process WHERE Name='msedgewebview2.exe' AND ParentProcessId=" found " AND CommandLine LIKE '%--type=renderer%'").Count > 0
+    }
+    return rendererOk
+}
+
+; Zebar itself, not just its bar windows: reopened windows would get the same dead page.
+RestartZebar(why) {
+    global Zebar
+    WmLog("bar: " why ": restarting Zebar")
+    zebars := Map()
+    for p in ProcessSnapshot(true)
+        if p.name = "zebar.exe"
+            zebars[p.pid] := true
+    for p in ProcessSnapshot()
+        if p.name = "msedgewebview2.exe" && zebars.Has(p.ppid)
+            try ProcessClose p.pid
+    for pid, _ in zebars
+        try ProcessClose pid
+    loop 30 {
+        if !ProcessExist("zebar.exe")
+            break
+        Sleep 100
+    }
+    try Run('"' Zebar '" startup', , "Hide")
+}
+
+; Every monitor has a bar across its top edge (physical pixels, like Zebar places it).
+BarLayoutOk() {
+    DetectHiddenWindows true          ; one hidden under a fullscreen window is still there
+    bars := BarWindows()
+    loop MonitorGetCount() {
+        if !bars.Has(A_Index)
+            return false
+        try {
+            MonitorGet A_Index, &l, &t, &r
+            WinGetPos &x, &y, &w, , bars[A_Index].hwnd
+            if Abs(x - l) > 2 || Abs(y - t) > 2 || Abs(w - (r - l)) > 2
+                return false
+        }
+    }
+    return true
+}
+
+; The bars at winarchy.ini's barHeight. Zebar keeps the height it started with in memory,
+; so after a text size change (lib/apply.ps1 Update-BarHeight resizes the bars without a
+; restart) a bar Zebar reopens comes back at the old height: put it right. Zebar's own
+; scaling, truncated: barHeight px * the monitor's DPI / 96.
+FixBarHeights() {
+    want := Integer(Env("barHeight", 26))
+    for m, bar in BarWindows() {
+        try {
+            dpi := DllCall("GetDpiForWindow", "ptr", bar.hwnd, "uint") || 96
+            h := Floor(want * dpi / 96)
+            WinGetPos , , &w, &cur, bar.hwnd
+            if Abs(cur - h) > 1
+                DllCall("SetWindowPos", "ptr", bar.hwnd, "ptr", 0, "int", 0, "int", 0, "int", w, "int", h, "uint", 0x0216)  ; NOMOVE|NOZORDER|NOACTIVATE|NOOWNERZORDER
+        }
+    }
+}
+
+; winarchy.ini written again without this script restarting (the text size): read it again.
+RefreshEnv() {
+    global OW
+    static stamp := ""
+    try t := FileGetTime(EnvGet("USERPROFILE") "\.winarchy\generated\winarchy.ini", "M")
+    catch
+        return
+    if stamp != "" && t != stamp
+        OW := LoadOmarchyEnv()
+    stamp := t
 }
 
 RestartBar(*) {
@@ -936,8 +1068,9 @@ RestartBar(*) {
     if !BarEnabled
         return
     ; New bar windows over a game, then GlazeWM redrawing it, knock it out of
-    ; fullscreen: it switches display mode again and it all repeats. After it closes.
-    if Busy() {
+    ; fullscreen: it switches display mode again and it all repeats. After it closes
+    ; (BarGuard then reopens a bar that is missing).
+    if BarHeldBack() {
         DisplayPending := true
         return
     }
@@ -953,8 +1086,10 @@ RestartBar(*) {
 ; A monitor was added or removed (laptop dock/undock, or an Apollo/Sunshine stream's
 ; virtual display appearing/disappearing): re-split the workspaces. Games switch display
 ; modes too, and streaming ends with real monitors reappearing while a game may still be
-; open on another workspace: both wait for every game to close, not just the one in front
-; (RestartBar still brings the bar back promptly - see its own GameOpen check above).
+; open on another workspace: both wait for every game to close, not just the one in front.
+; The bar isn't reopened here: Zebar reopens its bars for the new layout by itself, and
+; closing them at the same time could leave a monitor without one. BarGuard reopens a
+; bar that is still missing or out of place after that.
 OnDisplayChange() {
     global MonitorCount, DisplayPending
     if Busy() || GameOpen() {
@@ -969,7 +1104,9 @@ OnDisplayChange() {
         MonitorCount := MonitorGetCount()
         OmarchyCmd("apply", "-MonitorsOnly")
     }
-    RestartBar()
+    HideTaskbars()
+    if !GameOpen()                        ; see RestartBar
+        SetTimer () => Glaze("wm-redraw"), -2500
 }
 
 ; Close just the bar windows; Zebar itself keeps running for the menu widget.
@@ -1024,10 +1161,12 @@ GapsOn() {
 
 ; Topmost bar, but a fullscreen window (Super+F, video, game) may cover it.
 FullscreenWatch() {
-    global BarEnabled, BusyUntil, DisplayPending, Games
+    global BarEnabled, BusyUntil, BarBusyUntil, DisplayPending, Games
     static lastHomeCheck := 0
     PerMonitorDpi()
     covered := CoveredMonitors()
+    if covered.Count || GameRunning() || D3DFullscreen()
+        BarBusyUntil := A_TickCount + 5000
     if covered.Count || GameRunning() || FullscreenState()
         BusyUntil := A_TickCount + 5000
     ; The heavy catch-up (monitor resplit, workspace repair, a redrawing wm-redraw) waits
@@ -1368,14 +1507,14 @@ GiveFocusBack(game, admin) {
 ; {monitor: window} for each monitor whose front window is fullscreen or a game:
 ; the focused window, or the one showing at the monitor's centre (overlays such as
 ; NVIDIA's or Steam's are click-through, so they don't count).
-; IsGame is checked first: a fullscreen window short-circuits IsFullscreenWindow||IsGame
-; the other way round, so a game that already fills the screen (most of them, once
-; started) would never reach IsGame and so never get registered or ignored.
+; IsGame is checked first: a fullscreen window short-circuits CoversBar||IsGame the
+; other way round, so a game that already fills the screen (most of them, once started)
+; would never reach IsGame and so never get registered or ignored.
 CoveredMonitors() {
     covered := Map()
     ; (try: any of these windows can close between two calls)
     try {
-        if (fg := WinExist("A")) && WinGetMinMax(fg) != -1 && (IsGame(fg) || IsFullscreenWindow(fg))
+        if (fg := WinExist("A")) && WinGetMinMax(fg) != -1 && (IsGame(fg) || CoversBar(fg))
             covered[MonitorOfWindow(fg)] := fg
     }
     loop MonitorGetCount() {
@@ -1384,11 +1523,32 @@ CoveredMonitors() {
         try {
             MonitorGet A_Index, &l, &t, &r, &b
             top := RootWindowAt((l + r) // 2, (t + b) // 2)
-            if top && (IsGame(top) || IsFullscreenWindow(top)) && MonitorOfWindow(top) = A_Index
+            if top && (IsGame(top) || CoversBar(top)) && MonitorOfWindow(top) = A_Index
                 covered[A_Index] := top
         }
     }
     return covered
+}
+
+; A fullscreen window the bar steps aside for (Super+F, a video, a browser's or terminal's
+; fullscreen), not one that only fills the monitor. With the taskbar hidden a maximized
+; window fills it too: one that keeps its resizable frame (Super+Alt+F full width, a
+; double-clicked title bar) is maximized, not fullscreen - going fullscreen drops the
+; frame. Never: windows on another workspace (cloaked), tool and no-activate windows (the
+; wallpaper reveal, overlays), and the shell's own full-monitor surfaces (Start, Search,
+; Alt+Tab, Task View), which come and go in a moment and would only blink the bar.
+CoversBar(hwnd) {
+    try {
+        if IsCloaked(hwnd) || WinGetExStyle(hwnd) & 0x08000080       ; WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW
+            return false
+        if WinGetMinMax(hwnd) = 1 && WinGetStyle(hwnd) & 0x40000      ; WS_THICKFRAME
+            return false
+        if WinGetClass(hwnd) ~= "^(XamlExplorerHostIslandWindow|MultitaskingViewFrame|ForegroundStaging)$"
+            || WinGetProcessName(hwnd) ~= "i)^(StartMenuExperienceHost|SearchHost|SearchApp|ShellExperienceHost|ShellHost)\.exe$"
+            return false
+        return IsFullscreenWindow(hwnd)
+    }
+    return false
 }
 
 RootWindowAt(x, y) {

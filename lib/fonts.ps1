@@ -125,9 +125,9 @@ function Invoke-TextSize([string]$size) {
     $s = Read-State
     Write-Status $s -BumpTheme
     Log "text size ${px}px -> bar, menus, panels, terminals"
-    # A bigger size needs a taller bar: that is GlazeWM's top gap and the bar window, so
-    # re-apply (which restarts the bar). Sizes at or under 12px keep the bar as it is.
-    if ((Get-BarHeight (Get-Config)) -ne $oldBar) { Invoke-Apply }
+    # A bigger size needs a taller bar: GlazeWM's top gap and the bar window, resized in
+    # place (no restart: the bar stays up). Sizes at or under 12px keep the bar as it is.
+    if ((Get-BarHeight (Get-Config)) -ne $oldBar) { Update-BarHeight }
 }
 
 # Windows Terminal (settings.json, reloads by itself), and Alacritty when it has a config.

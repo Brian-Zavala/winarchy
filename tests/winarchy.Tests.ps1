@@ -285,7 +285,12 @@ Describe 'Bar restart' {
     # Zebar attaches to its parent's console: from `winarchy update` it would log into
     # that terminal and die with it. It must be started through (console-less) AutoHotkey.
     BeforeAll {
+        # All of Stop-Zebar: with only Get-Process stubbed, the webview half of it found the
+        # real Zebar's WebView2 processes and stopped them, leaving the bar empty.
         Mock Get-Process {}
+        Mock Get-CimInstance {}
+        Mock Stop-Process {}
+        Mock Set-ZebarStartup {}
         Mock Start-Sleep {}
         Mock Start-Process {}
         Mock Start-Hidden {}
@@ -298,6 +303,43 @@ Describe 'Bar restart' {
     It 'falls back to a direct start without AutoHotkey' {
         Restart-Bar @{ zebar = 'C:\z\zebar.exe' }
         Should -Invoke Start-Hidden -Times 1
+    }
+}
+
+Describe 'The bar stays up (winarchy.ahk)' {
+    BeforeAll {
+        $ahk = Get-Content -Raw "$root\ahk\winarchy.ahk"
+        function Get-AhkFunction([string]$name) {
+            if ($ahk -match "(?ms)^$name\([^)]*\)\s*\{.*?^\}") { $Matches[0] } else { throw "no $name in winarchy.ahk" }
+        }
+    }
+    It 'restarts Zebar when its page is gone, not just when zebar.exe is' {
+        Get-AhkFunction 'BarGuard' | Should -Match 'ZebarPageAlive\(\)'
+        Get-AhkFunction 'BarGuard' | Should -Match 'RestartZebar\('
+        Get-AhkFunction 'ZebarPageAlive' | Should -Match 'msedgewebview2\.exe'
+        Get-AhkFunction 'ZebarPageAlive' | Should -Match '--type=renderer'
+    }
+    It 'is not held back by Windows'' own busy state, only by what covers it' {
+        Get-AhkFunction 'BarGuard' | Should -Match 'BarHeldBack\(\)'
+        Get-AhkFunction 'BarGuard' | Should -Not -Match 'Busy\(\)'
+        Get-AhkFunction 'RestartBar' | Should -Not -Match 'Busy\(\)'
+        Get-AhkFunction 'BarHeldBack' | Should -Not -Match 'FullscreenState\(\)'
+    }
+    It 'hides only for real fullscreen windows' {
+        Get-AhkFunction 'CoveredMonitors' | Should -Match 'CoversBar\('
+        Get-AhkFunction 'CoveredMonitors' | Should -Not -Match 'IsFullscreenWindow\('
+        $c = Get-AhkFunction 'CoversBar'
+        $c | Should -Match 'IsCloaked'
+        $c | Should -Match '0x40000'          # maximized with its frame: full width, not fullscreen
+        $c | Should -Match '0x08000080'       # tool / no-activate windows (the wallpaper reveal)
+    }
+    It 'leaves a display change to Zebar instead of closing the bars' {
+        Get-AhkFunction 'OnDisplayChange' | Should -Not -Match 'RestartBar\(|CloseBar\('
+        Get-AhkFunction 'BarGuard' | Should -Match 'BarLayoutOk\(\)'
+    }
+    It 'keeps the bars at winarchy.ini''s height after a text size change' {
+        Get-AhkFunction 'BarGuard' | Should -Match 'RefreshEnv\(\)'
+        Get-AhkFunction 'BarGuard' | Should -Match 'FixBarHeights\(\)'
     }
 }
 
@@ -677,6 +719,18 @@ Describe 'Theme set order' {
         Mock Set-OmarchyStateTheme {}
         Invoke-ThemeSet 't'
         $script:order -join ' ' | Should -Be 'bar status:True background slow'
+    }
+}
+
+Describe 'Default background' {
+    BeforeEach { Mock Get-ThemeBackgrounds { @('C:\w\0-winding-road.jpg', 'C:\w\1-quattro.jpg', 'C:\w\2-swirl-buck.jpg') } }
+    It 'opens Tokyo Night on quattro, as shipped in config' {
+        Get-DefaultBackground 'tokyo-night' | Should -Be 'C:\w\1-quattro.jpg'
+    }
+    It 'falls back to the first by name when the named one is missing or none is named' {
+        Mock Get-Config { @{ defaultBackgrounds = @{ 'tokyo-night' = 'gone.jpg' } } }
+        Get-DefaultBackground 'tokyo-night' | Should -Be 'C:\w\0-winding-road.jpg'
+        Get-DefaultBackground 'catppuccin' | Should -Be 'C:\w\0-winding-road.jpg'
     }
 }
 

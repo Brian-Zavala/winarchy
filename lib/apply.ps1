@@ -818,6 +818,66 @@ function Restart-Bar($p) {
     else { Start-Hidden $p.zebar @('startup') }
 }
 
+# Sets the open bar windows to $height px (scaled by each one's monitor DPI the way Zebar
+# scales them: truncated), where they are. The page fills its window, so it follows.
+function Resize-BarWindows([int]$height) {
+    if (-not ('Winarchy.BarWindows' -as [type])) {
+        Add-Type -Namespace Winarchy -Name BarWindows -MemberDefinition @'
+delegate bool EnumProc(IntPtr h, IntPtr l);
+[DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, System.Text.StringBuilder s, int n);
+[DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+[DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+[DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr h);
+[DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+[DllImport("user32.dll")] static extern IntPtr SetThreadDpiAwarenessContext(IntPtr c);
+struct RECT { public int L, T, R, B; }
+public static int Resize(uint[] zebarPids, int height) {
+    // Physical pixels, like Zebar's own placement (per-monitor aware v2).
+    IntPtr old = SetThreadDpiAwarenessContext(new IntPtr(-4));
+    int n = 0;
+    try {
+        EnumWindows((h, l) => {
+            uint pid; GetWindowThreadProcessId(h, out pid);
+            if (Array.IndexOf(zebarPids, pid) < 0) return true;
+            var t = new System.Text.StringBuilder(64); GetWindowText(h, t, 64);
+            if (t.ToString() != "Zebar - omarchy / bar") return true;
+            uint dpi = GetDpiForWindow(h); if (dpi == 0) dpi = 96;
+            RECT r; GetWindowRect(h, out r);
+            int want = (int)(height * dpi / 96.0);
+            if (r.B - r.T != want && SetWindowPos(h, IntPtr.Zero, 0, 0, r.R - r.L, want, 0x0216)) n++;  // NOMOVE|NOZORDER|NOACTIVATE|NOOWNERZORDER
+            return true;
+        }, IntPtr.Zero);
+    } finally { if (old != IntPtr.Zero) SetThreadDpiAwarenessContext(old); }
+    return n;
+}
+'@
+    }
+    $pids = [uint32[]]@(Get-Process zebar -ErrorAction SilentlyContinue | ForEach-Object Id)
+    if (-not $pids) { return 0 }
+    [Winarchy.BarWindows]::Resize($pids, $height)
+}
+
+# The bar's height changed (text size): GlazeWM's strip for it, winarchy.ini and Zebar's
+# settings follow, and the open bars are resized where they are. Nothing restarts, so the
+# bar never goes away. Zebar holds its widget settings in memory until it restarts, so it
+# may reopen a bar at the old height (a monitor change): winarchy.ahk reads winarchy.ini
+# again and puts it back (BarGuard).
+function Update-BarHeight {
+    $p = Get-Paths
+    $cfg = Get-Config
+    Write-ZebarPack $p $cfg
+    Write-AhkIni $p $cfg
+    $old = if (Test-Path $GlazeConfig) { Get-Content -Raw $GlazeConfig } else { '' }
+    $monitors = Get-LayoutMonitorCount @($p.monitors).Count (Get-BoundMonitorCount $old)
+    if ((Write-GlazeConfig $monitors) -and $p.glazewmCli -and (Get-GlazeWmProcess)) {
+        & $p.glazewmCli command wm-reload-config | Out-Null
+    }
+    $height = Get-BarHeight $cfg
+    $n = try { Resize-BarWindows $height } catch { Log "bar resize FAILED: $($_.Exception.Message)"; 0 }
+    Log "bar height ${height}px ($n bar window(s) resized in place)"
+}
+
 function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Resplit) {
     Invoke-ConfigMigration
     $p = Update-Paths

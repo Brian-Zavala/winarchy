@@ -32,6 +32,7 @@ Describe 'Text size (omarchy-display-text-size)' {
         Mock Get-Paths { @{ wtSettings = $wt } }
         Mock Write-Status {}
         Mock Invoke-Apply {}
+        Mock Update-BarHeight {}
         Mock Save-JsonProperty {}
     }
     It 'refuses sizes outside 9-20 and non-numbers' {
@@ -54,16 +55,42 @@ Describe 'Text size (omarchy-display-text-size)' {
         (Read-Json $wt).profiles.defaults.font.size | Should -Be 14
         (Read-Json $wt).profiles.defaults.font.face | Should -Be 'JetBrainsMono Nerd Font'
     }
-    It 'only re-applies when the bar has to grow' {
+    It 'resizes the bar only when it has to grow, and never restarts it' {
         Invoke-TextSize '10'
-        Should -Invoke Invoke-Apply -Times 0 -Exactly
+        Should -Invoke Update-BarHeight -Times 0 -Exactly
         Invoke-TextSize '16'
-        Should -Invoke Invoke-Apply -Times 1 -Exactly
+        Should -Invoke Update-BarHeight -Times 1 -Exactly
+        Should -Invoke Invoke-Apply -Times 0 -Exactly
     }
     It 'resets to 12px' {
         Invoke-TextSize '16'
         Invoke-TextSize 'reset'
         (Get-Config).textSize | Should -Be 12
+    }
+}
+
+Describe 'A taller bar without a restart' {
+    BeforeEach {
+        Mock Get-Paths { @{ glazewmCli = 'C:\g\glazewm.exe'; monitors = @(1, 2) } }
+        Mock Get-Config { @{ barHeight = 26; textSize = 16 } }
+        Mock Write-ZebarPack {}
+        Mock Write-AhkIni {}
+        Mock Write-GlazeConfig { $false }
+        Mock Resize-BarWindows { 2 }
+        Mock Restart-Bar {}
+        Mock Stop-Zebar {}
+        Mock Restart-OmarchyAhk {}
+        $GlazeConfig = Join-Path $TestDrive 'glazewm.yaml'
+    }
+    It 'resizes the open bars and writes what the next start reads, restarting nothing' {
+        Update-BarHeight
+        Should -Invoke Resize-BarWindows -Times 1 -Exactly -ParameterFilter { $height -eq 35 }
+        Should -Invoke Write-ZebarPack -Times 1 -Exactly
+        Should -Invoke Write-AhkIni -Times 1 -Exactly
+        Should -Invoke Write-GlazeConfig -Times 1 -Exactly
+        Should -Invoke Restart-Bar -Times 0 -Exactly
+        Should -Invoke Stop-Zebar -Times 0 -Exactly
+        Should -Invoke Restart-OmarchyAhk -Times 0 -Exactly
     }
 }
 

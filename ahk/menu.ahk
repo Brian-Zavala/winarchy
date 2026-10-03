@@ -97,8 +97,8 @@ switch verb {
     case "monitor":
         if A_Args.Length > 2 && !SetMonitorEnabled(arg, A_Args[3] = "on")
             Notify(A_Args[3] = "on" ? "Windows could not turn that display on" : "The last display that is on stays on")
-    ; A size that needs a taller bar re-applies, which restarts Zebar and so closes the
-    ; panel this came from: open it again where it was.
+    ; A size that needs a taller bar resizes the bar where it is (no restart), so the
+    ; panel this came from stays open; should it have closed anyway, open it again.
     case "text-size":
         if OmarchyCmdWait("text-size", arg)
             Notify("Text size change failed (Update > Doctor shows why)")
