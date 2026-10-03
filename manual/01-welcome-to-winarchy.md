@@ -8,4 +8,6 @@ It also follows what Omarchy 4 (Quattro) added: the menu with its software catal
 
 Winarchy is unofficial. It isn't affiliated with Omarchy or 37signals, and it tracks Omarchy's releases rather than leading them. Where Windows can't do what Hyprland does, this manual says so.
 
+Winarchy is for when you can't leave Windows yet, for work, a game or an app that only runs here. It's meant as a way in: learn the keys and the workflow here, and when you're ready, [install the real Omarchy](https://omarchy.org). Everything you learned carries over.
+
 `Super` is the Windows key. Let's get started with the basics.

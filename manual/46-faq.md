@@ -31,3 +31,7 @@ Yes. The installer asks whether to keep your own launcher script, or set `"launc
 ### Does it change anything I can't get back?
 
 No. Every change is recorded before it's made, and `winarchy uninstall` puts it all back. See [system snapshots](47-system-snapshots.md).
+
+### Should I just use Omarchy instead?
+
+If you can, yes. Omarchy on Linux is the real thing: Hyprland does what GlazeWM can't, and nothing has to work around Windows. Winarchy is for when you can't switch yet, and the keys, themes and menu here are Omarchy's, so moving over later is easy. When you do, `winarchy uninstall` puts this PC back the way it was.
