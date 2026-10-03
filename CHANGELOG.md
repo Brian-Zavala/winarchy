@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.51 — 2026-10-03
+
 - Fixed: prompts in Herdr and in terminals opened with Winarchy's keys could lose all their colours, leaving oh-my-posh's and starship's Nerd Font caps as stray outlines. When Winarchy was installed, updated or applied from a Claude Code session, the key daemon, bar and window manager inherited that session's `NO_COLOR=1` and passed it to everything they started, and a `claude` started there took itself for part of that session. Winarchy and its key daemon now drop those variables before starting anything. A `NO_COLOR` you set yourself is kept.
 
 ## 0.1.48 — 2026-10-03
