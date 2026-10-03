@@ -230,6 +230,8 @@ function Write-AhkIni($p, $cfg) {
             browser = $browser; browserPrivate = $(if ($cfg.apps.browser -eq 'auto') { $p.browserPrivate } else { Get-BrowserPrivateFlag $browser })
             btop = $(if ($p.btopDir) { Join-Path $p.btopDir 'btop4win.exe' })
             herdr = $p.herdr
+            # Set-TerminalProfiles' Omarchy Shell, once it is in Terminal's settings.
+            wtProfile = $(if ($p.wtSettings -and (Select-String -LiteralPath $p.wtSettings -SimpleMatch $ShellProfile -Quiet -ErrorAction SilentlyContinue)) { $ShellProfile })
         }
         config = [ordered]@{
             flowHotkey = $p.flowHotkey
@@ -556,6 +558,11 @@ function Set-Autostart($p, $cfg) {
 $ScreensaverProfile = '{5f6a2c1e-7a39-4b1f-9e0d-0a1c2e3f4b51}'
 $AboutProfile = '{5f6a2c1e-7a39-4b1f-9e0d-0a1c2e3f4b52}'
 $AgentProfile = '{5f6a2c1e-7a39-4b1f-9e0d-0a1c2e3f4b53}'
+# Every other terminal winarchy opens (Sign in, Install, Doctor, Update, nvim, TUI apps).
+# Pinned to elevate=false: with "Run as administrator" on in Terminal's defaults, a tab on
+# the default profile is re-launched elevated, and that path quotes the whole command line
+# as one file name (error 0x80070002).
+$ShellProfile = '{5f6a2c1e-7a39-4b1f-9e0d-0a1c2e3f4b54}'
 
 function Set-TerminalProfiles($p) {
     $file = $p.wtSettings
@@ -597,9 +604,15 @@ function Set-TerminalProfiles($p) {
             commandline = "`"$pwsh`" -NoLogo -Command `"& '$Code\bin\winarchy.ps1' agent -Inline`""
             tabTitle = 'Omarchy Agent'; suppressApplicationTitle = $true
             font = [ordered]@{ face = $font }; padding = '8'; bellStyle = 'none'
+        },
+        [ordered]@{
+            guid = $ShellProfile; name = 'Omarchy Shell'; hidden = $true
+            elevate = $false
+            commandline = "`"$pwsh`" -NoLogo"
+            font = [ordered]@{ face = $font }; startingDirectory = '%USERPROFILE%'
         }
     )
-    $list = @($wt.profiles.list | Where-Object { $_.guid -notin $ScreensaverProfile, $AboutProfile, $AgentProfile })
+    $list = @($wt.profiles.list | Where-Object { $_.guid -notin $ScreensaverProfile, $AboutProfile, $AgentProfile, $ShellProfile })
     foreach ($w in $want) { Save-JsonItem $file 'profiles.list' $w.name }
     $wt.profiles.list = @($list) + $want
     if ($pwsh) { Set-TerminalDefaultProfile $file $wt }
@@ -785,13 +798,14 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Respli
     }
     if ($MonitorsOnly) { return }
     Initialize-Branding
+    # Profiles first: the ini names Omarchy Shell only once it exists.
+    try { Set-TerminalProfiles $p } catch { Log "terminal profiles FAILED: $($_.Exception.Message)" }
     Write-AhkIni $p $cfg
     try { Write-WebAppIni $p } catch { Log "web app keys FAILED: $($_.Exception.Message)" }
     Write-ZebarPack $p $cfg
     # Window animations on/off switches between the official GlazeWM and the animation build.
     Switch-GlazeWM $p
     Set-Autostart $p $cfg
-    try { Set-TerminalProfiles $p } catch { Log "terminal profiles FAILED: $($_.Exception.Message)" }
     Set-WindowsScreensaver $cfg
     try { Set-DisallowShaking $cfg } catch { Log "Aero Shake setting FAILED: $($_.Exception.Message)" }
     try { Set-MinimizeAnimationPolicy $cfg } catch { Log "minimize animation setting FAILED: $($_.Exception.Message)" }

@@ -118,7 +118,8 @@ OmarchyCmdLine(args*) {
 RunInTerminal(title, command, dir := EnvGet("USERPROFILE")) {
     if Env("wt") {
         try {
-            Run 'wt.exe new-tab --title "' title '" -d "' dir '" ' command
+            ; wt splits tabs on ; (escaped as \;, like Start-AgentTerminal does).
+            Run 'wt.exe new-tab' WtProfileArg() ' --title "' title '" -d "' dir '" ' StrReplace(command, ";", "\;")
             return
         }
     }
@@ -128,13 +129,22 @@ RunInTerminal(title, command, dir := EnvGet("USERPROFILE")) {
 ; Windows Terminal with these arguments, or the fallback command line without it.
 RunWt(args, fallback := "") {
     if Env("wt") {
+        ; No profile of its own: Omarchy Shell, placed after the window options (-w, --size...).
+        if !RegExMatch(args, "(^|\s)(-p|--profile)\s")
+            args := RegExReplace(args, "^((?:(?:-w|--window|--size|--pos)\s+\S+\s*|(?:--fullscreen|--maximized|--focus|-F|-M|-f)\s+)*)", "$1" LTrim(WtProfileArg()) " ", , 1)
         try {
-            Run 'wt.exe ' args
+            Run 'wt.exe ' Trim(args)
             return
         }
     }
     if fallback
         try Run fallback
+}
+
+; -p for winarchy's own terminal profile (elevate off, so "Run as administrator" in
+; Terminal's defaults can't break these tabs), or nothing before `winarchy apply` wrote it.
+WtProfileArg() {
+    return Env("wtProfile") ? ' -p "' Env("wtProfile") '"' : ""
 }
 
 ; Physical-pixel coordinates (what GlazeWM uses) for this thread.
