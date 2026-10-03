@@ -2250,6 +2250,21 @@ if Env("compose", "0") = "1" {
     hwnd := WindowUnderCursor()
     if !hwnd
         return
+    ; Snipping Tool's recording toolbar is a captionless XAML popup that ignores SC_MOVE
+    ; (and Windows gives it no drag area), so move it by hand. It's small and stays on one
+    ; monitor, so the per-tick WinMove DPI problem above doesn't bite.
+    if WinGetTitle(hwnd) = "Recording toolbar" && WinGetProcessName(hwnd) = "SnippingTool.exe" {
+        CoordMode "Mouse", "Screen"
+        SetWinDelay -1
+        MouseGetPos &mx, &my
+        WinGetPos &wx, &wy, , , hwnd
+        while GetKeyState("LButton", "P") {
+            MouseGetPos &x, &y
+            WinMove wx + x - mx, wy + y - my, , , hwnd
+            Sleep 10
+        }
+        return
+    }
     info := GlazeWindowInfo(hwnd)
     if info && info.state != "tiling" && info.state != "floating"
         return  ; fullscreen / minimized
