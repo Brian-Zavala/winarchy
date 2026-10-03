@@ -25,6 +25,8 @@ Open PowerShell (not as administrator) and run:
 irm https://raw.githubusercontent.com/Brian-Zavala/winarchy/main/install.ps1 | iex
 ```
 
+A first install takes 2 minutes or less, depending on your connection.
+
 Rather read it before you run it? Good instinct. Here's [install.ps1](install.ps1).
 
 ## Uninstall

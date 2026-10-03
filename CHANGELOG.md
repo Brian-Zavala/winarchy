@@ -80,7 +80,7 @@
 
 ## 0.1.23 — 2026-09-29
 
-- The installer banner says a first install takes about 5 minutes, depending on the connection.
+- The installer banner says a first install takes 2 minutes or less, depending on the connection.
 
 ## 0.1.22 — 2026-09-29
 
