@@ -66,6 +66,31 @@ function Uninstall-NpmGlobal([string]$Package, [string]$Label) {
     & npm uninstall -g $Package
     if ($LASTEXITCODE -ne 0) { throw "npm could not remove $Label; try: npm uninstall -g $Package" }
 }
+# The agents that have a winget package too (portable, on PATH through winget's Links):
+# winget first, so a PC without Node.js can install them; npm when winget can't.
+function Install-AgentPackage([string]$WingetId, [string]$NpmPackage, [string]$Label) {
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Save-Winget $WingetId $false 'menu'
+        if (Install-WingetPackage $WingetId $Label 'user') { return }
+        [void](Remove-JournalEntry "winget|$WingetId")
+    }
+    if (Get-Command npm -ErrorAction SilentlyContinue) { Install-NpmGlobal $NpmPackage $Label; return }
+    throw "$Label did not install; try: winget install -e --id $WingetId   (or with Node.js: npm install -g $NpmPackage)"
+}
+# Whichever installed it: winget's package when winget has it, else npm's.
+function Uninstall-AgentPackage([string]$WingetId, [string]$NpmPackage, [string]$Label) {
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        $listed = (& winget list -e --id $WingetId --disable-interactivity --accept-source-agreements 2>$null) -match [regex]::Escape($WingetId)
+        if ($listed) {
+            & winget uninstall -e --id $WingetId --silent --disable-interactivity | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw "winget could not remove $Label; try: winget uninstall -e --id $WingetId" }
+            [void](Remove-JournalEntry "winget|$WingetId")
+            return
+        }
+    }
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw "$Label was not installed by winget or npm: remove it the way it was installed" }
+    Uninstall-NpmGlobal $NpmPackage $Label
+}
 function Install-StoreApp([string]$StoreId, [string]$Label) {
     & winget install --id $StoreId --source msstore --accept-package-agreements --accept-source-agreements
     if ($LASTEXITCODE -ne 0) { throw "winget could not install $Label from the Microsoft Store; try: winget install --id $StoreId --source msstore" }
@@ -146,10 +171,10 @@ $Catalog = @(
         items = @(
             @{ key = 'claude-code'; label = 'Claude Code'; id = 'npm-claude-code'
                test = { Test-CatalogCommand 'claude' }
-               install = { Install-NpmGlobal '@anthropic-ai/claude-code' 'Claude Code' }; remove = { Uninstall-NpmGlobal '@anthropic-ai/claude-code' 'Claude Code' } }
+               install = { Install-AgentPackage 'Anthropic.ClaudeCode' '@anthropic-ai/claude-code' 'Claude Code' }; remove = { Uninstall-AgentPackage 'Anthropic.ClaudeCode' '@anthropic-ai/claude-code' 'Claude Code' } }
             @{ key = 'codex'; label = 'Codex'; id = 'npm-codex'
                test = { Test-CatalogCommand 'codex' }
-               install = { Install-NpmGlobal '@openai/codex' 'Codex' }; remove = { Uninstall-NpmGlobal '@openai/codex' 'Codex' } }
+               install = { Install-AgentPackage 'OpenAI.Codex' '@openai/codex' 'Codex' }; remove = { Uninstall-AgentPackage 'OpenAI.Codex' '@openai/codex' 'Codex' } }
             @{ key = 'copilot-cli'; label = 'GitHub Copilot'; id = 'npm-copilot'
                test = { Test-CatalogCommand 'copilot' }
                install = { Install-NpmGlobal '@github/copilot' 'GitHub Copilot' }; remove = { Uninstall-NpmGlobal '@github/copilot' 'GitHub Copilot' } }

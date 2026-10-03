@@ -262,3 +262,33 @@ Describe 'The menu side' {
         Get-Content -Raw "$root\zebar\omarchy\menu.css" | Should -Match '\.row\.dim'
     }
 }
+
+Describe 'Coding agents install without Node.js' {
+    BeforeEach {
+        Mock Save-Winget {}
+        Mock Remove-JournalEntry { $true }
+        Mock Install-NpmGlobal {}
+        function Install-WingetPackage([string]$id, [string]$name, [string]$scope) { }
+        function winget { }
+    }
+    It 'installs Claude Code and Codex through winget first' {
+        Mock Install-WingetPackage { $true }
+        & (Get-CatalogItem 'claude-code').install
+        Should -Invoke Install-WingetPackage -Times 1 -ParameterFilter { $id -eq 'Anthropic.ClaudeCode' }
+        Should -Invoke Save-Winget -Times 1 -ParameterFilter { $id -eq 'Anthropic.ClaudeCode' -and $source -eq 'menu' }
+        Should -Invoke Install-NpmGlobal -Times 0
+        & (Get-CatalogItem 'codex').install
+        Should -Invoke Install-WingetPackage -Times 1 -ParameterFilter { $id -eq 'OpenAI.Codex' }
+    }
+    It 'falls back to npm when winget fails, and drops the winget record' {
+        Mock Install-WingetPackage { $false }
+        Mock Get-Command { [pscustomobject]@{ Source = 'x' } } -ParameterFilter { $Name -in 'winget', 'npm' }
+        & (Get-CatalogItem 'codex').install
+        Should -Invoke Remove-JournalEntry -ParameterFilter { $key -eq 'winget|OpenAI.Codex' }
+        Should -Invoke Install-NpmGlobal -Times 1 -ParameterFilter { $Package -eq '@openai/codex' }
+    }
+    It 'names both ways when neither winget nor npm can' {
+        Mock Get-Command { $null } -ParameterFilter { $Name -in 'winget', 'npm' }
+        { & (Get-CatalogItem 'claude-code').install } | Should -Throw '*winget install -e --id Anthropic.ClaudeCode*npm install -g @anthropic-ai/claude-code*'
+    }
+}

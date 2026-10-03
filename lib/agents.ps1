@@ -15,12 +15,12 @@ $AgentTable = [ordered]@{
     claude = @{
         label = 'Claude Code'; cmd = 'claude'; args = @('--permission-mode', 'auto')
         prompt = { param($p) @('--', $p) }
-        hint = 'npm install -g @anthropic-ai/claude-code'
+        hint = 'winget install -e --id Anthropic.ClaudeCode   (or Install > AI Agents)'
     }
     codex = @{
         label = 'Codex'; cmd = 'codex'; args = @('--approve-for-me')
         prompt = { param($p) @('--', $p) }
-        hint = 'npm install -g @openai/codex'
+        hint = 'winget install -e --id OpenAI.Codex   (or Install > AI Agents)'
     }
     copilot = @{
         label = 'GitHub Copilot'; cmd = 'copilot'; args = @('--allow-all')
@@ -156,7 +156,10 @@ function Find-AgentExe([string]$cmd) {
             (Join-Path ([Environment]::GetFolderPath('ApplicationData')) "npm\$cmd.cmd"),
             (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "$cmd\bin\$cmd.exe"),
             (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "Programs\Antigravity\bin\$cmd.cmd"),
-            (Join-Path $HOME ".local\bin\$cmd.exe"))) {
+            (Join-Path $HOME ".local\bin\$cmd.exe"),
+            # winget's portable packages (Claude Code, Codex): a shell started before the
+            # install doesn't have this folder on PATH yet.
+            (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "Microsoft\WinGet\Links\$cmd.exe"))) {
         if (Test-Path -LiteralPath $f) { return $f }
     }
     $null
@@ -281,7 +284,10 @@ function Pop-AgentMakePending {
     Remove-Item -LiteralPath $AgentMakePending -Force -ErrorAction SilentlyContinue
     if (-not $p -or -not $AgentMake.Contains([string]$p.kind)) { return $null }
     $at = [DateTimeOffset]::MinValue
-    if (-not [DateTimeOffset]::TryParse([string]$p.at, $Invariant, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$at)) { return $null }
+    # ConvertFrom-Json already turns an ISO time into a DateTime; [string] of that drops
+    # the zone, which read back as local time was hours off anywhere but UTC.
+    if ($p.at -is [datetime]) { $at = [DateTimeOffset]$p.at }
+    elseif (-not [DateTimeOffset]::TryParse([string]$p.at, $Invariant, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$at)) { return $null }
     if (([DateTimeOffset]::UtcNow - $at).TotalMinutes -gt 15) { return $null }
     [string]$p.kind
 }
@@ -304,7 +310,8 @@ function Invoke-AgentLogin([string]$id) {
     }
     $rest = @($cmd | Select-Object -Skip 1)
     $global:LASTEXITCODE = 0
-    & $cmd[0] @rest
+    # By path: the menu's terminal may predate the install, so PATH can lack it.
+    & ((Find-AgentExe $cmd[0]) ?? $cmd[0]) @rest
     # A cancelled or failed sign-in leaves the old limits (and the warning) as they were.
     if ($LASTEXITCODE) { throw "$($AgentTable[$key].label) sign-in did not finish (exit $LASTEXITCODE)" }
     [void](Update-AgentUsage -Force -Only $key -NoRetry)
@@ -344,6 +351,9 @@ function ConvertTo-PwshCommandLine([string[]]$cmd, [hashtable]$Env) {
 
 function Start-AgentTerminal([string[]]$cmd, [string]$Dir, [hashtable]$Env) {
     $p = Get-Paths
+    # In your home folder, the way a new terminal opens: otherwise the agent (unattended)
+    # starts in whatever folder launched it, winarchy's own ahk\ from the bar and keys.
+    if (-not $Dir) { $Dir = $HOME }
     $line = ConvertTo-PwshCommandLine $cmd -Env $Env
     if ($p.wt) {
         # The profile supplies the look and the fixed "Omarchy Agent" title that window

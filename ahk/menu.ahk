@@ -167,7 +167,10 @@ switch verb {
     case "herdr": RunHerdr()
     ; The coding agent opens in its own window (winarchy agent picks the flags); with no
     ; default agent yet, -Pick opens the chooser instead of failing into the log.
-    case "agent": OmarchyCmd("agent", "-Pick")
+    ; Waited on (it only opens the terminal), so a missing agent says so instead of nothing.
+    case "agent":
+        if OmarchyCmdWait("agent", "-Pick")
+            Notify("Your agent didn't start: is it installed? (Install > AI Agents)")
     ; Setup > Default Agent: sets it, then starts it, like Omarchy's menu does.
     case "default-agent": RunInTerminal("Default agent", CliInTerminal("default-agent", arg))
     case "install-app": RunInTerminal("Install " arg, CliInTerminal("install-app", arg))
