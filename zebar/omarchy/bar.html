@@ -29,7 +29,6 @@
       <span id="clock" title="Click: calendar · Right-click: date format · Middle-click: world clock"></span>
       <div class="side">
         <div class="post" id="post">
-          <span class="module hidden" id="media"></span>
           <span class="module hidden" id="reminder"></span>
           <span class="module" id="elsewhen" title="World clock (Super+Ctrl+Alt+E)"></span>
           <span class="module hidden" id="weather"></span>
@@ -94,8 +93,6 @@
         monitors: '\u{F037A}',
         appFallback: '\u{F0F1D}',   // generic app-window glyph, used when no icon is cached yet
         reminder: '\u{F009A}',      // bell (a reminder is set)
-        playing: '\u{F03E4}',       // pause: what a click does while it plays
-        paused: '\u{F040A}',        // play
       };
       // Omarchy: "dddd HH:mm", alternate "d MMMM 'W'ww yyyy" (12-hour here by request).
       const CLOCK_FORMATS = [CLOCK_24H ? 'EEEE HH:mm' : 'EEEE h:mm a', "d MMMM 'W'WW yyyy"];
@@ -108,8 +105,6 @@
         cpu: { type: 'cpu', refreshInterval: 5000 },
         battery: { type: 'battery', refreshInterval: 30000 },
         systray: { type: 'systray' },
-        // What is playing (Windows' media sessions: Spotify, a browser tab, ...).
-        media: { type: 'media' },
       });
 
       const $ = id => document.getElementById(id);
@@ -368,21 +363,6 @@
         ].join('\n')).join('\n') + '\nClick: usage · Right-click: start agent';
       }
 
-      // Omarchy's media module: what is playing, left of the clock. Click: play / pause,
-      // right click: next track, middle click: previous. Gone when nothing is playing.
-      function renderMedia(media) {
-        const el = $('media');
-        const s = media?.session;
-        el.classList.toggle('hidden', !s?.title);
-        if (!s?.title) return;
-        const text = s.artist ? `${s.artist} - ${s.title}` : s.title;
-        setText(el, `${s.isPlaying ? ICONS.playing : ICONS.paused} ${text.length > 40 ? text.slice(0, 39) + '…' : text}`);
-        el.title = `${text}\nClick: ${s.isPlaying ? 'pause' : 'play'} · Right-click: next · Middle-click: previous`;
-      }
-      $('media').onclick = () => providers.outputMap.media?.togglePlayPause().catch(() => {});
-      $('media').oncontextmenu = e => { e.preventDefault(); providers.outputMap.media?.next().catch(() => {}); };
-      $('media').onauxclick = e => { if (e.button === 1) { e.preventDefault(); providers.outputMap.media?.previous().catch(() => {}); } };
-
       // reminders.json (winarchy reminder): the next one, as a bell and its time. Gone once
       // it is due; the reminder's own OSD takes over from there.
       function renderReminder(r) {
@@ -465,7 +445,7 @@
       const RENDER = {
         glazewm: g => { renderWorkspaces(g); renderDisplay(g); },
         systray: renderTray, network: renderNetwork, audio: renderAudio,
-        cpu: renderCpu, battery: renderBattery, media: renderMedia,
+        cpu: renderCpu, battery: renderBattery,
       };
       const drawn = {};
       function render() {
