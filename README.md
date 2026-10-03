@@ -17,6 +17,12 @@ Winarchy won't turn Windows into Linux, and it isn't pretending to. It just make
 
 *Unofficial, and not affiliated with Omarchy or 37signals.*
 
+
+
+https://github.com/user-attachments/assets/3cd8a0ff-7a82-45dd-9e16-d235dab70585
+
+
+
 ## Install
 
 Open PowerShell (not as administrator) and run:
