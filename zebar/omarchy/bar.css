@@ -47,10 +47,9 @@ html.clear #bar { text-shadow: 0 0 3px rgba(0, 0, 0, 0.7); }
    centerAnchor); indicators hug it on the left, weather/update on the right. */
 #clock { cursor: pointer; padding: 0 6px; white-space: nowrap; }
 .indicators { margin-left: auto; }
-/* Mirrors the indicators on the left of the clock: the globe gets the same 21px slot, flush
-   against the clock's padding, and the rest follow at an even gap. */
+/* Mirrors the indicators on the left of the clock: 21px slots, the first flush against the
+   clock's padding, the rest at an even gap. */
 .post { gap: 6px; margin-left: 0; }
-#elsewhen { min-width: 21px; text-align: center; }
 .post .module { min-width: 21px; text-align: center; }
 .right { margin-left: auto; padding-left: 14px; gap: 14px; }
 #agents { margin-right: 4px; }

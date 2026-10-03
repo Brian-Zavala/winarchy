@@ -78,6 +78,10 @@ Describe 'the bar' {
         $ahk | Should -Match 'case "worldclock"'
         (Get-Content -Raw (Join-Path $root 'ahk\winarchy.ahk')) | Should -Match '#\^!e::'
     }
+    It 'puts no globe on the bar for the world clock (released Omarchy has none)' {
+        $bar | Should -Not -Match 'id="elsewhen"'
+        $bar | Should -Not -Match '\\u\{F01E7\}'
+    }
     It 'ships the world clock panel and registers its widget with per-monitor presets' {
         foreach ($f in 'html', 'css', 'js') { Test-Path (Join-Path $root "zebar\omarchy\worldclock.$f") | Should -BeTrue }
         (Get-Content -Raw (Join-Path $root 'lib\apply.ps1')) | Should -Match "'worldclock' './worldclock\.html'"

@@ -26,11 +26,10 @@
           <span class="indicator off" id="awake"></span>
         </div>
       </div>
-      <span id="clock" title="Click: calendar · Right-click: date format · Middle-click: world clock"></span>
+      <span id="clock" title="Click: calendar · Right-click: date format · Middle-click: world clock (Super+Ctrl+Alt+E)"></span>
       <div class="side">
         <div class="post" id="post">
           <span class="module hidden" id="reminder"></span>
-          <span class="module" id="elsewhen" title="World clock (Super+Ctrl+Alt+E)"></span>
           <span class="module hidden" id="weather"></span>
           <span class="module update hidden" id="update"></span>
         </div>
@@ -117,9 +116,6 @@
       $('dictation').textContent = ICONS.dictation;
       $('recording').textContent = ICONS.recording;
       $('update').textContent = ICONS.update;
-      // Omarchy's omarchy.elsewhen: a globe next to the clock that opens the world clock.
-      $('elsewhen').textContent = '\u{F01E7}';
-      $('elsewhen').onclick = () => act('worldclock');
       $('agents').textContent = ICONS.agents;
       $('winChevron').textContent = ICONS.chevron;
       // Indicators toggle on click (Omarchy); weather/update open details. The icon flips
