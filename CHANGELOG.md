@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.37 — 2026-10-03
+
 - Fixed: an app installer asking for admin permission from behind the terminal (GlazeWM's does) left its UAC prompt parked on the taskbar, and the install looked stuck. The install now rings the bell, says Windows is asking, and brings the prompt up; if it can't, it says to click the flashing shield on the taskbar.
 
 ## 0.1.36 — 2026-10-03
