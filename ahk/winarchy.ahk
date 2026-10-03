@@ -2339,9 +2339,125 @@ if Env("compose", "0") = "1" {
 
 ; Universal clipboard (Omarchy v4): Super + C/V/X/A
 #c::Send IsTerminal() ? "^+c" : "^c"
-#v::Send IsTerminal() ? "^+v" : "^v"
+; In a terminal a picture goes through Ctrl+V like a hand-pressed paste; text keeps Ctrl+Shift+V.
+#v::IsTerminal() ? TerminalPaste(ClipHasImage() ? "^v" : "^+v") : Send("^v")
 #x::Send "^x"
 #a::Send "^a"
+
+; Pasting images into a terminal: terminals paste a copied file as its path (that's how
+; Claude Code and co. take a screenshot), but a bare image pastes nothing. The screenshot
+; watcher copies image + file; clipboard history keeps only the image, so a screenshot
+; picked again from Win+V (or an image copied in a browser) gets saved as a PNG and
+; that file is added to the clipboard just before the terminal pastes.
+#HotIf IsTerminal()
+$^v::TerminalPaste("^v")
+$^+v::TerminalPaste("^+v")
+#HotIf
+
+TerminalPaste(keys) {
+    try ClipImageAsFile()
+    Send keys
+}
+
+ClipImageAsFile() {
+    static CF_DIB := 8, CF_HDROP := 15
+    if DllCall("IsClipboardFormatAvailable", "uint", CF_HDROP) || !DllCall("IsClipboardFormatAvailable", "uint", CF_DIB)
+        return
+    seq := DllCall("GetClipboardSequenceNumber", "uint")
+    png := DllCall("RegisterClipboardFormat", "str", "PNG", "uint")
+    isPng := DllCall("IsClipboardFormatAvailable", "uint", png)
+    if !ClipOpen()
+        return
+    try data := ClipBytes(isPng ? png : CF_DIB)
+    finally DllCall("CloseClipboard")
+    if !IsSet(data) || !data
+        return
+
+    dir := A_Temp "\winarchy-clips"
+    DirCreate dir
+    loop files dir "\*.*"
+        if DateDiff(A_Now, A_LoopFileTimeModified, "Days") >= 7
+            try FileDelete A_LoopFileFullPath
+    path := dir "\clip-" FormatTime(, "yyyyMMdd-HHmmss") "-" A_MSec ".png"
+    if isPng
+        FileOpen(path, "w").RawWrite(data)
+    else if !DibToPng(data, path)
+        return
+
+    ; Something else took the clipboard meanwhile: leave it alone.
+    if DllCall("GetClipboardSequenceNumber", "uint") != seq || !ClipOpen()
+        return
+    try {
+        ; DROPFILES (20 bytes, wide paths) + the path + a double null.
+        drop := DllCall("GlobalAlloc", "uint", 0x42, "uptr", 20 + (StrLen(path) + 2) * 2, "ptr")
+        p := DllCall("GlobalLock", "ptr", drop, "ptr")
+        NumPut("uint", 20, p), NumPut("int", 1, p, 16)
+        StrPut(path, p + 20, "UTF-16")
+        DllCall("GlobalUnlock", "ptr", drop)
+        if !DllCall("SetClipboardData", "uint", CF_HDROP, "ptr", drop, "ptr")
+            DllCall("GlobalFree", "ptr", drop)
+        ; The image is already in clipboard history: don't add it a second time.
+        for fmt in ["CanIncludeInClipboardHistory", "CanUploadToCloudClipboard"] {
+            h := DllCall("GlobalAlloc", "uint", 0x42, "uptr", 4, "ptr")
+            if !DllCall("SetClipboardData", "uint", DllCall("RegisterClipboardFormat", "str", fmt, "uint"), "ptr", h, "ptr")
+                DllCall("GlobalFree", "ptr", h)
+        }
+    } finally DllCall("CloseClipboard")
+}
+
+ClipHasImage() {
+    return DllCall("IsClipboardFormatAvailable", "uint", 8)    ; CF_DIB
+        || DllCall("IsClipboardFormatAvailable", "uint", 15)   ; CF_HDROP (a screenshot file)
+}
+
+ClipOpen() {
+    loop 10 {
+        if DllCall("OpenClipboard", "ptr", A_ScriptHwnd)
+            return true
+        Sleep 20
+    }
+    return false
+}
+
+; A copy of one clipboard format's bytes (the clipboard must be open).
+ClipBytes(fmt) {
+    h := DllCall("GetClipboardData", "uint", fmt, "ptr")
+    if !h || !(size := DllCall("GlobalSize", "ptr", h, "uptr"))
+        return ""
+    p := DllCall("GlobalLock", "ptr", h, "ptr")
+    buf := Buffer(size)
+    DllCall("RtlMoveMemory", "ptr", buf, "ptr", p, "uptr", size)
+    DllCall("GlobalUnlock", "ptr", h)
+    return buf
+}
+
+; CF_DIB bytes -> PNG file: wrap them as a .bmp, let GDI+ re-encode it.
+DibToPng(dib, path) {
+    static token := 0
+    if !token {
+        DllCall("LoadLibrary", "str", "gdiplus")
+        si := Buffer(24, 0), NumPut("uint", 1, si)
+        DllCall("gdiplus\GdiplusStartup", "ptr*", &token, "ptr", si, "ptr", 0)
+    }
+    hdr := NumGet(dib, 0, "uint"), bits := NumGet(dib, 14, "ushort")
+    comp := NumGet(dib, 16, "uint"), used := NumGet(dib, 32, "uint")
+    masks := hdr = 40 && comp = 3 ? 12 : hdr = 40 && comp = 6 ? 16 : 0
+    colors := used ? used * 4 : bits <= 8 ? (1 << bits) * 4 : 0
+    bmpFile := path ".bmp"
+    f := FileOpen(bmpFile, "w")
+    head := Buffer(14, 0)
+    NumPut("ushort", 0x4D42, "uint", 14 + dib.Size, "uint", 0, "uint", 14 + hdr + masks + colors, head)
+    f.RawWrite(head), f.RawWrite(dib), f.Close()
+    ok := false, bmp := 0
+    if !DllCall("gdiplus\GdipCreateBitmapFromFile", "wstr", bmpFile, "ptr*", &bmp) {
+        clsid := Buffer(16)
+        DllCall("ole32\CLSIDFromString", "wstr", "{557CF406-1A04-11D3-9A73-0000F81EF32E}", "ptr", clsid)
+        ok := !DllCall("gdiplus\GdipSaveImageToFile", "ptr", bmp, "wstr", path, "ptr", clsid, "ptr", 0)
+        DllCall("gdiplus\GdipDisposeImage", "ptr", bmp)
+    }
+    try FileDelete bmpFile
+    return ok
+}
 
 ; Super + Ctrl + V: clipboard history, Super + Ctrl + E: emoji picker
 #^v::Send "#v"
