@@ -40,6 +40,7 @@ Pack := Env("pack")
 BarTitle := "Zebar - omarchy / bar ahk_exe zebar.exe"
 MenuTitle := "Zebar - omarchy / menu ahk_exe zebar.exe"
 CalendarTitle := "Zebar - omarchy / calendar ahk_exe zebar.exe"
+ZebarPort := 6124         ; Zebar's page server on 127.0.0.1 (lib/apply.ps1 $ZebarPort)
 
 ; Super+Shift+Space / `winarchy bar off` turns the top bar off until it's turned on again.
 BarFlag := Env("data") "\generated\bar-off"
@@ -908,8 +909,8 @@ WmLog(msg) {
 }
 
 BarGuard() {
-    global BarEnabled, Zebar
-    static lastRestart := 0, lastRepair := 0, deadSince := 0, badSince := 0
+    global BarEnabled, Zebar, ZebarPort
+    static lastRestart := 0, lastRepair := 0, deadSince := 0, badSince := 0, serverSince := 0
     if !BarEnabled || BarHeldBack()   ; a game changing display modes: see FullscreenWatch
         return
     RefreshEnv()                      ; the text size changed the bar height, no restart
@@ -928,6 +929,19 @@ BarGuard() {
         return
     }
     deadSince := 0
+    ; Zebar running without its page server: a Zebar started while the old one still held
+    ; the port (apply's restart racing a menu key). Pages already loaded stay, but the
+    ; menu, a panel or a reloaded bar gets Edge's "127.0.0.1 refused to connect" page.
+    ; Once a minute at most: a Zebar that can't get the port at all must not flap.
+    if !ZebarServerUp() {
+        serverSince := serverSince || A_TickCount
+        if A_TickCount - serverSince >= 10000 && A_TickCount - lastRestart > 60000 {
+            serverSince := 0, lastRestart := A_TickCount
+            RestartZebar("its page server (127.0.0.1:" ZebarPort ") is not running")
+        }
+        return
+    }
+    serverSince := 0
     ; Zebar's generic starter bar: its settings.json was reset (Zebar writes that bar in
     ; when it finds none), so restarting Zebar alone would only bring it back. Apply
     ; points the settings at winarchy's bar again and restarts Zebar.
@@ -1008,12 +1022,34 @@ RestartZebar(why) {
             try ProcessClose p.pid
     for pid, _ in zebars
         try ProcessClose pid
-    loop 30 {
-        if !ProcessExist("zebar.exe")
+    ; The new Zebar needs the old one's port: started while it is still held, it runs
+    ; without its page server (see ZebarServerUp).
+    loop 50 {
+        if !ProcessExist("zebar.exe") && !ZebarServerUp()
             break
         Sleep 100
     }
     try Run('"' Zebar '" startup', , "Hide")
+}
+
+; Zebar serves every widget page from http://127.0.0.1:6124. Something listening there =
+; up. A failed look counts as up: only a sure "nothing there" restarts Zebar.
+ZebarServerUp() {
+    global ZebarPort
+    size := 0
+    DllCall("iphlpapi\GetExtendedTcpTable", "ptr", 0, "uint*", &size, "int", false, "uint", 2, "int", 3, "uint", 0)
+    buf := Buffer(size + 1024)        ; slack: a listener may appear between the two calls
+    size := buf.Size
+    ; AF_INET, TCP_TABLE_OWNER_PID_LISTENER: dwNumEntries, then rows of
+    ; {state, localAddr, localPort, remoteAddr, remotePort, pid}, ports in network order.
+    if DllCall("iphlpapi\GetExtendedTcpTable", "ptr", buf, "uint*", &size, "int", false, "uint", 2, "int", 3, "uint", 0)
+        return true
+    loop NumGet(buf, 0, "uint") {
+        p := NumGet(buf, 4 + (A_Index - 1) * 24 + 8, "uint")
+        if ((p & 0xFF) << 8 | (p >> 8) & 0xFF) = ZebarPort
+            return true
+    }
+    return false
 }
 
 ; Every monitor has a bar across its top edge (physical pixels, like Zebar places it).

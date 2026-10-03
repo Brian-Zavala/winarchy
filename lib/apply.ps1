@@ -807,10 +807,21 @@ function Stop-Zebar {
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 }
 
+# Zebar serves every widget page from http://127.0.0.1:6124 (winarchy.ahk ZebarPort).
+$ZebarPort = 6124
+
 function Restart-Bar($p) {
     try { Set-ZebarStartup } catch {}
     Stop-Zebar
-    Start-Sleep -Milliseconds 800
+    # Not a fixed nap: a Zebar started while the old one still holds its port runs
+    # without its page server, and every page it opens then is "127.0.0.1 refused to
+    # connect" (winarchy.ahk BarGuard restarts such a Zebar).
+    $wait = [Diagnostics.Stopwatch]::StartNew()
+    do {
+        Start-Sleep -Milliseconds 200
+        $held = (Get-Process zebar -ErrorAction SilentlyContinue) -or
+            (Get-NetTCPConnection -LocalPort $ZebarPort -State Listen -ErrorAction SilentlyContinue)
+    } while ($held -and $wait.ElapsedMilliseconds -lt 5000)
     if (-not $p.zebar) { return }
     # Zebar attaches to its parent's console: started from here it would log into this
     # terminal (winarchy update) and die when the tab closes. AutoHotkey has no console.

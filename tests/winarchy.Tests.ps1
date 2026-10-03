@@ -289,6 +289,7 @@ Describe 'Bar restart' {
         # real Zebar's WebView2 processes and stopped them, leaving the bar empty.
         Mock Get-Process {}
         Mock Get-CimInstance {}
+        Mock Get-NetTCPConnection {}
         Mock Stop-Process {}
         Mock Set-ZebarStartup {}
         Mock Start-Sleep {}
@@ -302,6 +303,14 @@ Describe 'Bar restart' {
     }
     It 'falls back to a direct start without AutoHotkey' {
         Restart-Bar @{ zebar = 'C:\z\zebar.exe' }
+        Should -Invoke Start-Hidden -Times 1
+    }
+    It 'waits until the old Zebar lets go of its page server''s port' {
+        # Started while it is held, Zebar runs with no page server: "refused to connect".
+        $script:looks = 0
+        Mock Get-NetTCPConnection { $script:looks++; if ($script:looks -lt 3) { 'listening' } }
+        Restart-Bar @{ zebar = 'C:\z\zebar.exe' }
+        Should -Invoke Get-NetTCPConnection -Times 3 -Exactly -ParameterFilter { $LocalPort -eq 6124 }
         Should -Invoke Start-Hidden -Times 1
     }
 }
@@ -340,6 +349,13 @@ Describe 'The bar stays up (winarchy.ahk)' {
     It 'keeps the bars at winarchy.ini''s height after a text size change' {
         Get-AhkFunction 'BarGuard' | Should -Match 'RefreshEnv\(\)'
         Get-AhkFunction 'BarGuard' | Should -Match 'FixBarHeights\(\)'
+    }
+    It 'restarts a Zebar running without its page server, and waits for the old one''s port' {
+        Get-AhkFunction 'BarGuard' | Should -Match 'ZebarServerUp\(\)'
+        Get-AhkFunction 'RestartZebar' | Should -Match 'ZebarServerUp\(\)'
+        Get-AhkFunction 'ZebarServerUp' | Should -Match 'GetExtendedTcpTable'
+        $ahk | Should -Match 'ZebarPort := 6124'
+        $ZebarPort | Should -Be 6124          # lib/apply.ps1: the two must agree
     }
 }
 

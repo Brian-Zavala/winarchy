@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed: switching themes could open a full-screen "Hmmm… can't reach this page, 127.0.0.1 refused to connect" page instead of the menu, and the bar could disappear after it. Zebar serves the bar, menu and panels from a small web server on 127.0.0.1:6124. When `winarchy update`/`apply` restarted Zebar while you opened the menu, the new Zebar could start before the old one let go of that port, and it then ran without its server. Restarts now wait for the port to be free, and Winarchy restarts a Zebar that has no server within about 10 seconds.
+
 ## 0.1.45 — 2026-10-03
 
 - Gamers first: the install now sets up the admin game helper by itself (one admin prompt, in a new _Gaming_ step) instead of leaving it to `winarchy game-setup`. Most games run as administrator, and without the helper Winarchy couldn't close them, minimize one when you switch workspace or bring it back when you return. `winarchy update` keeps the helper up to date and sets it up once on a PC installed before this. `"gameHelper": false` in your settings, or `winarchy game-setup remove`, keeps it off. Game mode, minimize blocking and the bar's gamepad icon were already on by default and still are.
