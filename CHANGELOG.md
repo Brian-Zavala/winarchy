@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Fixed: with _Run this profile as Administrator_ on in Windows Terminal, every window Winarchy opened (Sign in, Install, Doctor, Update, Herdr, Neovim, terminal apps) asked for UAC, then failed with `0x80070002 ... The system cannot find the file specified`. They now open on Winarchy's own hidden _Omarchy Shell_ profile, which never runs elevated. On a PC where Terminal has never been opened, Winarchy now writes its settings instead of skipping its profiles, and sets the Nerd Font as Terminal's font when none is set.
+- Fixed: a reinstall could show GlazeWM's "Another instance of the application is already running". GlazeWM is now started once, at the end of the install, and nothing starts a second one while the first is still starting.
+- Coding agents on a fresh PC. Claude Code and Codex install with winget, so _Install > AI Agents_ no longer needs Node.js first (npm stays the fallback). _Sign in_ finds an agent installed after the bar started. Agent windows open in your home folder, not in Winarchy's own code folder, and the agent key says so when the agent can't start.
+- Sturdier installs:
+  - **Elevated windows.** The install refuses to run as administrator (or as SYSTEM), since everything it starts would run elevated. `WINARCHY_ALLOW_ELEVATED=1` overrides it.
+  - **PATH.** Winarchy, the menu and the always-running script pick up what an install just added to PATH, so new tools work without signing out. Changes to your PATH keep `%USERPROFILE%`-style entries as they were written.
+  - **Downloads and settings.** A failed Nerd Font download no longer stops the install; it's listed under _Needs attention_ instead. An install stopped halfway is no longer mistaken for a restore the next time.
+  - **User names and paths.** Python is found when your user name has accents. Paths with an apostrophe (`O'Brien`) work for auto-tiling, the agent profile and Herdr. The Herdr editor pane works with an editor installed under `Program Files`, and `hds` finds OpenCode installed since the shell started.
+- Reinstalls and updates:
+  - **Your own changes.** Edits in Winarchy's code folder are kept in a git stash, and named, instead of stopping the update.
+  - **Commits of your own.** A copy with its own commits stops with the commands to keep them, instead of quietly installing the old version.
+  - **Leftovers and old tools.** A folder left behind by an uninstall no longer breaks the reinstall. `WINARCHY_REF` switches an existing copy to that branch. The installer needs winget 1.4 and PowerShell 7.2 or newer, and upgrades an older PowerShell 7.
+  - **Zip installs.** An install from the zip (a PC without git) now updates too, and becomes a git checkout once git is installed.
+- After _Install_ or _Remove_ in the menu, Winarchy picks up the change at once: VS Code, Neovim, Claude Code, btop, Herdr and Terminal get the current theme, and the editor, btop and Herdr keys find the new app. Flow Launcher gets its theme on a fresh PC. _Trigger > Share_ installs LocalSend in a terminal you can follow, then opens it.
+- `winarchy doctor` says when Terminal runs profiles as administrator and how to turn that off. It also checks Winarchy's Terminal profiles and the app paths the menu uses, and notices a second GlazeWM. It shows whether Winarchy's code has edits or commits of its own.
+
 ## 0.1.33 — 2026-09-30
 
 - Fix screensaver triggering UAC prompts and appearing windowed: explicitly set `elevate = $false` on `Omarchy Screensaver`, `Omarchy About`, and `Omarchy Agent` Windows Terminal profiles so the screensaver launches unelevated and full screen without security dialogs.

@@ -118,7 +118,8 @@ function Write-HerdrConfig([string]$theme) {
     # TOML literal string (single quotes): a Windows path is full of backslashes, and a
     # basic string would read them as escapes.
     $shell = (Get-Paths).pwsh
-    if (-not $shell) { $shell = 'pwsh.exe' }
+    # A literal string can't hold an apostrophe (a user name like O'Brien): by name then.
+    if (-not $shell -or $shell -match "'") { $shell = 'pwsh.exe' }
     $vars = @{
         herdr_theme = $name; herdr_theme_custom = $custom; herdr_accent = $accent
         herdr_shell = $shell
@@ -200,14 +201,7 @@ function Remove-HerdrFiles([string]$bin, [string]$packages) {
 function Uninstall-Herdr {
     Remove-HerdrProfile
     Remove-HerdrFiles (Join-Path $env:LOCALAPPDATA 'Programs\Herdr') (Join-Path $env:USERPROFILE '.herdr')
-    $cur = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if ($cur) {
-        $new = (@($cur -split ';' | Where-Object { $_ -and $_.TrimEnd('\') -ne $HerdrBin.TrimEnd('\') }) -join ';')
-        if ($new -ne $cur) {
-            [Environment]::SetEnvironmentVariable('Path', $new, 'User')
-            Send-SettingChange 'Environment'
-        }
-    }
+    [void](Edit-UserPath $HerdrBin -Remove)
     # Both recordings described an install that is now gone, so drop them: leaving them
     # would make `winarchy uninstall` try to undo it a second time.
     [void](Remove-JournalEntry 'herdr|install')
@@ -369,7 +363,9 @@ function Invoke-HerdrSquare {
     Invoke-HerdrPane $editor (Get-EditorCommand $ctx.cwd)
     Invoke-HerdrPane $diff (Get-DiffWatchCommand)
     # Omarchy runs plain opencode here (no unattended flags); without it, the default agent.
-    $agent = if (Test-AgentInstalled 'opencode') { 'opencode' } else { Get-HerdrAgentCommand ((Get-DefaultAgent) ?? 'opencode') }
+    # By its path: the pane's PATH can be from before opencode was installed.
+    $oc = Find-AgentExe 'opencode'
+    $agent = if ($oc) { "& $(Format-PwshArg $oc)" } else { Get-HerdrAgentCommand ((Get-DefaultAgent) ?? 'opencode') }
     Invoke-HerdrPane $agentPane $agent
 }
 
@@ -451,7 +447,9 @@ function Get-EditorCommand([string]$cwd) {
     $editor = (Get-Config).apps.editor
     if (-not $editor -or $editor -eq 'auto') { $editor = $p.nvim }
     if ($editor -and $editor -match '(?i)\b(nvim|vim|hx|helix|nano|micro)(\.exe)?$') {
-        return "$(Format-PwshArg $editor) ."
+        # A quoted path is a string to PowerShell, not a command: it needs the call operator.
+        $e = Format-PwshArg $editor
+        return "$(if ($e.StartsWith("'")) { '& ' })$e ."
     }
     # No terminal editor: leave a shell rather than a pane that flashes and closes.
     "Write-Host 'Editor pane: set a terminal editor in config.json (apps.editor), e.g. nvim.'"

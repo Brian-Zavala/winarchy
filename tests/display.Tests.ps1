@@ -158,7 +158,12 @@ Describe 'Tailscale install question' {
         Mock Read-Host { '' }
         Install-TailscaleStep
         Should -Invoke Install-CatalogItem -Times 0 -Exactly
-        (Get-Config).tailscaleOffered | Should -BeTrue
+        $script:TailscaleOffered | Should -BeTrue
+    }
+    It 'writes no config.json of its own, so a stopped install is not taken for a restore' {
+        Mock Read-Host { '' }
+        Install-TailscaleStep
+        Test-Path $ConfigFile | Should -BeFalse
     }
     It 'installs through the catalog (journaled as yours) on yes' {
         Mock Read-Host { 'y' }

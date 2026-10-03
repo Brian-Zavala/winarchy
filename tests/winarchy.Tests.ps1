@@ -776,3 +776,94 @@ Describe 'Windows Terminal default profile' {
         (Read-Json $script:wtFile).defaultProfile | Should -Be $wsl
     }
 }
+
+Describe 'Windows Terminal profiles' {
+    BeforeEach {
+        $script:JournalDir = Join-Path $TestDrive ([guid]::NewGuid())
+        New-Item -ItemType Directory $script:JournalDir | Out-Null
+        Set-Content (Join-Path $script:JournalDir 'journal.json') '{"entries":[]}'
+        $script:JournalCache = $null
+        $PathsFile = Join-Path $TestDrive 'paths.json'
+        $script:wtFile = Join-Path $TestDrive "wt-$([guid]::NewGuid())\settings.json"
+        Mock Get-FontFamily { 'JetBrainsMono Nerd Font' }
+        Mock Test-FontInstalled { $true }
+        $p = @{ wt = 'wt.exe'; pwsh = 'C:\Program Files\PowerShell\7\pwsh.exe'; wtSettings = $script:wtFile }
+    }
+    It 'adds Omarchy Shell, never elevated, for every tab winarchy opens' {
+        New-Item -ItemType Directory -Force (Split-Path $script:wtFile) | Out-Null
+        Write-Json $script:wtFile ([ordered]@{ profiles = [ordered]@{ defaults = [ordered]@{ elevate = $true }; list = @() } })
+        Set-TerminalProfiles $p
+        $shell = (Read-Json $script:wtFile).profiles.list | Where-Object guid -eq $ShellProfile
+        $shell.name | Should -Be 'Omarchy Shell'
+        $shell.elevate | Should -BeFalse
+        $shell.hidden | Should -BeTrue
+        # Every profile winarchy launches opts out of elevation.
+        @((Read-Json $script:wtFile).profiles.list | Where-Object { $_.elevate -ne $false }).Count | Should -Be 0
+    }
+    It 'starts settings.json when Terminal has never run, and the ini then names the profile' {
+        Mock Get-TerminalSettingsTarget { $script:wtFile }
+        $p.wtSettings = $null
+        Set-TerminalProfiles $p
+        Test-Path $script:wtFile | Should -BeTrue
+        $p.wtSettings | Should -Be $script:wtFile
+        (Read-Json $script:wtFile).profiles.list.guid | Should -Contain $ShellProfile
+        (Read-Json $PathsFile).wtSettings | Should -Be $script:wtFile
+    }
+    It 'skips the profiles without Terminal' {
+        Mock Get-TerminalSettingsTarget { $script:wtFile }
+        $p.wtSettings = $null; $p.wt = $null
+        Set-TerminalProfiles $p
+        Test-Path $script:wtFile | Should -BeFalse
+    }
+    It 'sets the Nerd Font as the default face once, keeping a face already set' {
+        New-Item -ItemType Directory -Force (Split-Path $script:wtFile) | Out-Null
+        Write-Json $script:wtFile ([ordered]@{ profiles = [ordered]@{ list = @() } })
+        Set-TerminalProfiles $p
+        (Read-Json $script:wtFile).profiles.defaults.font.face | Should -Be 'JetBrainsMono Nerd Font'
+        Write-Json $script:wtFile ([ordered]@{ profiles = [ordered]@{ defaults = [ordered]@{ font = [ordered]@{ face = 'Consolas' } }; list = @() } })
+        Set-TerminalProfiles $p
+        (Read-Json $script:wtFile).profiles.defaults.font.face | Should -Be 'Consolas'
+    }
+    It 'leaves the face alone when the font is not installed' {
+        Mock Test-FontInstalled { $false }
+        New-Item -ItemType Directory -Force (Split-Path $script:wtFile) | Out-Null
+        Write-Json $script:wtFile ([ordered]@{ profiles = [ordered]@{ list = @() } })
+        Set-TerminalProfiles $p
+        (Read-Json $script:wtFile).profiles.defaults.font | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Terminal launches from AutoHotkey' {
+    BeforeAll { $envAhk = Get-Content -Raw (Join-Path $root 'ahk\lib\env.ahk') }
+    It 'opens every tab on the Omarchy Shell profile' {
+        $envAhk | Should -Match '(?s)RunInTerminal\(.*?Run TerminalTabLine\('
+        $envAhk | Should -Match "(?s)TerminalTabLine\(title.*?new-tab' WtProfileArg\(\)"
+        $envAhk | Should -Match '(?s)RunWt\(.*?Run WtLine\(args\)'
+        $envAhk | Should -Match '(?s)WtLine\(args\) \{.*?WtProfileArg\(\)'
+        $envAhk | Should -Match 'Env\("wtProfile"\)'
+    }
+}
+
+Describe 'Paths with an apostrophe' {
+    BeforeAll { . "$root\lib\autotile.ps1" }
+    It 'escapes it in the auto-tiling startup command (YAML single quotes)' {
+        $Code = "C:\Users\O'Brien\AppData\Local\winarchy"
+        $line = ConvertTo-AutoTileStartup @{ autoTiling = @{ enabled = $true } } "C:\Users\O'Brien\cli\glazewm.exe"
+        $line | Should -BeLike "*O''Brien*winarchy*autotile-watch.ps1*O''Brien*glazewm.exe*"
+        ($line -replace "''", '') | Should -Not -Match "O'B"
+    }
+}
+
+Describe 'Doctor: Windows Terminal' {
+    BeforeAll { . "$root\lib\doctor.ps1" }
+    It 'names elevation in the defaults or the default profile, and nothing otherwise' {
+        $mk = { param($defaults, $list, $default) [pscustomobject]@{ defaultProfile = $default; profiles = [pscustomobject]@{ defaults = $defaults; list = $list } } }
+        Get-TerminalElevation (& $mk ([pscustomobject]@{ elevate = $true }) @() $null) | Should -Be 'every profile (Defaults)'
+        Get-TerminalElevation (& $mk ([pscustomobject]@{}) @([pscustomobject]@{ guid = '{a}'; name = 'PowerShell'; elevate = $true }) '{a}') | Should -Be 'your default profile (PowerShell)'
+        Get-TerminalElevation (& $mk ([pscustomobject]@{}) @([pscustomobject]@{ guid = '{a}'; name = 'PowerShell' }) '{a}') | Should -BeNullOrEmpty
+    }
+    It 'lists the Omarchy profiles a settings file lacks' {
+        $wt = [pscustomobject]@{ profiles = [pscustomobject]@{ list = @([pscustomobject]@{ guid = $AgentProfile }, [pscustomobject]@{ guid = $ShellProfile }) } }
+        @(Get-MissingTerminalProfiles $wt) | Should -Be @('Omarchy Screensaver', 'Omarchy About')
+    }
+}

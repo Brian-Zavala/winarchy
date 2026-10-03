@@ -29,3 +29,17 @@ Describe 'install.ps1' {
         $hasFiles | Should -BeTrue
     }
 }
+
+Describe 'install.ps1 on Windows PowerShell 5.1' {
+    It 'parses in 5.1, the PowerShell every Windows 11 PC has' {
+        $ps51 = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        if (-not (Test-Path $ps51)) { Set-ItResult -Skipped -Because 'no Windows PowerShell here'; return }
+        $file = Join-Path (Split-Path -Parent $PSScriptRoot) 'install.ps1'
+        $out = & $ps51 -NoProfile -NonInteractive -Command "`$e = `$null; [void][Management.Automation.Language.Parser]::ParseFile('$file', [ref]`$null, [ref]`$e); `$e | ForEach-Object { `$_.Message }"
+        $out | Should -BeNullOrEmpty
+    }
+    It 'reads git output as text, so stderr cannot end it under ErrorActionPreference Stop' {
+        Get-BootstrapLine '    try { & git @args 2>&1' | Should -Not -BeNullOrEmpty
+        @($script:lines | Where-Object { $_ -match '^\s+git -C|\(git -C' }).Count | Should -Be 0
+    }
+}

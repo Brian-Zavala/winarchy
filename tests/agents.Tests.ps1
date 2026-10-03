@@ -36,7 +36,14 @@ Describe 'Start-AgentTerminal' {
         Start-AgentTerminal @('claude', '--model', 'a b')
         Should -Invoke Start-Process -Times 1 -ParameterFilter {
             $a = @(Split-CommandLine $ArgumentList)
-            $a[3] -eq 'Omarchy Agent' -and $a[4] -eq 'C:\Program Files\PowerShell\7\pwsh.exe' -and $a[-1] -eq "claude --model 'a b'"
+            $a[3] -eq 'Omarchy Agent' -and $a -contains 'C:\Program Files\PowerShell\7\pwsh.exe' -and $a[-1] -eq "claude --model 'a b'"
+        }
+    }
+    It 'starts in your home folder when given none, not the folder that launched it' {
+        Start-AgentTerminal @('claude')
+        Should -Invoke Start-Process -ParameterFilter {
+            $a = @(Split-CommandLine $ArgumentList)
+            $a[[array]::IndexOf($a, '-d') + 1] -eq $HOME
         }
     }
     It 'escapes ; so Windows Terminal does not split it into a second tab' {
@@ -146,9 +153,18 @@ Describe 'Invoke-AgentLogin (the usage panel''s Sign in)' {
         finally { $AgentLogin.Remove('fake'); $AgentTable.Remove('fake'); Remove-Item function:global:fake-login }
         Should -Invoke Update-AgentUsage -Times 0
     }
+    It 'runs the login by its full path when PATH lacks it' {
+        Mock Test-AgentInstalled { $true }
+        Mock Update-AgentUsage {}
+        function global:fake-login-by-path { $global:gotLogin = 'by path' }
+        Mock Find-AgentExe { 'fake-login-by-path' }
+        $AgentLogin['fake'] = @('fake-login', 'now')
+        try { Invoke-AgentLogin 'fake' } finally { $AgentLogin.Remove('fake'); Remove-Item function:global:fake-login-by-path }
+        $global:gotLogin | Should -Be 'by path'
+    }
     It 'says how to install an agent that is missing' {
         Mock Test-AgentInstalled { $false }
-        { Invoke-AgentLogin 'codex' } | Should -Throw '*npm install -g @openai/codex*'
+        { Invoke-AgentLogin 'codex' } | Should -Throw '*winget install -e --id OpenAI.Codex*'
     }
     It 'refuses an agent it cannot sign in' {
         { Invoke-AgentLogin 'crush' } | Should -Throw '*usage: winarchy agent-login <claude|codex>*'

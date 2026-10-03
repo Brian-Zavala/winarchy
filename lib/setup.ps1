@@ -32,8 +32,12 @@ function Test-Preflight {
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
         throw 'winget (App Installer) is missing. Install "App Installer" from the Microsoft Store, then run this again.'
     }
-    $admin = Test-Elevated
-    if ($admin) { Write-Warning 'Running as administrator: settings would land in the admin profile. Run from a normal terminal.' }
+    # Elevated, everything this starts (GlazeWM, the bar, AutoHotkey) runs elevated too, and
+    # every terminal it opens asks for UAC; as SYSTEM it would set up a profile nobody uses.
+    if ([Security.Principal.WindowsIdentity]::GetCurrent().IsSystem) { throw 'Running as SYSTEM: run the install from your own account, in a normal terminal.' }
+    if ((Test-Elevated) -and -not $env:WINARCHY_ALLOW_ELEVATED) {
+        throw 'Running as administrator: winarchy installs per user, and everything it starts from here would run elevated. Open a normal (not "Run as administrator") terminal and run it again. (WINARCHY_ALLOW_ELEVATED=1 skips this check.)'
+    }
     Write-Ok "Windows build $build, $env:PROCESSOR_ARCHITECTURE, winget OK"
 }
 
@@ -138,7 +142,7 @@ function Invoke-Winget([string]$verb, [string]$id, [string]$scope) {
         break
     }
     $r | Add-Member Reboot ($r.Code -in $WingetRebootCodes) -Force
-    if ($r.Code -in $WingetExitOk -or $r.Reboot) { $r.Ok = $true; $r.Reason = $null }
+    if ($r.Code -in $WingetExitOk -or $r.Reboot) { $r.Ok = $true; $r.Reason = $null; Update-ProcessPath }
     elseif ($null -ne $r.Code) { $r.Reason = Get-WingetReason $r.Code }
     $r
 }
@@ -295,7 +299,12 @@ function Install-Prerequisites {
     } else { Save-Winget 'AutoHotkey.AutoHotkey' $true; Write-Done "AutoHotkey: $($p.ahk)" }
     if (-not $p.nerdFont) {
         Write-Ok 'installing JetBrainsMono Nerd Font (bar icons + terminal glyphs)'
-        [void](Install-NerdFont 'JetBrainsMono')
+        # A download that fails (offline, GitHub blocked) costs the icons, not the install.
+        try { [void](Install-NerdFont 'JetBrainsMono') }
+        catch {
+            Write-Warn "JetBrainsMono Nerd Font did not install ($($_.Exception.Message))"
+            Add-Unfinished 'Bar icons need the Nerd Font: winarchy font-install JetBrainsMono'
+        }
     } else { Write-Done 'JetBrainsMono Nerd Font: installed' }
 }
 
@@ -488,6 +497,7 @@ function Get-InstallAnswers($p, [switch]$Restoring) {
         # With an input method (Japanese, Chinese, Korean) CapsLock switches modes: leave it.
         if ($p.input.ime) { $cfg.compose = $false }
     }
+    if ($script:TailscaleOffered) { $cfg.tailscaleOffered = $true }
     $wall = Join-Path $p.pictures 'Wallpapers'
     Write-Ok "Your own backgrounds go in $wall (shown as 'Mine' in the picker)."
     New-Item -ItemType Directory -Force $wall | Out-Null
@@ -533,14 +543,15 @@ function Invoke-Taskbar([string]$action) {
 
 function Add-CliToPath {
     $bin = Join-Path $Code 'bin'
-    $cur = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if (($cur -split ';') -contains $bin) { return }
+    if (@((Get-UserPathRaw) -split ';' | Where-Object { [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -eq $bin }).Count) { return }
     [void](Add-JournalEntry @{ kind = 'envpath'; key = "envpath|$bin"; dir = $bin })
-    [Environment]::SetEnvironmentVariable('Path', ($cur.TrimEnd(';') + ";$bin"), 'User')
-    Send-SettingChange 'Environment'
+    [void](Edit-UserPath $bin)
 }
 
 function Start-Everything($p) {
+    # What starts here inherits this PATH: the one from before the install's winget runs
+    # would leave GlazeWM, Zebar and AutoHotkey without the tools installed just now.
+    Update-ProcessPath
     # The animation build is unsigned and built locally: Defender can quarantine it between
     # Update-Paths and here. Re-detect so the official GlazeWM starts instead.
     # Apply again too, so the config and winarchy.ahk's restart guard stop pointing at it.
@@ -550,7 +561,7 @@ function Start-Everything($p) {
         Use-Lock { Invoke-Apply -NoRestart }
         $p = Get-Paths
     }
-    if ($p.glazewm -and -not (Get-GlazeWmProcess)) { Start-GlazeWM $p.glazewm }
+    if ($p.glazewm -and -not (Test-GlazeWmRunning)) { Start-GlazeWM $p.glazewm }
     if ($p.flow -and -not (Get-Process Flow.Launcher -ErrorAction SilentlyContinue)) { Start-InteractiveProcess $p.flow }
     Restart-Bar $p
     Restart-OmarchyAhk $p
@@ -629,7 +640,15 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     if ($theme) { Use-Lock { Invoke-ThemeSet $theme } }
 
     Write-Step 'Starting'
+    # A Flow that never ran has no settings for the theme above to change.
+    $flowPending = $p.flow -and -not (Test-Path $p.flowSettings)
     Start-Everything $p
+    if ($flowPending -and $theme) {
+        for ($i = 0; $i -lt 20 -and -not (Get-Process Flow.Launcher -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Milliseconds 500 }
+        Start-Sleep -Seconds 3             # past its first start, so closing it saves its settings
+        try { if ((Set-FlowTheme (Read-Colors $theme)) -ne 'skipped') { Write-Done 'Flow Launcher themed' } }
+        catch { Log "Flow Launcher theme FAILED: $($_.Exception.Message)" }
+    }
     # Last, so a slow or failed build can't hold up the rest: the official GlazeWM already runs.
     Invoke-AnimationOffer
     if ($restoring -and (Test-Path $restoreFile)) { Remove-Item $restoreFile -Force -ErrorAction SilentlyContinue; Write-Done 'Your settings are back.' }
@@ -679,6 +698,62 @@ function Invoke-Adopt {
 # winarchy update (also the bar's update icon): exactly what update-check found,
 # once at a time, then a fresh check so the icon shows what is really left. Nothing in
 # it waits for a person: the window closes by itself unless something needs attention.
+# Edits to winarchy's own files (by hand, or by an agent started in the code folder) stop
+# git pull. Kept in a stash, never thrown away, so the update can go ahead.
+function Save-LocalCodeEdits {
+    if (-not (git -C $Code status --porcelain 2>$null)) { return }
+    $msg = "winarchy $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+    git -C $Code stash push -u -q -m $msg 2>&1 | Out-Host
+    if ($LASTEXITCODE) { Write-Warn 'Your changes to winarchy''s files could not be set aside; the update may not apply.'; return }
+    Write-Ok "Your changes to winarchy's files are saved in a git stash (`"$msg`"): git -C `"$Code`" stash pop brings them back."
+}
+
+# A copy installed from the zip, updated the way the bootstrap installs it. With git here
+# now, it becomes a checkout (git pull from then on); without, the branch's zip replaces
+# the files, and the ones the new version no longer has go - only those .winarchy-files
+# lists, never anything winarchy didn't put there. $true when the version changed.
+function Update-CodeFromZip {
+    $src = Get-WinarchySource
+    $manifest = Join-Path $Code '.winarchy-files'
+    $versionFile = Join-Path $Code 'VERSION'
+    $before = (Get-Content -Raw $versionFile -ErrorAction SilentlyContinue)?.Trim()
+    $old = @(Get-Content $manifest -ErrorAction SilentlyContinue | Where-Object { $_ })
+    $removeStale = {
+        param([string[]]$keep)
+        $want = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($k in $keep) { [void]$want.Add($k) }
+        foreach ($rel in $old) { if (-not $want.Contains($rel)) { Remove-Item -LiteralPath (Join-Path $Code $rel) -Force -ErrorAction SilentlyContinue } }
+    }
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) "winarchy-update-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+    try {
+        if (Get-Command git -ErrorAction SilentlyContinue) {
+            git clone --depth 1 --branch $src.ref --no-checkout "https://github.com/$($src.repo).git" $tmp 2>&1 | Out-Host
+            if ($LASTEXITCODE) { throw "git clone of $($src.repo) failed" }
+            Move-Item (Join-Path $tmp '.git') (Join-Path $Code '.git')
+            git -C $Code reset --hard -q 2>&1 | Out-Host
+            if ($LASTEXITCODE) { throw 'git reset in the code folder failed' }
+            & $removeStale @(git -C $Code ls-files | ForEach-Object { $_ -replace '/', '\' })
+            Remove-Item -LiteralPath $manifest -Force -ErrorAction SilentlyContinue
+            Write-Ok 'winarchy is a git checkout now: updates pull from here on'
+        } else {
+            $zip = "$tmp.zip"
+            Invoke-WebRequest "https://github.com/$($src.repo)/archive/refs/heads/$($src.ref).zip" -OutFile $zip -TimeoutSec 300
+            Expand-Archive $zip $tmp -Force
+            $root = (Get-ChildItem $tmp -Directory | Select-Object -First 1).FullName
+            $files = @(Get-ChildItem $root -Recurse -File -Force | ForEach-Object { $_.FullName.Substring($root.Length + 1) })
+            if (-not $files) { throw 'the downloaded zip was empty' }
+            & $removeStale $files
+            Copy-Item -Recurse -Force (Join-Path $root '*') $Code
+            Set-Content -LiteralPath $manifest -Value $files -Encoding UTF8
+            Get-ChildItem $Code -Recurse -File | Unblock-File
+            Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+        }
+    } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+    $after = (Get-Content -Raw $versionFile -ErrorAction SilentlyContinue)?.Trim()
+    if ($after -ne $before) { Write-Done "winarchy $before -> $after" } else { Write-Ok 'up to date' }
+    $after -ne $before
+}
+
 function Invoke-Update {
     $m = [Threading.Mutex]::new($false, 'Local\WinarchyUpdate')
     if (-not $m.WaitOne(0)) { Write-Host 'An update is already running in another window.'; return }
@@ -696,8 +771,10 @@ function Invoke-Update {
 
         Write-Step 'winarchy'
         $codeChanged = $false
-        if ((Test-Path (Join-Path $Code '.git')) -and (git -C $Code remote)) {
+        $hasGit = [bool](Get-Command git -ErrorAction SilentlyContinue)
+        if ((Test-Path (Join-Path $Code '.git')) -and $hasGit -and (git -C $Code remote)) {
             $before = git -C $Code rev-parse HEAD
+            Save-LocalCodeEdits
             git -C $Code pull --ff-only 2>&1 | Out-Host
             if ($LASTEXITCODE) {
                 # Carry on with the rest: themes and apps don't depend on the code moving.
@@ -706,6 +783,10 @@ function Invoke-Update {
                     else { 'winarchy code not updated: git pull failed (see above)' })
             }
             $codeChanged = $before -ne (git -C $Code rev-parse HEAD)
+        } elseif (Test-Path (Join-Path $Code '.winarchy-files')) {
+            # Installed from the zip (the bootstrap on a PC without git).
+            try { $codeChanged = Update-CodeFromZip }
+            catch { Add-Unfinished "winarchy code not updated: $($_.Exception.Message)" }
         } else { Write-Ok 'installed from a local copy (no git remote): nothing to pull' }
 
         # Whatever winarchy needs and this PC is missing - including anything the code just

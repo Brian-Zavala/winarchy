@@ -50,8 +50,8 @@ function Install-BuildTools {
         $r = Invoke-Unattended 'winget' $a 3600
         if (-not $r.Ok -and $r.Code -notin $WingetExitOk) { Log "$($t.name): winget $($r.Reason)" }
     }
-    $env:Path = @([Environment]::GetEnvironmentVariable('Path', 'Machine'), [Environment]::GetEnvironmentVariable('Path', 'User'),
-        (Join-Path $env:USERPROFILE '.cargo\bin')) -join ';'
+    Update-ProcessPath
+    $env:Path += ';' + (Join-Path $env:USERPROFILE '.cargo\bin')
 }
 
 # The build of the pinned commit is installed (built here or downloaded).
@@ -284,11 +284,13 @@ function Get-GlazeWMPath($proc, $p) {
 }
 
 # Restart GlazeWM when the running one isn't the selected build. wm-exit restores every
-# window (hidden workspaces included) before the other build takes over.
-function Switch-GlazeWM($p) {
+# window (hidden workspaces included) before the other build takes over. -NoRestart (the
+# install's apply): with none running, leave the start to Start-Everything, once.
+function Switch-GlazeWM($p, [switch]$NoRestart) {
     $want = $p.glazewm
     if (-not $want) { return }
     $running = @(Get-GlazeWmProcess)      # the WM only: the auto-tiling watcher keeps a CLI alive too
+    if (-not $running -and ($NoRestart -or (Test-GlazeWmMutex))) { return }
     if ($running.Count -eq 1 -and (Get-GlazeWMPath $running[0] $p) -eq $want) { return }
     Write-Utf8 $SwitchFlag (Get-Date).ToString('s')
     foreach ($r in $running) {

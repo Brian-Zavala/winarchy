@@ -4,7 +4,7 @@ Winarchy checks for updates by itself: two minutes after you log in, and every s
 
 An update goes through, in order:
 
-- **Winarchy itself**, pulled from GitHub. A copy with commits of its own isn't touched, and the update says so.
+- **Winarchy itself**, pulled from GitHub. Changes you made to its files are kept in a git stash, and the update names it (`git stash pop` in Winarchy's folder brings them back). A copy with commits of its own isn't touched, and the update says so. A copy installed from the zip, on a PC without git, is replaced by the new version's files, and becomes a git checkout once git is installed.
 - **Anything a newer Winarchy needs** that your PC doesn't have yet. `winarchy doctor -Fix` does the same for anything that went missing since.
 - **Omarchy's themes and backgrounds**, when Omarchy has a new release. Winarchy follows Omarchy's releases, not every commit, and `omarchyTag` in your settings says which one you're on.
 - **Herdr**, with its own updater, since it doesn't come from winget.

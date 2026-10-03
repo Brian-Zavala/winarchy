@@ -306,3 +306,86 @@ Describe 'Zebar settings before GlazeWM installs' {
         $script:order -join ',' | Should -Be 'zebar,glzr-io.glazewm,Flow-Launcher.Flow-Launcher'
     }
 }
+
+Describe 'PATH on a fresh PC' {
+    BeforeEach { $script:savedPath = $env:Path }
+    AfterEach { $env:Path = $script:savedPath }
+    It 'picks up what an install added to the registry, keeping what only this process has' {
+        Mock Get-UserPathRaw { '' }
+        $own = Join-Path $TestDrive 'process-only'
+        $env:Path = "$own;$env:SystemRoot\System32"
+        Update-ProcessPath
+        $parts = $env:Path -split ';'
+        $parts | Should -Contain $own
+        @($parts | Where-Object { $_.TrimEnd('\') -eq "$env:SystemRoot\System32" }).Count | Should -Be 1
+        foreach ($d in ([Environment]::GetEnvironmentVariable('Path', 'User') -split ';' | Where-Object { $_ })) { $parts | Should -Contain $d }
+    }
+    It 'adds to the user PATH as stored, keeping %VARS% unexpanded' {
+        Mock Get-UserPathRaw { '%USERPROFILE%\bin;C:\Tools' }
+        Mock Set-UserPathRaw { $script:written = $value }
+        Edit-UserPath 'C:\winarchy\bin' | Should -BeTrue
+        $script:written | Should -Be '%USERPROFILE%\bin;C:\Tools;C:\winarchy\bin'
+    }
+    It 'adds to an empty user PATH without a stray separator' {
+        Mock Get-UserPathRaw { '' }
+        Mock Set-UserPathRaw { $script:written = $value }
+        Edit-UserPath 'C:\winarchy\bin' | Should -BeTrue
+        $script:written | Should -Be 'C:\winarchy\bin'
+    }
+    It 'takes an entry out, however it was written, and leaves the rest as stored' {
+        Mock Get-UserPathRaw { "%USERPROFILE%\bin;$env:USERPROFILE\herdr\;C:\Tools" }
+        Mock Set-UserPathRaw { $script:written = $value }
+        Edit-UserPath "$env:USERPROFILE\herdr" -Remove | Should -BeTrue
+        $script:written | Should -Be '%USERPROFILE%\bin;C:\Tools'
+        Mock Get-UserPathRaw { 'C:\Tools' }
+        Edit-UserPath "$env:USERPROFILE\herdr" -Remove | Should -BeFalse
+    }
+}
+
+Describe 'Preflight' {
+    BeforeEach {
+        Mock Write-Step {}; Mock Write-Ok {}
+        $script:savedAllow = $env:WINARCHY_ALLOW_ELEVATED
+        $env:WINARCHY_ALLOW_ELEVATED = $null
+    }
+    AfterEach { $env:WINARCHY_ALLOW_ELEVATED = $script:savedAllow }
+    It 'refuses to install from an elevated terminal' {
+        Mock Test-Elevated { $true }
+        { Test-Preflight } | Should -Throw '*Running as administrator*'
+    }
+    It 'lets WINARCHY_ALLOW_ELEVATED override that' {
+        Mock Test-Elevated { $true }
+        $env:WINARCHY_ALLOW_ELEVATED = '1'
+        { Test-Preflight } | Should -Not -Throw
+    }
+}
+
+Describe 'Updating a zip install' {
+    BeforeEach {
+        $script:realCode = $Code
+        $Code = Join-Path $TestDrive "code-$([guid]::NewGuid().ToString('N').Substring(0, 6))"
+        New-Item -ItemType Directory -Force (Join-Path $Code 'lib') | Out-Null
+        Set-Content (Join-Path $Code 'VERSION') '0.1.0'
+        Set-Content (Join-Path $Code 'lib\gone.ps1') 'old'
+        Set-Content (Join-Path $Code 'mine.txt') 'not winarchy''s'
+        Set-Content (Join-Path $Code '.winarchy-files') @('VERSION', 'lib\gone.ps1')
+        $src = Join-Path $TestDrive "zip-$([guid]::NewGuid().ToString('N').Substring(0, 6))"
+        New-Item -ItemType Directory -Force (Join-Path $src 'winarchy-main\lib') | Out-Null
+        Set-Content (Join-Path $src 'winarchy-main\VERSION') '0.2.0'
+        Set-Content (Join-Path $src 'winarchy-main\lib\new.ps1') 'new'
+        $script:zip = "$src.zip"
+        Compress-Archive (Join-Path $src 'winarchy-main') $script:zip
+        Mock Get-Command { $null } -ParameterFilter { $Name -eq 'git' }
+        Mock Invoke-WebRequest { Copy-Item $script:zip $OutFile }
+        Mock Write-Ok {}; Mock Write-Done {}
+    }
+    It 'replaces the files, drops only the ones winarchy put there, and says the version moved' {
+        Update-CodeFromZip | Should -BeTrue
+        Get-Content (Join-Path $Code 'VERSION') | Should -Be '0.2.0'
+        Test-Path (Join-Path $Code 'lib\new.ps1') | Should -BeTrue
+        Test-Path (Join-Path $Code 'lib\gone.ps1') | Should -BeFalse
+        Test-Path (Join-Path $Code 'mine.txt') | Should -BeTrue
+        Get-Content (Join-Path $Code '.winarchy-files') | Should -Contain 'lib\new.ps1'
+        Should -Invoke Invoke-WebRequest -ParameterFilter { $Uri -like '*/archive/refs/heads/main.zip' }
+    }
+}

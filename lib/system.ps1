@@ -219,7 +219,7 @@ function Invoke-Transcode([string]$Path, [string]$Format, [string]$Resolution) {
     if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
         Write-Host 'ffmpeg is not installed: installing it (winget)...'
         winget install -e --id Gyan.FFmpeg --accept-package-agreements --accept-source-agreements
-        $env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine')
+        Update-ProcessPath
         if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { throw 'ffmpeg is installed but not on PATH yet: open a new terminal and run this again' }
     }
     if (-not $Path) {
@@ -246,11 +246,19 @@ function Invoke-Transcode([string]$Path, [string]$Format, [string]$Resolution) {
 
 # --- Trigger > Share (LocalSend) ---------------------------------------------------------
 
+function Find-LocalSend {
+    Get-ChildItem "$env:LOCALAPPDATA\Programs\LocalSend", "$env:ProgramFiles\LocalSend" -Filter 'localsend_app.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+}
+
 function Start-Share {
-    $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs\LocalSend", "$env:ProgramFiles\LocalSend" -Filter 'localsend_app.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($exe) { Start-Process $exe.FullName; return }
-    Write-Host 'LocalSend is not installed: installing it (winget)...'
-    winget install -e --id LocalSend.LocalSend --accept-package-agreements --accept-source-agreements
+    $exe = Find-LocalSend
+    if (-not $exe) {
+        Write-Host 'LocalSend is not installed: installing it (winget)...'
+        winget install -e --id LocalSend.LocalSend --accept-package-agreements --accept-source-agreements
+        $exe = Find-LocalSend
+        if (-not $exe) { throw 'LocalSend did not install; try: winget install -e --id LocalSend.LocalSend' }
+    }
+    Start-Process $exe.FullName
 }
 
 # Install > Web App lives in lib/webapps.ps1 (presets, keys, shortcuts with their own

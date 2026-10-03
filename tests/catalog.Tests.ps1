@@ -132,9 +132,21 @@ Describe 'Terminal apps in Start' {
         $lnk = Join-Path $script:lnkDir 'Cliamp.lnk'
         $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
         $s.Arguments | Should -Match 'notepad\.exe'
-        if (Get-Command wt.exe -ErrorAction SilentlyContinue) { $s.Arguments | Should -Match '^new-tab --title "Cliamp"' }
+        if (Get-Command wt.exe -ErrorAction SilentlyContinue) { $s.Arguments | Should -Match '^new-tab( -p "[^"]+")? --title "Cliamp"' }
         [Winarchy.Shortcut]::GetAppId($lnk) | Should -Be 'Winarchy.Tui.cliamp'
         Should -Invoke Save-File -Times 1
+    }
+    It 'opens on the Omarchy Shell profile, and repairs a shortcut made without it' {
+        if (-not (Get-Command wt.exe -ErrorAction SilentlyContinue)) { Set-ItResult -Skipped -Because 'no Windows Terminal'; return }
+        $item = Get-CatalogItem 'cliamp'
+        Mock Get-WtProfile { '' }
+        Add-TuiShortcut $item | Out-Null
+        $lnk = Join-Path $script:lnkDir 'Cliamp.lnk'
+        Test-TuiShortcutCurrent $item $lnk | Should -BeTrue
+        Mock Get-WtProfile { '{5f6a2c1e-7a39-4b1f-9e0d-0a1c2e3f4b54}' }
+        Test-TuiShortcutCurrent $item $lnk | Should -BeFalse
+        Add-TuiShortcut $item | Out-Null
+        (New-Object -ComObject WScript.Shell).CreateShortcut($lnk).Arguments | Should -Match '^new-tab -p "\{5f6a2c1e-7a39-4b1f-9e0d-0a1c2e3f4b54\}" --title "Cliamp"'
     }
     It 'passes the arguments a TUI needs' {
         Add-TuiShortcut (Get-CatalogItem 'dua') | Out-Null
@@ -248,5 +260,68 @@ Describe 'The menu side' {
     }
     It 'styles an installed row as dim' {
         Get-Content -Raw "$root\zebar\omarchy\menu.css" | Should -Match '\.row\.dim'
+    }
+}
+
+Describe 'Coding agents install without Node.js' {
+    BeforeEach {
+        Mock Save-Winget {}
+        Mock Remove-JournalEntry { $true }
+        Mock Install-NpmGlobal {}
+        function Install-WingetPackage([string]$id, [string]$name, [string]$scope) { }
+        function winget { }
+    }
+    It 'installs Claude Code and Codex through winget first' {
+        Mock Install-WingetPackage { $true }
+        & (Get-CatalogItem 'claude-code').install
+        Should -Invoke Install-WingetPackage -Times 1 -ParameterFilter { $id -eq 'Anthropic.ClaudeCode' }
+        Should -Invoke Save-Winget -Times 1 -ParameterFilter { $id -eq 'Anthropic.ClaudeCode' -and $source -eq 'menu' }
+        Should -Invoke Install-NpmGlobal -Times 0
+        & (Get-CatalogItem 'codex').install
+        Should -Invoke Install-WingetPackage -Times 1 -ParameterFilter { $id -eq 'OpenAI.Codex' }
+    }
+    It 'falls back to npm when winget fails, and drops the winget record' {
+        Mock Install-WingetPackage { $false }
+        Mock Get-Command { [pscustomobject]@{ Source = 'x' } } -ParameterFilter { $Name -in 'winget', 'npm' }
+        & (Get-CatalogItem 'codex').install
+        Should -Invoke Remove-JournalEntry -ParameterFilter { $key -eq 'winget|OpenAI.Codex' }
+        Should -Invoke Install-NpmGlobal -Times 1 -ParameterFilter { $Package -eq '@openai/codex' }
+    }
+    It 'names both ways when neither winget nor npm can' {
+        Mock Get-Command { $null } -ParameterFilter { $Name -in 'winget', 'npm' }
+        { & (Get-CatalogItem 'claude-code').install } | Should -Throw '*winget install -e --id Anthropic.ClaudeCode*npm install -g @anthropic-ai/claude-code*'
+    }
+}
+
+Describe 'After an install or removal' {
+    BeforeEach {
+        function Write-AhkIni($p, $cfg) {}
+        function Update-AgentList {}
+        function Get-ThemeTargets { @{ vscode = @{ run = { param($t, $c) $script:themed = $t } } } }
+        function Read-Colors($t) { @{} }
+        Mock Update-ProcessPath {}
+        Mock Update-Paths { @{} }
+        Mock Write-AhkIni {}
+        Mock Update-AgentList {}
+        Mock Read-State { @{ theme = 'nord' } }
+        Mock Get-Config { @{} }
+        Mock Write-Ok {}
+        $script:themed = $null
+    }
+    It 'refreshes PATH, paths, the ini and the agent list, then themes the app' {
+        Sync-AfterCatalogChange (Get-CatalogItem 'vscode') -Installed
+        Should -Invoke Update-ProcessPath -Times 1
+        Should -Invoke Update-Paths -Times 1
+        Should -Invoke Write-AhkIni -Times 1
+        Should -Invoke Update-AgentList -Times 1
+        $script:themed | Should -Be 'nord'
+    }
+    It 'themes nothing after a removal, or for a target turned off' {
+        Sync-AfterCatalogChange (Get-CatalogItem 'vscode')
+        $script:themed | Should -BeNullOrEmpty
+        Mock Get-Config { @{ themeTargets = @{ vscode = $false } } }
+        Sync-AfterCatalogChange (Get-CatalogItem 'vscode') -Installed
+        $script:themed | Should -BeNullOrEmpty
+        Should -Invoke Write-AhkIni -Times 2
     }
 }

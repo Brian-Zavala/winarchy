@@ -54,6 +54,63 @@ function Write-PackFile([string]$name, [string]$text) {
     }
 }
 
+# One value from the generated winarchy.ini ($null when it isn't there).
+function Get-AhkIniValue([string]$key) {
+    $ini = Join-Path $Generated 'winarchy.ini'
+    $line = Get-Content -LiteralPath $ini -ErrorAction SilentlyContinue | Where-Object { $_ -like "$key=*" } | Select-Object -First 1
+    if ($line) { $line.Substring($key.Length + 1).Trim() }
+}
+
+# The Windows Terminal profile winarchy's own tabs open on (Omarchy Shell, elevate off),
+# once apply has written it; '' before that.
+function Get-WtProfile { "$(Get-AhkIniValue 'wtProfile')" }
+
+# Where the code comes from: the same WINARCHY_REPO / WINARCHY_REF the bootstrap honours.
+function Get-WinarchySource {
+    @{ repo = $env:WINARCHY_REPO ?? 'Brian-Zavala/winarchy'; ref = $env:WINARCHY_REF ?? 'main' }
+}
+
+# This process's PATH again from the registry (Machine, then User), keeping the entries
+# only this process has (a Store PowerShell's own folder): winget and npm add to the
+# registry, and a process started before that sees none of it - nor does anything it
+# starts (GlazeWM, Zebar, AutoHotkey, a terminal).
+function Update-ProcessPath {
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $dirs = @([Environment]::GetEnvironmentVariable('Path', 'Machine'), [Environment]::GetEnvironmentVariable('Path', 'User'), $env:Path) -join ';' -split ';'
+    $env:Path = @($dirs | Where-Object { $_ -and $seen.Add($_.TrimEnd('\')) }) -join ';'
+}
+
+# The user PATH as stored: %USERPROFILE%\... entries unexpanded. Reading it through
+# [Environment] expands them, and writing that back hard-codes every one of them.
+function Get-UserPathRaw {
+    $k = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment')
+    if (-not $k) { return '' }
+    try { [string]$k.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames) } finally { $k.Dispose() }
+}
+
+function Set-UserPathRaw([string]$value) {
+    $k = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+    try { $k.SetValue('Path', $value, [Microsoft.Win32.RegistryValueKind]::ExpandString) } finally { $k.Dispose() }
+    Send-SettingChange 'Environment'
+}
+
+# Adds a folder to the user PATH, or takes one out; $true when it changed anything.
+function Edit-UserPath([string]$dir, [switch]$Remove) {
+    $cur = Get-UserPathRaw
+    $parts = @($cur -split ';' | Where-Object { $_ })
+    $want = $dir.TrimEnd('\')
+    $same = { param($d) [Environment]::ExpandEnvironmentVariables($d).TrimEnd('\') -eq $want }
+    $has = [bool]@($parts | Where-Object { & $same $_ }).Count
+    if ($Remove) {
+        if (-not $has) { return $false }
+        Set-UserPathRaw (@($parts | Where-Object { -not (& $same $_) }) -join ';')
+    } else {
+        if ($has) { return $false }
+        Set-UserPathRaw ((@($parts) + $dir) -join ';')
+    }
+    $true
+}
+
 function Read-Json([string]$path, [switch]$AsHashtable) {
     if (-not (Test-Path -LiteralPath $path)) { return $null }
     try { Get-Content -Raw -LiteralPath $path | ConvertFrom-Json -AsHashtable:$AsHashtable } catch { $null }
@@ -631,14 +688,32 @@ function Get-GlazeWmProcess {
     })
 }
 
+# GlazeWM's single-instance mutex (wm-platform's single_instance.rs, the same in 3.9 and
+# 3.10). A second GlazeWM shows "Another instance of the application is already running"
+# and exits, so this is the check that counts: the process list misses a GlazeWM that is
+# still starting. Access denied means it exists (a GlazeWM running elevated).
+$GlazeWmMutex = 'Global\325d0ed7-7f60-4925-8d1b-aa287b26b218'
+function Test-GlazeWmMutex {
+    try {
+        $m = $null
+        if ([Threading.Mutex]::TryOpenExisting($GlazeWmMutex, [ref]$m)) { $m.Dispose(); return $true }
+    } catch [UnauthorizedAccessException] { return $true } catch {}
+    $false
+}
+
+function Test-GlazeWmRunning { (Test-GlazeWmMutex) -or [bool](Get-GlazeWmProcess) }
+
 # GlazeWM starts glazewm-watcher as a child, and the child inherits GlazeWM's IPC socket.
 # If the WM dies and the watcher stays, the watcher keeps 127.0.0.1:6123 held. The next
 # GlazeWM then fails with "Fatal error ... (os error 10048)". So stop any leftover watcher
 # before starting GlazeWM, but only when no WM is running (a live WM's watcher is doing its job).
 # A watcher stuck while exiting can't be killed, and only a reboot frees the port. In that
 # case say so instead of starting a GlazeWM that can only fail.
+# Never a second one: install, apply, doctor -Fix and winarchy.ahk's guard can all get
+# here, and a second GlazeWM is an error dialog.
 function Start-GlazeWM([string]$exe) {
     if (-not $exe) { return }
+    if (Test-GlazeWmRunning) { Log 'GlazeWM: already running'; return }
     if (-not (Get-GlazeWmProcess)) {
         Get-Process glazewm-watcher -ErrorAction SilentlyContinue | ForEach-Object {
             Log "GlazeWM: stopping leftover glazewm-watcher $($_.Id) (it holds the IPC port)"
@@ -658,4 +733,7 @@ function Start-GlazeWM([string]$exe) {
         }
     }
     Start-InteractiveProcess -FilePath $exe -WorkingDirectory (Split-Path $exe)
+    # Until it holds its mutex, so the next caller (Start-Everything right after apply,
+    # winarchy.ahk's guard) sees it running.
+    for ($i = 0; $i -lt 25 -and -not (Test-GlazeWmMutex); $i++) { Start-Sleep -Milliseconds 200 }
 }

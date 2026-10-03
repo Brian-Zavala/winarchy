@@ -224,3 +224,46 @@ Describe 'CLI errors' {
         Get-Content (Join-Path $home2 '.winarchy\logs\winarchy.log') -Raw | Should -Match '\[theme-set\] FAILED: .*no-such-theme'
     }
 }
+
+Describe 'GlazeWM starts once' {
+    BeforeEach {
+        Mock Start-InteractiveProcess {}
+        Mock Start-Sleep {}
+        Mock Write-Utf8 {}
+        $exe = 'C:\Program Files\glzr.io\GlazeWM\glazewm.exe'
+    }
+    It 'starts none while one holds the mutex, even if the process list misses it' {
+        Mock Get-GlazeWmProcess { @() }
+        Mock Test-GlazeWmMutex { $true }
+        Start-GlazeWM $exe
+        Should -Invoke Start-InteractiveProcess -Times 0
+    }
+    It 'starts one when none runs, and waits for its mutex' {
+        Mock Get-GlazeWmProcess { @() }
+        Mock Get-Process {}
+        Mock Get-NetTCPConnection {}
+        $script:checks = 0
+        Mock Test-GlazeWmMutex { (++$script:checks) -gt 2 }
+        Start-GlazeWM $exe
+        Should -Invoke Start-InteractiveProcess -Times 1
+        $script:checks | Should -BeGreaterThan 2
+    }
+    It 'leaves the start to the install when apply runs with -NoRestart' {
+        Mock Get-GlazeWmProcess { @() }
+        Mock Test-GlazeWmMutex { $false }
+        Mock Start-GlazeWM {}
+        Switch-GlazeWM @{ glazewm = $exe } -NoRestart
+        Should -Invoke Start-GlazeWM -Times 0
+    }
+    It 'still starts it from a plain apply' {
+        Mock Get-GlazeWmProcess { @() }
+        Mock Test-GlazeWmMutex { $false }
+        Mock Start-GlazeWM {}
+        Switch-GlazeWM @{ glazewm = $exe }
+        Should -Invoke Start-GlazeWM -Times 1
+    }
+    It 'knows the mutex in both the CLI and winarchy.ahk' {
+        $GlazeWmMutex | Should -Be 'Global\325d0ed7-7f60-4925-8d1b-aa287b26b218'
+        Get-Content -Raw (Join-Path $root 'ahk\winarchy.ahk') | Should -Match ([regex]::Escape($GlazeWmMutex))
+    }
+}

@@ -124,6 +124,14 @@ SetTimer BarGuard, 5000
 ; OnExit arrow that used to return UnhookWinEvent's 1 - see UnhookMinimize.
 OnMessage DllCall("RegisterWindowMessage", "Str", "TaskbarCreated", "UInt"), (*) => SetTimer(RestartBar, -3000)
 OnMessage 0x007E, (*) => SetTimer(OnDisplayChange, -3000)    ; WM_DISPLAYCHANGE
+; WM_SETTINGCHANGE "Environment" (an installer changed PATH): what this script starts
+; from now on (terminals, Zebar, GlazeWM) gets the new PATH.
+OnMessage 0x001A, OnSettingChange
+
+OnSettingChange(wParam, lParam, *) {
+    if lParam && StrGet(lParam) = "Environment"
+        SetTimer(RefreshPath, -500)
+}
 ; Commands from menu.ahk (menu widget actions that need this script's state).
 OnMessage 0x5555, OnMenuCommand
 ; GlazeWM keys pressed while an admin window was in front, relayed by the admin game
@@ -389,7 +397,16 @@ SetTimer GlazeGuard, 3000
 ; "running" forever and no watchdog here would ever fire). The CLI lives in a `cli`
 ; subfolder; the official GlazeWM's own path reads empty, because it runs with UI access,
 ; and that is exactly the one we must count as running.
+; GlazeWM's single-instance mutex comes first (lib/common.ps1, Test-GlazeWmMutex): it is
+; held from the moment GlazeWM starts, so a GlazeWM still starting is not started twice
+; (a second one is an "Another instance ... is already running" dialog).
 GlazeWmRunning() {
+    if h := DllCall("OpenMutexW", "uint", 0x100000, "int", 0, "str", "Global\325d0ed7-7f60-4925-8d1b-aa287b26b218", "ptr") {
+        DllCall("CloseHandle", "ptr", h)
+        return true
+    }
+    if A_LastError = 5                       ; access denied: it exists (an elevated GlazeWM)
+        return true
     for pid in ProcessList("glazewm.exe") {
         path := ""
         try path := ProcessGetPath(pid)

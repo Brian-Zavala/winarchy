@@ -38,7 +38,10 @@ function Install-TailscaleStep([switch]$Restoring) {
     Write-Ok 'It needs a Tailscale account and one admin prompt to install.'
     if ($script:AssumeYes) { Write-Ok "Not installed in an unattended install. $later"; return }
     $yes = Read-YesNo 'Install Tailscale?' $false
-    try { Set-ConfigValue 'tailscaleOffered' $true } catch { Log "tailscaleOffered: $($_.Exception.Message)" }
+    # Kept for Get-InstallAnswers, which writes config.json: written here, before the other
+    # answers, an install stopped in between would look like a restore the next time.
+    $script:TailscaleOffered = $true
+    if (Test-Path $ConfigFile) { try { Set-ConfigValue 'tailscaleOffered' $true } catch { Log "tailscaleOffered: $($_.Exception.Message)" } }
     if (-not $yes) { Write-Ok "Skipped. $later"; return }
     # A failed optional extra must not take the whole install down with it.
     try { Install-CatalogItem 'tailscale' } catch { Write-Ok "Tailscale install failed (skipping): $($_.Exception.Message)" }

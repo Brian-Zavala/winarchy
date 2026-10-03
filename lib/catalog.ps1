@@ -61,10 +61,36 @@ function Install-NpmGlobal([string]$Package, [string]$Label) {
     if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw "$Label installs with npm: install Node.js first (Install > Development > Node.js)" }
     & npm install -g $Package
     if ($LASTEXITCODE -ne 0) { throw "npm could not install $Label; try: npm install -g $Package" }
+    Update-ProcessPath
 }
 function Uninstall-NpmGlobal([string]$Package, [string]$Label) {
     & npm uninstall -g $Package
     if ($LASTEXITCODE -ne 0) { throw "npm could not remove $Label; try: npm uninstall -g $Package" }
+}
+# The agents that have a winget package too (portable, on PATH through winget's Links):
+# winget first, so a PC without Node.js can install them; npm when winget can't.
+function Install-AgentPackage([string]$WingetId, [string]$NpmPackage, [string]$Label) {
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Save-Winget $WingetId $false 'menu'
+        if (Install-WingetPackage $WingetId $Label 'user') { return }
+        [void](Remove-JournalEntry "winget|$WingetId")
+    }
+    if (Get-Command npm -ErrorAction SilentlyContinue) { Install-NpmGlobal $NpmPackage $Label; return }
+    throw "$Label did not install; try: winget install -e --id $WingetId   (or with Node.js: npm install -g $NpmPackage)"
+}
+# Whichever installed it: winget's package when winget has it, else npm's.
+function Uninstall-AgentPackage([string]$WingetId, [string]$NpmPackage, [string]$Label) {
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        $listed = (& winget list -e --id $WingetId --disable-interactivity --accept-source-agreements 2>$null) -match [regex]::Escape($WingetId)
+        if ($listed) {
+            & winget uninstall -e --id $WingetId --silent --disable-interactivity | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw "winget could not remove $Label; try: winget uninstall -e --id $WingetId" }
+            [void](Remove-JournalEntry "winget|$WingetId")
+            return
+        }
+    }
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw "$Label was not installed by winget or npm: remove it the way it was installed" }
+    Uninstall-NpmGlobal $NpmPackage $Label
 }
 function Install-StoreApp([string]$StoreId, [string]$Label) {
     & winget install --id $StoreId --source msstore --accept-package-agreements --accept-source-agreements
@@ -146,10 +172,10 @@ $Catalog = @(
         items = @(
             @{ key = 'claude-code'; label = 'Claude Code'; id = 'npm-claude-code'
                test = { Test-CatalogCommand 'claude' }
-               install = { Install-NpmGlobal '@anthropic-ai/claude-code' 'Claude Code' }; remove = { Uninstall-NpmGlobal '@anthropic-ai/claude-code' 'Claude Code' } }
+               install = { Install-AgentPackage 'Anthropic.ClaudeCode' '@anthropic-ai/claude-code' 'Claude Code' }; remove = { Uninstall-AgentPackage 'Anthropic.ClaudeCode' '@anthropic-ai/claude-code' 'Claude Code' } }
             @{ key = 'codex'; label = 'Codex'; id = 'npm-codex'
                test = { Test-CatalogCommand 'codex' }
-               install = { Install-NpmGlobal '@openai/codex' 'Codex' }; remove = { Uninstall-NpmGlobal '@openai/codex' 'Codex' } }
+               install = { Install-AgentPackage 'OpenAI.Codex' '@openai/codex' 'Codex' }; remove = { Uninstall-AgentPackage 'OpenAI.Codex' '@openai/codex' 'Codex' } }
             @{ key = 'copilot-cli'; label = 'GitHub Copilot'; id = 'npm-copilot'
                test = { Test-CatalogCommand 'copilot' }
                install = { Install-NpmGlobal '@github/copilot' 'GitHub Copilot' }; remove = { Uninstall-NpmGlobal '@github/copilot' 'GitHub Copilot' } }
@@ -357,21 +383,26 @@ function Find-TuiExe($item) {
     if (Test-Path -LiteralPath $link) { $link }
 }
 
+# What a terminal app's shortcut runs: Windows Terminal on winarchy's own profile (so
+# "Run as administrator" in Terminal's defaults can't break it), else the exe itself.
+function Get-TuiShortcutCommand($item, [string]$exe) {
+    $wt = (Get-Command wt.exe -ErrorAction SilentlyContinue).Source
+    if (-not $wt) { return @{ target = $exe; arguments = "$($item.tui.args)" } }
+    $prof = Get-WtProfile
+    $p = if ($prof) { " -p `"$prof`"" } else { '' }
+    @{ target = $wt; arguments = "new-tab$p --title `"$($item.tui.name)`" `"$exe`"$(if ($item.tui.args) { " $($item.tui.args)" })" }
+}
+
 function Add-TuiShortcut($item) {
     $exe = Find-TuiExe $item
     if (-not $exe) { Log "$($item.label): no exe found for its Start shortcut yet"; return $false }
     $lnkPath = Get-TuiShortcutPath $item
     New-Item -ItemType Directory -Force (Split-Path $lnkPath) | Out-Null
     Save-File $lnkPath
-    $wt = (Get-Command wt.exe -ErrorAction SilentlyContinue).Source
+    $cmd = Get-TuiShortcutCommand $item $exe
     $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnkPath)
-    if ($wt) {
-        $s.TargetPath = $wt
-        $s.Arguments = "new-tab --title `"$($item.tui.name)`" `"$exe`"$(if ($item.tui.args) { " $($item.tui.args)" })"
-    } else {
-        $s.TargetPath = $exe
-        $s.Arguments = "$($item.tui.args)"
-    }
+    $s.TargetPath = $cmd.target
+    $s.Arguments = $cmd.arguments
     $s.WorkingDirectory = $env:USERPROFILE
     $s.IconLocation = "$exe,0"
     $s.Description = "$($item.tui.name) in the terminal"
@@ -387,6 +418,15 @@ function Remove-TuiShortcut($item) {
     if ((Test-Path -LiteralPath $dir) -and -not (Get-ChildItem -LiteralPath $dir -Force)) { Remove-Item -LiteralPath $dir -Force -ErrorAction SilentlyContinue }
 }
 
+# A shortcut made by an older winarchy (no terminal profile yet) or for an exe that moved.
+function Test-TuiShortcutCurrent($item, [string]$lnk) {
+    $exe = Find-TuiExe $item
+    if (-not $exe) { return $true }
+    $cmd = Get-TuiShortcutCommand $item $exe
+    $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
+    $s.TargetPath -eq $cmd.target -and $s.Arguments -eq $cmd.arguments
+}
+
 # apply, and every refresh of the Apps list: a shortcut for every installed terminal app
 # that lacks one (installed with winget by hand counts too), and none for one that was
 # uninstalled some other way.
@@ -394,8 +434,10 @@ function Sync-TuiShortcuts {
     $snapshot = Get-InstalledSnapshot
     foreach ($item in $Catalog | ForEach-Object { $_.items } | Where-Object { $_.tui }) {
         $installed = try { [bool](& $item.test $snapshot) } catch { $false }
-        $has = Test-Path -LiteralPath (Get-TuiShortcutPath $item)
+        $lnk = Get-TuiShortcutPath $item
+        $has = Test-Path -LiteralPath $lnk
         if ($installed -and -not $has) { [void](Add-TuiShortcut $item) }
+        elseif ($installed -and -not (Test-TuiShortcutCurrent $item $lnk)) { [void](Add-TuiShortcut $item) }
         elseif (-not $installed -and $has) { Remove-TuiShortcut $item }
     }
     # Your own (Install > TUI > Custom TUI): kept while the command is still there.
@@ -459,6 +501,32 @@ function Remove-CustomTui([string]$Name) {
     Write-Ok "Removed $Name"
 }
 
+# The theme target an app has (lib/themes.ps1, Get-ThemeTargets): themed as soon as it is
+# installed, not at the next theme change.
+$CatalogThemeTarget = @{
+    vscode = 'vscode'; neovim = 'neovim'; 'claude-code' = 'claude'; btop = 'btop'; herdr = 'herdr'; 'windows-terminal' = 'terminal'
+}
+
+# After an install or a removal: this process's PATH, the detected paths and the ini the
+# menu reads (editor, btop, Herdr), the agent list, then the app's theme. Without it
+# those stayed as they were until the next winarchy apply.
+function Sync-AfterCatalogChange($item, [switch]$Installed) {
+    Update-ProcessPath
+    try {
+        $p = Update-Paths
+        if (Get-Command Write-AhkIni -ErrorAction SilentlyContinue) { Write-AhkIni $p (Get-Config) }
+        if (Get-Command Update-AgentList -ErrorAction SilentlyContinue) { [void](Update-AgentList) }
+    } catch { Log "$($item.label): refresh after the change FAILED: $($_.Exception.Message)" }
+    $target = $CatalogThemeTarget[$item.key]
+    if (-not $Installed -or -not $target -or -not (Get-Command Get-ThemeTargets -ErrorAction SilentlyContinue)) { return }
+    $off = (Get-Config).themeTargets
+    if ($off -and $off[$target] -eq $false) { return }
+    try {
+        $theme = (Read-State).theme
+        if ($theme) { [void](& (Get-ThemeTargets)[$target].run $theme (Read-Colors $theme)); Write-Ok "$($item.label): themed $theme" }
+    } catch { Log "$($item.label): theme FAILED: $($_.Exception.Message)" }
+}
+
 function Install-CatalogItem([string]$key) {
     $item = Get-CatalogItem $key
     if (-not $item) { throw "unknown catalog item '$key' (winarchy catalog lists them)" }
@@ -471,7 +539,9 @@ function Install-CatalogItem([string]$key) {
     if ($item.install) {
         & $item.install
         if ($item.tui -and (Add-TuiShortcut $item)) { Write-Ok "$($item.tui.name) is in Start and the menu's Apps list" }
-        [void](Update-Catalog); return
+        [void](Update-Catalog)
+        Sync-AfterCatalogChange $item -Installed
+        return
     }
     # Journal before the change, so `winarchy uninstall` knows this one was ours.
     Save-Winget $item.id $false 'menu'
@@ -482,6 +552,7 @@ function Install-CatalogItem([string]$key) {
     if ($item.tui -and (Add-TuiShortcut $item)) { Write-Ok "$($item.tui.name) is in Start and the menu's Apps list" }
     # Setup after the package itself (Tailscale: start its sign-in, show it in the bar).
     if ($item.postInstall) { & $item.postInstall }
+    Sync-AfterCatalogChange $item -Installed
 }
 
 function Uninstall-CatalogItem([string]$key) {
@@ -493,6 +564,7 @@ function Uninstall-CatalogItem([string]$key) {
         & $item.remove
         Remove-JournalEntry "winget|$($item.id)"
         [void](Update-Catalog)
+        Sync-AfterCatalogChange $item
         return
     }
     & winget uninstall -e --id $item.id --silent --disable-interactivity | Out-Host
@@ -501,4 +573,5 @@ function Uninstall-CatalogItem([string]$key) {
     # `winarchy uninstall` try to remove it a second time.
     Remove-JournalEntry "winget|$($item.id)"
     [void](Update-Catalog)
+    Sync-AfterCatalogChange $item
 }

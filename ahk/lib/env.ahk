@@ -118,23 +118,89 @@ OmarchyCmdLine(args*) {
 RunInTerminal(title, command, dir := EnvGet("USERPROFILE")) {
     if Env("wt") {
         try {
-            Run 'wt.exe new-tab --title "' title '" -d "' dir '" ' command
+            Run TerminalTabLine(title, command, dir)
             return
         }
     }
     Run command, dir
 }
 
+; wt splits tabs on ; (escaped as \;, like Start-AgentTerminal does).
+TerminalTabLine(title, command, dir) {
+    return 'wt.exe new-tab' WtProfileArg() ' --title "' title '" -d "' dir '" ' StrReplace(command, ";", "\;")
+}
+
 ; Windows Terminal with these arguments, or the fallback command line without it.
 RunWt(args, fallback := "") {
     if Env("wt") {
         try {
-            Run 'wt.exe ' args
+            Run WtLine(args)
             return
         }
     }
     if fallback
         try Run fallback
+}
+
+; No profile of its own: Omarchy Shell, placed after the window options (-w, --size...).
+WtLine(args) {
+    if WtProfileArg() && !RegExMatch(args, "(^|\s)(-p|--profile)\s")
+        args := RegExReplace(args, "^((?:(?:-w|--window|--size|--pos)\s+\S+\s*|(?:--fullscreen|--maximized|--focus|-F|-M|-f)\s+)*)", "$1" LTrim(WtProfileArg()) " ", , 1)
+    return 'wt.exe ' Trim(args)
+}
+
+; PATH as the registry has it now (Machine, then User), %VARS% expanded.
+RegistryPathDirs() {
+    dirs := []
+    for root in ["HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment", "HKCU\Environment"] {
+        try for d in StrSplit(RegRead(root, "Path"), ";") {
+            if d = ""
+                continue
+            if InStr(d, "%") {                ; REG_EXPAND_SZ entries: %USERPROFILE%\...
+                buf := Buffer(2048 * 2)
+                if DllCall("ExpandEnvironmentStringsW", "str", d, "ptr", buf, "uint", 2048)
+                    d := StrGet(buf, "UTF-16")
+            }
+            dirs.Push(d)
+        }
+    }
+    return dirs
+}
+
+; A command line tool, found on PATH as it is now: this script's own PATH is from when you
+; logged in, so something installed since (Install > TUI) would look missing.
+FindCommand(name) {
+    dirs := [EnvGet("LOCALAPPDATA") "\Microsoft\WinGet\Links"]
+    dirs.Push(RegistryPathDirs()*)
+    for d in dirs {
+        for ext in [".exe", ".cmd", ".bat"]
+            if FileExist(p := RTrim(d, "\") "\" name ext)
+                return p
+    }
+    return ""
+}
+
+; This script's PATH again from the registry, keeping entries only this process has: a
+; script started at login doesn't see what was installed since (winget, npm), and neither
+; does anything it runs.
+RefreshPath() {
+    seen := Map()
+    seen.CaseSense := false
+    out := ""
+    for list in [RegistryPathDirs(), StrSplit(EnvGet("PATH"), ";")]
+        for d in list
+            if d != "" && !seen.Has(k := RTrim(d, "\")) {
+                seen[k] := true
+                out .= (out = "" ? "" : ";") d
+            }
+    if out != ""
+        EnvSet "PATH", out
+}
+
+; -p for winarchy's own terminal profile (elevate off, so "Run as administrator" in
+; Terminal's defaults can't break these tabs), or nothing before `winarchy apply` wrote it.
+WtProfileArg() {
+    return Env("wtProfile") ? ' -p "' Env("wtProfile") '"' : ""
 }
 
 ; Physical-pixel coordinates (what GlazeWM uses) for this thread.

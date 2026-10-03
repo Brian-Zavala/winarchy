@@ -29,6 +29,8 @@ function Invoke-AutoTile([string]$action) {
 # through so the watcher always talks to whichever GlazeWM is actually running.
 function ConvertTo-AutoTileStartup($cfg, [string]$cli) {
     if (-not $cfg.autoTiling.enabled -or -not $cli) { return '' }
-    $script = Join-Path $Code 'lib\autotile-watch.ps1'
+    # A YAML single-quoted string: an apostrophe in a path (a user name like O'Brien) is ''.
+    $script = (Join-Path $Code 'lib\autotile-watch.ps1') -replace "'", "''"
+    $cli = $cli -replace "'", "''"
     ", 'shell-exec pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File ""$script"" -Cli ""$cli""'"
 }
