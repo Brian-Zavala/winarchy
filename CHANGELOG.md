@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.40 — 2026-10-03
+
 - Fixed: an uninstall could leave one of Winarchy's backgrounds on the lock screen. Windows keeps its own copy of the picture, so it stayed even after `-Purge`. The uninstall now puts back your own lock screen picture, or Windows' default when that one is gone or was Winarchy's. It checks what Windows actually shows afterwards, and says so if a Winarchy picture is still there instead of ending with "Done.". A reinstall after such an uninstall no longer records Winarchy's picture as the one to go back to.
 
 ## 0.1.39 — 2026-10-03
