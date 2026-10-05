@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.55 — 2026-10-05
+
 - Fixed: apps that remember a full-screen size (Chrome, Explorer, Settings…) opened over the whole monitor, behind the top bar, instead of tiling. With the taskbar hidden they save that size, and GlazeWM took it for fullscreen. A new window with an ordinary resizable frame is now tiled; real fullscreen (borderless: videos, F11, game launchers) is left as it is. A maximized window that GlazeWM leaves untiled is restored and moved below the bar.
 - Fixed: after a window closed, the next one could open below the others instead of beside them. GlazeWM hands the workspace the direction of the dwindle split that was left, so it stayed stacked. A workspace with one window or none now goes back to side by side (stacked on a portrait monitor).
 - Fixed: `Ctrl + V` didn't paste a picture into Windows Terminal (Claude Code and other CLIs), only `Ctrl + Shift + V` did. A copied picture or file now goes through Terminal's paste on `Ctrl + V` too, as a file path; text still pastes as before.
