@@ -9,6 +9,8 @@ BeforeAll {
     $Code = $root
     # Log lines from tests go to a scratch log, never the real one.
     $LogFile = Join-Path $TestDrive 'winarchy.log'
+    # The journal too: the real one in ~/.winarchy/backup is what uninstall replays.
+    $BackupRoot = Join-Path $TestDrive 'backup'
     # The Web Apps rows ask the journal: a scratch one, never the real one.
     $script:JournalDir = Join-Path $TestDrive 'journal'
     $script:JournalCache = $null

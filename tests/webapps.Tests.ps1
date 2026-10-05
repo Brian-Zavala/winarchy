@@ -7,6 +7,8 @@ BeforeAll {
     foreach ($f in 'common', 'detect', 'keys', 'journal', 'webapps', 'catalog', 'herdr') { . "$root\lib\$f.ps1" }
     $Code = $root
     $LogFile = Join-Path $TestDrive 'winarchy.log'
+    # The journal too: the real one in ~/.winarchy/backup is what uninstall replays.
+    $BackupRoot = Join-Path $TestDrive 'backup'
     $presets = Get-WebAppPresets
     function New-ScratchJournal {
         $script:JournalDir = Join-Path $TestDrive ([guid]::NewGuid())

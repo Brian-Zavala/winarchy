@@ -18,6 +18,18 @@ function Get-JournalDir {
     $script:JournalDir
 }
 
+# Every journal not undone yet, newest first. Usually one, but a journal can be marked
+# undone without its changes being undone (a test run once did it to a real one): what
+# was recorded after that lands in a new journal, and an uninstall must replay them all.
+function Get-LiveJournalDirs {
+    $dirs = @(Get-ChildItem $BackupRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path (Join-Path $_.FullName 'journal.json') } | Sort-Object Name -Descending | ForEach-Object FullName)
+    if ($script:JournalDir -and $dirs -notcontains $script:JournalDir -and (Test-Path (Join-Path $script:JournalDir 'journal.json'))) {
+        $dirs = @($script:JournalDir) + $dirs
+    }
+    $dirs
+}
+
 function Read-Journal {
     if ($script:JournalCache) { return $script:JournalCache }
     $j = Read-Json (Join-Path (Get-JournalDir) 'journal.json') -AsHashtable

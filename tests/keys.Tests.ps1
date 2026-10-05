@@ -14,6 +14,8 @@ BeforeAll {
     foreach ($f in 'common', 'detect', 'keys', 'render', 'themes', 'journal', 'apply') { . "$root\lib\$f.ps1" }
     $Code = $root
     $LogFile = Join-Path $TestDrive 'winarchy.log'
+    # The journal too: the real one in ~/.winarchy/backup is what uninstall replays.
+    $BackupRoot = Join-Path $TestDrive 'backup'
     # Not $Generated here: the key-name helper's compiled type is cached under it, and a
     # loaded DLL in TestDrive can't be deleted when the run ends.
 }

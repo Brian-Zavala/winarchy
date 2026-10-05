@@ -11,6 +11,8 @@ BeforeAll {
     $ConfigFile = Join-Path $Data 'config.json'
     $Themes = Join-Path $Data 'themes'
     $LogFile = Join-Path $TestDrive 'winarchy.log'
+    # The journal too: the real one in ~/.winarchy/backup is what uninstall replays.
+    $BackupRoot = Join-Path $TestDrive 'backup'
     . "$root\lib\uninstall.ps1"
 
     # Nothing here may touch the running desktop: these stand in for the commands that
@@ -25,7 +27,23 @@ BeforeAll {
     function Stop-Process {}
     function winget { $script:WingetCalls.Add(($args -join ' ')); $global:LASTEXITCODE = [int]$script:WingetExit }
     function Invoke-Elevated([string]$Script) { $script:ElevatedCalls.Add($Script); if ($script:ElevatedFails) { throw 'the elevated step failed (exit 1603)' } }
-    function Restore-JournalEntry($e, $dir) { $script:Restored.Add("$($e.kind)|$($e.id)$($e.dir)") }
+    function Restore-JournalEntry($e, $dir) {
+        $script:Restored.Add("$($e.kind)|$($e.id)$($e.dir)")
+        if ($null -ne $script:RestoredFrom) { $script:RestoredFrom.Add("$($e.key)@$(Split-Path $dir -Leaf)") }
+    }
+    # Winarchy's login entries: a Startup folder and Run key of the tests' own, never the
+    # real ones, and no task scheduler, PATH, UAC or Explorer restart.
+    $script:Places = @{ startup = Join-Path $TestDrive 'Startup'; run = 'TestRegistry:\Run' }
+    function Get-AutostartPlaces { $script:Places }
+    function Get-GameHelper { @{ task = $script:GameTask } }
+    function Disable-GameHelper { $script:GameHelperRemoved++; if (-not $script:GameTaskSticks) { $script:GameTask = $null } }
+    function Test-BrowserTask { $false }
+    function Disable-BrowserPolicy {}
+    function Get-UserPathRaw { $script:FakePath }
+    function Set-UserPathRaw([string]$value) { $script:FakePath = $value }
+    function Show-TaskbarAgain { $script:TaskbarShown++ }
+    $script:GameTask = $null
+    $script:FakePath = 'C:\other'
     # The lock screen as Windows reports it, and what uninstall set it to: never the real one.
     function Get-LockScreenImage { $script:LockImage }
     function Set-LockScreenImage([string]$Path) { $script:LockSet.Add($Path); if (-not $script:LockStuck) { $script:LockImage = $Path } }
@@ -199,6 +217,8 @@ Describe 'Uninstall leaves no winarchy lock screen' {
         Invoke-Uninstall -Yes 6>$null
         $script:WallpaperResets | Should -Be 0
         $script:Wallpaper = Join-Path $Data 'wallpapers\nord\1.jpg'
+        # The first run marked its journal undone: a second needs one of its own.
+        New-TestJournal @()
         Invoke-Uninstall -Yes 6>$null
         $script:WallpaperResets | Should -Be 1
         $script:Wallpaper = $null
@@ -249,6 +269,116 @@ Describe 'Uninstall leaves no winarchy lock screen' {
         $e = @((Read-Journal).entries | Where-Object kind -eq 'lockscreen')
         $e.Count | Should -Be 1
         Test-WinarchyImage $e[0].path | Should -BeFalse
+    }
+}
+
+Describe 'Uninstall replays every journal not undone yet' {
+    BeforeEach {
+        New-TestData
+        Remove-Item $BackupRoot -Recurse -Force -ErrorAction SilentlyContinue
+        $script:JournalDir = $null; $script:JournalCache = $null
+        $script:RestoredFrom = [Collections.Generic.List[string]]::new()
+        function New-BackupJournal([string]$name, [object[]]$entries) {
+            $d = Join-Path $BackupRoot $name
+            New-Item -ItemType Directory -Force $d | Out-Null
+            Write-Json (Join-Path $d 'journal.json') ([ordered]@{ entries = @($entries) }) 8
+            $d
+        }
+    }
+    AfterEach { $script:RestoredFrom = $null }
+    It 'takes back what an older journal recorded, after one marked undone left a newer one behind' {
+        # The install's journal, and the one started after it was marked undone (with the
+        # same wallpaper recorded again, by then already winarchy's).
+        $old = New-BackupJournal '20261002-223616' @(
+            @{ kind = 'wallpaper'; key = 'wallpaper'; path = 'C:\mine.jpg' }
+            @{ kind = 'file'; key = 'file|C:\Startup\winarchy.lnk'; path = 'C:\Startup\winarchy.lnk'; existed = $false }
+        )
+        $new = New-BackupJournal '20261002-234822' @(
+            @{ kind = 'wallpaper'; key = 'wallpaper'; path = 'C:\winarchy-own.jpg' }
+            @{ kind = 'lockscreen'; key = 'lockscreen'; path = $null }
+        )
+        Invoke-Uninstall -Yes 6>$null
+        @($script:RestoredFrom) | Should -Be @('lockscreen@20261002-234822', 'file|C:\Startup\winarchy.lnk@20261002-223616', 'wallpaper@20261002-223616')
+        foreach ($d in $old, $new) {
+            Test-Path (Join-Path $d 'journal.json') | Should -BeFalse
+            @(Get-ChildItem $d -Filter 'journal-undone-*.json').Count | Should -Be 1
+        }
+    }
+    It '-DryRun leaves every journal as it was' {
+        $d = New-BackupJournal '20261002-223616' @(@{ kind = 'wallpaper'; key = 'wallpaper'; path = 'C:\mine.jpg' })
+        Invoke-Uninstall -Yes -DryRun 6>$null
+        Test-Path (Join-Path $d 'journal.json') | Should -BeTrue
+    }
+}
+
+Describe 'Uninstall removes what starts winarchy at login, journal or not' {
+    BeforeAll {
+        function New-TestShortcut([string]$path, [string]$target, [string]$arguments) {
+            $s = (New-Object -ComObject WScript.Shell).CreateShortcut($path)
+            $s.TargetPath = $target; $s.Arguments = $arguments; $s.Save()
+        }
+    }
+    BeforeEach {
+        New-TestData; New-TestJournal @()
+        $script:WingetCalls = [Collections.Generic.List[string]]::new()
+        $script:Restored = [Collections.Generic.List[string]]::new()
+        $script:FakeTasks = @()
+        $script:LockImage = $null
+        $script:GameHelperRemoved = 0
+        $script:GameTaskSticks = $false
+        $script:TaskbarShown = 0
+        $startup = $script:Places.startup
+        Remove-Item $startup -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force $startup | Out-Null
+        $notepad = Join-Path $env:SystemRoot 'notepad.exe'
+        New-TestShortcut (Join-Path $startup 'winarchy.lnk') $notepad ''
+        New-TestShortcut (Join-Path $startup 'Screenshot to Clipboard.lnk') $notepad "-File `"$Code\ps51\screenshot-to-clipboard.ps1`""
+        New-TestShortcut (Join-Path $startup 'Mine.lnk') $notepad 'C:\notes.txt'
+        Remove-Item 'TestRegistry:\Run' -Recurse -ErrorAction SilentlyContinue
+        New-Item 'TestRegistry:\Run' | Out-Null
+        Set-ItemProperty 'TestRegistry:\Run' -Name GlazeWM -Value "`"$Data\glazewm-animations\glazewm.exe`""
+        Set-ItemProperty 'TestRegistry:\Run' -Name Steam -Value '"C:\Program Files (x86)\Steam\steam.exe" -silent'
+        Set-ItemProperty 'TestRegistry:\Run' -Name OwnGlazeWM -Value '"C:\Program Files\glzr.io\GlazeWM\glazewm.exe"'
+        $script:GameTask = 'registered'
+        $script:FakePath = "C:\other;$Code\bin\"
+    }
+    It 'takes out the shortcuts, Run values, task and PATH entry that point into winarchy' {
+        $out = Invoke-Uninstall -Yes 6>&1 | Out-String
+        @((Get-ChildItem $script:Places.startup).Name) | Should -Be @('Mine.lnk')
+        $run = Get-ItemProperty 'TestRegistry:\Run'
+        $run.PSObject.Properties.Name | Should -Not -Contain 'GlazeWM'
+        $run.Steam | Should -Not -BeNullOrEmpty
+        $run.OwnGlazeWM | Should -Not -BeNullOrEmpty
+        $script:GameHelperRemoved | Should -Be 1
+        $script:FakePath | Should -Be 'C:\other'
+        $out | Should -Match 'Done\.'
+    }
+    It 'says so, instead of "Done.", when one is still there afterwards' {
+        $script:GameTaskSticks = $true
+        $out = Invoke-Uninstall -Yes 3>$null 6>&1 | Out-String
+        $out | Should -Match 'step\(s\) failed'
+        $out | Should -Match 'admin game helper task is still there and starts winarchy at login'
+        $out | Should -Not -Match 'Done\.'
+    }
+    It '-DryRun lists them and removes nothing' {
+        $out = Invoke-Uninstall -Yes -DryRun 6>&1 | Out-String
+        $out | Should -Match '\[dry-run\] Remove Startup\\winarchy\.lnk'
+        $out | Should -Match '\[dry-run\] Remove Run\\GlazeWM'
+        @(Get-ChildItem $script:Places.startup).Count | Should -Be 3
+        $script:GameHelperRemoved | Should -Be 0
+        $script:FakePath | Should -Match 'winarchy|bin'
+    }
+    It 'shows the taskbar again when winarchy hid it and no journal said how it was' {
+        Write-Json $ConfigFile @{ hideTaskbar = $true }
+        Invoke-Uninstall -Yes 6>$null
+        $script:TaskbarShown | Should -Be 1
+    }
+    It 'leaves that to the journal when it recorded the taskbar' {
+        Write-Json $ConfigFile @{ hideTaskbar = $true }
+        New-TestJournal @(@{ kind = 'taskbar'; key = 'taskbar'; autoHide = $false; stuckRects3 = 'AA==' })
+        Invoke-Uninstall -Yes 6>$null
+        $script:TaskbarShown | Should -Be 0
+        $script:Restored | Should -Contain 'taskbar|'
     }
 }
 

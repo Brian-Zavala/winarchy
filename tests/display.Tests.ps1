@@ -12,6 +12,8 @@ BeforeAll {
     $Generated = Join-Path $Data 'generated'
     $Pack = Join-Path $TestDrive 'pack'
     $LogFile = Join-Path $TestDrive 'winarchy.log'
+    # The journal too: the real one in ~/.winarchy/backup is what uninstall replays.
+    $BackupRoot = Join-Path $TestDrive 'backup'
     $AlacrittyConfig = Join-Path $TestDrive 'alacritty.toml'
     New-Item -ItemType Directory -Force $Data, $Pack | Out-Null
     $script:JournalDir = Join-Path $TestDrive 'journal'

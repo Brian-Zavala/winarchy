@@ -8,6 +8,8 @@ BeforeAll {
     $Code = $root
     # Log lines from tests go to a scratch log, never the real one.
     $LogFile = Join-Path $TestDrive 'winarchy.log'
+    # The journal too: the real one in ~/.winarchy/backup is what uninstall replays.
+    $BackupRoot = Join-Path $TestDrive 'backup'
     $Pack = Join-Path $TestDrive 'pack'
     New-Item -ItemType Directory -Force $Pack | Out-Null
     # SHA-256 of the text "hello".

@@ -55,13 +55,89 @@ function Restore-DefaultWallpaper {
     }
 }
 
+# Where winarchy's login entries live. Its own function so the tests can point it at
+# their own folder and registry key: the real ones start winarchy on this PC.
+function Get-AutostartPlaces {
+    @{ startup = [Environment]::GetFolderPath('Startup'); run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' }
+}
+
+# What would start winarchy at the next login, found on the PC instead of in the journal:
+# a journal that was lost, or marked undone without being undone, once left all of this
+# behind, and the next reboot brought winarchy back. Only what is winarchy's for sure:
+# a shortcut or Run value pointing into its folders, its own tasks, its PATH entry.
+function Get-WinarchyAutostart {
+    $places = Get-AutostartPlaces
+    $roots = @($Code, $Data, (Join-Path $env:LOCALAPPDATA 'omarchy-win'), (Join-Path $env:USERPROFILE '.omarchy-win')) |
+        Where-Object { $_ } | ForEach-Object { $_.TrimEnd('\') + '\' }
+    $ours = { param([string]$s) @($roots | Where-Object { $s.IndexOf($_, [StringComparison]::OrdinalIgnoreCase) -ge 0 }).Count -gt 0 }
+    $sh = $null
+    foreach ($lnk in @(Get-ChildItem -LiteralPath $places.startup -Filter '*.lnk' -File -ErrorAction SilentlyContinue)) {
+        $sh ??= New-Object -ComObject WScript.Shell
+        $s = try { $sh.CreateShortcut($lnk.FullName) } catch { $null }
+        if ($lnk.Name -in 'winarchy.lnk', 'omarchy-wm.lnk' -or ($s -and (& $ours "$($s.TargetPath) $($s.Arguments)"))) {
+            [pscustomobject]@{ kind = 'startup'; what = "Startup\$($lnk.Name)"; path = $lnk.FullName }
+        }
+    }
+    $run = Get-ItemProperty $places.run -ErrorAction SilentlyContinue
+    if ($run) {
+        foreach ($v in $run.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' -and (& $ours "$($_.Value)") }) {
+            [pscustomobject]@{ kind = 'run'; what = "Run\$($v.Name)"; name = $v.Name }
+        }
+    }
+    if ((Get-GameHelper).task) { [pscustomobject]@{ kind = 'gametask'; what = 'the admin game helper task' } }
+    if (Test-BrowserTask) { [pscustomobject]@{ kind = 'browsertask'; what = 'the browser colour task' } }
+    $bin = (Join-Path $Code 'bin').TrimEnd('\')
+    if (@((Get-UserPathRaw) -split ';' | Where-Object { $_ -and [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -eq $bin }).Count) {
+        [pscustomobject]@{ kind = 'path'; what = "PATH entry $bin"; dir = $bin }
+    }
+}
+
+function Remove-WinarchyAutostartItem($item) {
+    switch ($item.kind) {
+        'startup' { Remove-Item -LiteralPath $item.path -Force }
+        'run' { Remove-ItemProperty (Get-AutostartPlaces).run -Name $item.name }
+        'gametask' { Disable-GameHelper }
+        'browsertask' { Disable-BrowserPolicy }
+        'path' { [void](Edit-UserPath $item.dir -Remove) }
+    }
+}
+
+# Winarchy hid the taskbar, and no journal said how it was before: show it (auto-hide
+# off, Windows' default) and restart Explorer so the tray icons come back with it.
+function Show-TaskbarAgain {
+    $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3'
+    $cur = (Get-ItemProperty $key -ErrorAction SilentlyContinue).Settings
+    if ($cur -and $cur[8] -eq 3) {
+        $shown = [byte[]]$cur.Clone(); $shown[8] = 2   # ABS_ALWAYSONTOP
+        Restore-Taskbar @{ autoHide = $false; stuckRects3 = [Convert]::ToBase64String($shown) }
+    }
+    $script:RestartExplorer = $true
+}
+
 function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [switch]$Yes) {
     $script:AssumeYes = $Yes -or [bool]$env:WINARCHY_YES
-    $dir = Get-JournalDir
-    $j = Read-Journal
-    Write-Host "Undoing winarchy using $dir ($(@($j.entries).Count) recorded changes)"
-    $entries = @($j.entries)
-    [array]::Reverse($entries)
+    # Every journal not undone yet, newest first, each one's entries newest first. When two
+    # recorded the same thing, the older one holds the real original: only it is replayed.
+    $dirs = @(Get-LiveJournalDirs)
+    $seen = [Collections.Generic.HashSet[string]]::new()
+    $kept = @{}
+    foreach ($d in $dirs[($dirs.Count - 1)..0]) {
+        if (-not $d) { continue }
+        $kept[$d] = @((Read-Json (Join-Path $d 'journal.json') -AsHashtable).entries | Where-Object { $_ -and $seen.Add("$($_.key)") })
+    }
+    # Each entry with the journal folder its copies are in.
+    $items = foreach ($d in $dirs) {
+        $mine = @($kept[$d]); [array]::Reverse($mine)
+        foreach ($e in $mine) { [pscustomobject]@{ e = $e; dir = $d } }
+    }
+    $items = @($items)
+    $entries = @($items | ForEach-Object { $_.e })
+    if ($dirs.Count -le 1) {
+        Write-Host "Undoing winarchy using $(if ($dirs) { $dirs[0] } else { '(no journal)' }) ($($entries.Count) recorded changes)"
+    } else {
+        Write-Host "Undoing winarchy using $($dirs.Count) journals ($($entries.Count) recorded changes):"
+        foreach ($d in $dirs) { Write-Host "  $d" }
+    }
 
     # The question before anything changes, so Ctrl+C still leaves the PC as it was.
     $userApps = @(Get-UserApps $entries)
@@ -105,7 +181,8 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
     # the PATH entry its installer added are handled with the apps below, and keeping it
     # keeps both (a kept Herdr with its PATH entry gone would stop answering to `herdr`).
     $keptHerdrBins = @($keptApps | Where-Object { $_.entry.kind -eq 'herdr' } | ForEach-Object { $_.entry.bin })
-    foreach ($e in $entries) {
+    foreach ($it in $items) {
+        $e = $it.e; $dir = $it.dir
         if ($e.kind -in 'winget', 'note', 'herdr', 'webapp', 'port') { continue }
         if ($e.kind -eq 'envpath' -and $keptHerdrBins -contains $e.dir) { continue }
         $what = switch ($e.kind) {
@@ -127,9 +204,17 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
             $reminders | Unregister-ScheduledTask -Confirm:$false
         }
     }
+    # Whatever still starts winarchy at login after the replay (see Get-WinarchyAutostart).
+    $leftover = @(try { Get-WinarchyAutostart } catch { Write-Warning "  could not look for winarchy's login entries: $($_.Exception.Message)"; @() })
+    foreach ($item in $leftover) {
+        & $step "Remove $($item.what) ($(if ($DryRun) { 'if the journal leaves it' } else { 'the journal left it' }))" { Remove-WinarchyAutostartItem $item }
+    }
+    if ((Get-Config).hideTaskbar -and -not @($entries | Where-Object { $_.kind -eq 'taskbar' }).Count) {
+        & $step 'Show the taskbar again (no journal recorded how it was)' { Show-TaskbarAgain }
+    }
     # The replay removed the screenshot auto-copy shortcut unless you had one before
     # winarchy; if it's gone, stop the running copy too (it runs from the code folder).
-    if (-not (Test-Path -LiteralPath (Join-Path ([Environment]::GetFolderPath('Startup')) 'Screenshot to Clipboard.lnk'))) {
+    if (-not (Test-Path -LiteralPath (Join-Path (Get-AutostartPlaces).startup 'Screenshot to Clipboard.lnk'))) {
         & $step 'Stop screenshot auto-copy' { Stop-ScreenshotWatcher }
     }
 
@@ -152,7 +237,8 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
 
     # What winarchy runs on (GlazeWM, Flow, AutoHotkey, ...) goes unless -KeepApps; the
     # person's own apps go only if they said so.
-    foreach ($e in $entries | Where-Object { $_.kind -in 'winget', 'herdr', 'webapp', 'port' }) {
+    foreach ($it in $items | Where-Object { $_.e.kind -in 'winget', 'herdr', 'webapp', 'port' }) {
+        $e = $it.e; $dir = $it.dir
         $own = $userKeys -contains $e.key
         if ($own -and $keptKeys -contains $e.key) { continue }
         if (-not $own -and $KeepApps) { continue }
@@ -172,11 +258,16 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
         }
     }
     foreach ($e in $entries | Where-Object { $_.kind -eq 'note' }) { Write-Host "  note: $($e.text)" }
-    # Done with this journal: a later install starts a new one instead of reusing
-    # install-day originals that no longer describe this PC. Its copies stay in $dir.
+    # Done with these journals: a later install starts a new one instead of reusing
+    # install-day originals that no longer describe this PC. Their copies stay where they are.
     if (-not $DryRun) {
-        Rename-Item (Join-Path $dir 'journal.json') "journal-undone-$(Get-Date -Format 'yyyyMMdd-HHmmss').json" -ErrorAction SilentlyContinue
+        $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+        foreach ($d in $dirs) { Rename-Item (Join-Path $d 'journal.json') "journal-undone-$stamp.json" -ErrorAction SilentlyContinue }
         $script:JournalDir = $null; $script:JournalCache = $null
+        # Still there after all that: the next login starts winarchy again, so say so.
+        foreach ($item in @(try { Get-WinarchyAutostart } catch { @() })) {
+            $script:UninstallFailures.Add("$($item.what) is still there and starts winarchy at login")
+        }
     }
 
     if (-not $Purge) {

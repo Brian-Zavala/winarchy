@@ -6,6 +6,8 @@ BeforeAll {
     foreach ($f in 'common', 'detect', 'apply', 'journal', 'targets', 'setup', 'uninstall') { . "$root\lib\$f.ps1" }
     $Code = $root
     $LogFile = Join-Path $TestDrive 'winarchy.log'
+    # The journal too: the real one in ~/.winarchy/backup is what uninstall replays.
+    $BackupRoot = Join-Path $TestDrive 'backup'
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -Namespace WinarchyTest -Name Prop -MemberDefinition @'
 [DllImport("user32.dll", CharSet = CharSet.Unicode)]
@@ -67,6 +69,12 @@ Describe 'Stopping winarchy on uninstall' {
         Mock Write-Host {}
         Mock Get-JournalDir { 'C:\nowhere' }
         Mock Read-Journal { @{ entries = @() } }
+        Mock Get-LiveJournalDirs { @() }
+        # Never this PC's Startup folder, Run key, tasks, PATH or taskbar: the safety net
+        # would remove winarchy's real login entries (or ask for UAC, or restart Explorer).
+        Mock Get-WinarchyAutostart {}
+        Mock Show-TaskbarAgain {}
+        Mock Get-Config { @{} }
         Mock Get-Paths { @{} }
         Mock Get-Process {}
         Mock Stop-Process {}

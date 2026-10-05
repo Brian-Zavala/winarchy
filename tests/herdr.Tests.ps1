@@ -7,6 +7,8 @@ BeforeAll {
     $Code = $root
     # Log lines from tests go to a scratch log, never the real one.
     $LogFile = Join-Path $TestDrive 'winarchy.log'
+    # The journal too: the real one in ~/.winarchy/backup is what uninstall replays.
+    $BackupRoot = Join-Path $TestDrive 'backup'
 
     # Pester runs a mock's body in its own scope, so the fake keeps its state in globals
     # (reset for every test, removed in AfterAll) rather than in $script: variables.

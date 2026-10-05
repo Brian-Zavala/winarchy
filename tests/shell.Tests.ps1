@@ -6,6 +6,8 @@ BeforeAll {
     foreach ($f in 'common', 'journal', 'herdr', 'shell') { . "$root\lib\$f.ps1" }
     $Code = $root
     $LogFile = Join-Path $TestDrive 'winarchy.log'
+    # The journal too: the real one in ~/.winarchy/backup is what uninstall replays.
+    $BackupRoot = Join-Path $TestDrive 'backup'
     Mock Save-File {}
 }
 
