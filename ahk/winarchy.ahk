@@ -910,7 +910,7 @@ WmLog(msg) {
 
 BarGuard() {
     global BarEnabled, Zebar, ZebarPort
-    static lastRestart := 0, lastRepair := 0, deadSince := 0, badSince := 0, serverSince := 0
+    static lastRestart := 0, lastRepair := 0, deadSince := 0, badSince := 0, serverSince := 0, lastDead := 0
     if !BarEnabled || BarHeldBack()   ; a game changing display modes: see FullscreenWatch
         return
     RefreshEnv()                      ; the text size changed the bar height, no restart
@@ -920,10 +920,12 @@ BarGuard() {
     }
     ; Zebar running with no page in its bars: they stay up, topmost and empty, so the bar
     ; is simply gone. A few seconds' grace first: Zebar starts its webview after itself.
+    ; Again only after a minute: a page that never shows as alive (its renderer not found)
+    ; must not restart Zebar every 10 s.
     if !ZebarPageAlive() {
         deadSince := deadSince || A_TickCount
-        if A_TickCount - deadSince >= 10000 {
-            deadSince := 0, lastRestart := A_TickCount
+        if A_TickCount - deadSince >= 10000 && (!lastDead || A_TickCount - lastDead > 60000) {
+            deadSince := 0, lastRestart := A_TickCount, lastDead := A_TickCount
             RestartZebar("its page stopped (the WebView2 process behind it is gone)")
         }
         return
@@ -1599,12 +1601,13 @@ Busy() {
     return A_TickCount < BusyUntil || GameRunning() || FullscreenState() || CoveredMonitors().Count > 0
 }
 
-; Windows' own view: a fullscreen app (2), an exclusive-fullscreen Direct3D game (3)
-; or presentation mode (4).
+; Windows' own view: an exclusive-fullscreen Direct3D game (3) or presentation mode (4).
+; Not its busy state (2): with the taskbar hidden it can stay on with nothing in front
+; (see BarHeldBack), and a fullscreen window is in CoveredMonitors anyway.
 FullscreenState() {
     state := 0
     try DllCall("shell32\SHQueryUserNotificationState", "int*", &state)
-    return state >= 2 && state <= 4
+    return state = 3 || state = 4
 }
 
 ; Is this window a game's? New ones are logged and taken out of GlazeWM's tiling
@@ -2360,8 +2363,11 @@ TerminalPaste(keys) {
 }
 
 ClipImageAsFile() {
-    static CF_DIB := 8, CF_HDROP := 15
-    if DllCall("IsClipboardFormatAvailable", "uint", CF_HDROP) || !DllCall("IsClipboardFormatAvailable", "uint", CF_DIB)
+    static CF_UNICODETEXT := 13, CF_DIB := 8, CF_HDROP := 15
+    ; Only a bare image: text that also offers a picture (cells copied in Excel, Office)
+    ; pastes as text, and must not take a PNG along into the next paste elsewhere.
+    if DllCall("IsClipboardFormatAvailable", "uint", CF_HDROP) || DllCall("IsClipboardFormatAvailable", "uint", CF_UNICODETEXT)
+        || !DllCall("IsClipboardFormatAvailable", "uint", CF_DIB)
         return
     seq := DllCall("GetClipboardSequenceNumber", "uint")
     png := DllCall("RegisterClipboardFormat", "str", "PNG", "uint")
@@ -2424,7 +2430,8 @@ ClipBytes(fmt) {
     h := DllCall("GetClipboardData", "uint", fmt, "ptr")
     if !h || !(size := DllCall("GlobalSize", "ptr", h, "uptr"))
         return ""
-    p := DllCall("GlobalLock", "ptr", h, "ptr")
+    if !(p := DllCall("GlobalLock", "ptr", h, "ptr"))
+        return ""
     buf := Buffer(size)
     DllCall("RtlMoveMemory", "ptr", buf, "ptr", p, "uptr", size)
     DllCall("GlobalUnlock", "ptr", h)
