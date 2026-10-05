@@ -85,9 +85,12 @@ function Get-WinarchyAutostart {
         }
     }
     if ((Get-GameHelper).task) { [pscustomobject]@{ kind = 'gametask'; what = 'the admin game helper task' } }
-    if (Test-BrowserTask) { [pscustomobject]@{ kind = 'browsertask'; what = 'the browser colour task' } }
-    $bin = (Join-Path $Code 'bin').TrimEnd('\')
-    if (@((Get-UserPathRaw) -split ';' | Where-Object { $_ -and [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -eq $bin }).Count) {
+    # No logon trigger: it only sets the browser colour, so it is left behind, not a login entry.
+    if (Test-BrowserTask) { [pscustomobject]@{ kind = 'browsertask'; what = 'the browser colour task'; notAtLogin = $true } }
+    # The bin folder of each, the one from before the rename (omarchy-win) too.
+    $bins = @($roots | ForEach-Object { $_ + 'bin' })
+    $onPath = @((Get-UserPathRaw) -split ';' | Where-Object { $_ } | ForEach-Object { [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') })
+    foreach ($bin in @($onPath | Where-Object { $bins -contains $_ } | Select-Object -Unique)) {
         [pscustomobject]@{ kind = 'path'; what = "PATH entry $bin"; dir = $bin }
     }
 }
@@ -110,8 +113,9 @@ function Show-TaskbarAgain {
     if ($cur -and $cur[8] -eq 3) {
         $shown = [byte[]]$cur.Clone(); $shown[8] = 2   # ABS_ALWAYSONTOP
         Restore-Taskbar @{ autoHide = $false; stuckRects3 = [Convert]::ToBase64String($shown) }
+        # Only then: restarting Explorer closes every Explorer window.
+        $script:RestartExplorer = $true
     }
-    $script:RestartExplorer = $true
 }
 
 function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [switch]$Yes) {
@@ -121,9 +125,14 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
     $dirs = @(Get-LiveJournalDirs)
     $seen = [Collections.Generic.HashSet[string]]::new()
     $kept = @{}
+    # A journal that doesn't parse is neither replayed nor marked undone: what it recorded
+    # is still on the PC.
+    $unread = @()
     foreach ($d in $dirs[($dirs.Count - 1)..0]) {
         if (-not $d) { continue }
-        $kept[$d] = @((Read-Json (Join-Path $d 'journal.json') -AsHashtable).entries | Where-Object { $_ -and $seen.Add("$($_.key)") })
+        $j = Read-Json (Join-Path $d 'journal.json') -AsHashtable
+        if (-not $j) { $unread += $d; continue }
+        $kept[$d] = @($j.entries | Where-Object { $_ -and $seen.Add("$($_.key)") })
     }
     # Each entry with the journal folder its copies are in.
     $items = foreach ($d in $dirs) {
@@ -149,11 +158,17 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
     # reinstall come back as it was. -Purge is the clean slate, and takes them too.
 
     $script:UninstallFailures = [Collections.Generic.List[string]]::new()
+    foreach ($d in $unread) { $script:UninstallFailures.Add("$d\journal.json could not be read, so nothing it recorded was undone (it is left as it is)") }
+    # The journal entries whose step failed: they stay recorded (see the end).
+    $notUndone = [Collections.Generic.List[object]]::new()
     $step = {
-        param([string]$msg, [scriptblock]$action)
+        param([string]$msg, [scriptblock]$action, $journalItem)
         if ($DryRun) { Write-Host "[dry-run] $msg" -ForegroundColor Yellow; return }
         Write-Host "==> $msg" -ForegroundColor Cyan
-        try { & $action } catch { $script:UninstallFailures.Add("$msg ($($_.Exception.Message))"); Write-Warning "  failed: $($_.Exception.Message)" }
+        try { & $action } catch {
+            $script:UninstallFailures.Add("$msg ($($_.Exception.Message))"); Write-Warning "  failed: $($_.Exception.Message)"
+            if ($journalItem) { $notUndone.Add($journalItem) }
+        }
     }
     $p = Get-Paths
 
@@ -194,7 +209,7 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
             'envpath' { "PATH: remove $($e.dir)" }
             default { $e.kind }
         }
-        & $step "Restore $what" { Restore-JournalEntry $e $dir }
+        & $step "Restore $what" { Restore-JournalEntry $e $dir } $it
     }
     # Reminders are scheduled tasks that call winarchy's menu.ahk: with winarchy gone they
     # would only fail when they come due. Ours all carry the prefix (lib/system.ps1).
@@ -206,7 +221,10 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
     }
     # Whatever still starts winarchy at login after the replay (see Get-WinarchyAutostart).
     $leftover = @(try { Get-WinarchyAutostart } catch { Write-Warning "  could not look for winarchy's login entries: $($_.Exception.Message)"; @() })
+    $replayed = @($items | ForEach-Object { $_.e.kind })
     foreach ($item in $leftover) {
+        # The replay already tried this task (and asked for admin rights): not a second time.
+        if ($item.kind -in 'gametask', 'browsertask' -and $replayed -contains $item.kind) { continue }
         & $step "Remove $($item.what) ($(if ($DryRun) { 'if the journal leaves it' } else { 'the journal left it' }))" { Remove-WinarchyAutostartItem $item }
     }
     if ((Get-Config).hideTaskbar -and -not @($entries | Where-Object { $_.kind -eq 'taskbar' }).Count) {
@@ -242,11 +260,11 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
         $own = $userKeys -contains $e.key
         if ($own -and $keptKeys -contains $e.key) { continue }
         if (-not $own -and $KeepApps) { continue }
-        if ($e.kind -eq 'herdr') { & $step 'Remove Herdr' { Restore-JournalEntry $e $dir }; continue }
-        if ($e.kind -eq 'webapp') { & $step "Remove web app $($e.label)" { Restore-JournalEntry $e $dir }; continue }
-        if ($e.kind -eq 'port') { & $step "Remove $($e.label)" { Restore-JournalEntry $e $dir }; continue }
+        if ($e.kind -eq 'herdr') { & $step 'Remove Herdr' { Restore-JournalEntry $e $dir } $it; continue }
+        if ($e.kind -eq 'webapp') { & $step "Remove web app $($e.label)" { Restore-JournalEntry $e $dir } $it; continue }
+        if ($e.kind -eq 'port') { & $step "Remove $($e.label)" { Restore-JournalEntry $e $dir } $it; continue }
         if ($e.preinstalled) { Write-Host "  keeping $($e.id) (it was installed before winarchy)"; continue }
-        & $step "winget uninstall $($e.id)" { Remove-WingetApp $e.id }
+        & $step "winget uninstall $($e.id)" { Remove-WingetApp $e.id } $it
     }
     if ($KeepApps) { Write-Host '  -KeepApps: GlazeWM, Flow Launcher and the rest stay installed (just not started).' }
 
@@ -262,11 +280,21 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
     # install-day originals that no longer describe this PC. Their copies stay where they are.
     if (-not $DryRun) {
         $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-        foreach ($d in $dirs) { Rename-Item (Join-Path $d 'journal.json') "journal-undone-$stamp.json" -ErrorAction SilentlyContinue }
+        foreach ($d in @($dirs | Where-Object { $_ -and $unread -notcontains $_ })) {
+            $file = Join-Path $d 'journal.json'
+            try { Rename-Item $file "journal-undone-$stamp.json" -ErrorAction Stop } catch { continue }
+            # What failed is still as winarchy left it: recorded again, in the same folder as
+            # its copies, so the next uninstall tries it again.
+            $left = @($notUndone | Where-Object { $_.dir -eq $d } | ForEach-Object { $_.e })
+            if ($left) {
+                [array]::Reverse($left)
+                Write-Json $file ([ordered]@{ created = (Get-Date).ToString('s'); computer = $env:COMPUTERNAME; entries = $left }) 8
+            }
+        }
         $script:JournalDir = $null; $script:JournalCache = $null
         # Still there after all that: the next login starts winarchy again, so say so.
         foreach ($item in @(try { Get-WinarchyAutostart } catch { @() })) {
-            $script:UninstallFailures.Add("$($item.what) is still there and starts winarchy at login")
+            $script:UninstallFailures.Add("$($item.what) is still there$(if (-not $item.notAtLogin) { ' and starts winarchy at login' })")
         }
     }
 

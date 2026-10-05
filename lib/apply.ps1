@@ -707,7 +707,7 @@ function Set-DisallowShaking($cfg) {
 function Set-MinimizeAnimationPolicy($cfg) {
     $cur = Get-MinimizeAnimation
     if ($cfg.blockMinimize -eq $false) {
-        $e = (Read-Journal).entries | Where-Object { $_.key -eq 'minanimate' } | Select-Object -First 1
+        $e = Get-JournalEntry 'minanimate'
         if ($e -and $cur -ne [int]$e.value) { Set-MinimizeAnimation ([int]$e.value) }
         return
     }
@@ -746,7 +746,7 @@ function Set-DesktopIconsVisible([bool]$show) {
 function Set-DesktopIconsPolicy($cfg) {
     $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
     $cur = [int](Get-ItemProperty $key -Name HideIcons -ErrorAction SilentlyContinue).HideIcons
-    $e = (Read-Journal).entries | Where-Object { $_.key -eq 'deskicons' } | Select-Object -First 1
+    $e = Get-JournalEntry 'deskicons'
     if ($cfg.hideDesktopIcons -eq $true) {
         if (-not $e) { [void](Add-JournalEntry @{ kind = 'deskicons'; key = 'deskicons'; hidden = $cur }) }
         if ($cur -ne 1) { Set-ItemProperty $key -Name HideIcons -Value 1 -Type DWord }

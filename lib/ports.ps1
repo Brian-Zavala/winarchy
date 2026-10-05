@@ -68,7 +68,7 @@ function Remove-PortFiles($entry) {
 }
 
 function Remove-Port([string]$key) {
-    $e = (Read-Journal).entries | Where-Object { $_.key -eq "port|$key" } | Select-Object -First 1
+    $e = Get-JournalEntry "port|$key"
     if (-not $e) { $e = @{ dir = Join-Path (Get-PortRoot) $key } }
     Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path -like "$($e.dir)\*" } | Stop-Process -Force -ErrorAction SilentlyContinue
     Remove-PortFiles $e

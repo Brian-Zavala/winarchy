@@ -21,23 +21,36 @@ function Get-JournalDir {
 # Every journal not undone yet, newest first. Usually one, but a journal can be marked
 # undone without its changes being undone (a test run once did it to a real one): what
 # was recorded after that lands in a new journal, and an uninstall must replay them all.
+# Only what is under $BackupRoot: a journal folder left over from somewhere else (a test's
+# stale root) is never replayed, nor marked undone.
 function Get-LiveJournalDirs {
-    $dirs = @(Get-ChildItem $BackupRoot -Directory -ErrorAction SilentlyContinue |
+    @(Get-ChildItem $BackupRoot -Directory -ErrorAction SilentlyContinue |
         Where-Object { Test-Path (Join-Path $_.FullName 'journal.json') } | Sort-Object Name -Descending | ForEach-Object FullName)
-    if ($script:JournalDir -and $dirs -notcontains $script:JournalDir -and (Test-Path (Join-Path $script:JournalDir 'journal.json'))) {
-        $dirs = @($script:JournalDir) + $dirs
-    }
-    $dirs
 }
 
 function Read-Journal {
     if ($script:JournalCache) { return $script:JournalCache }
-    $j = Read-Json (Join-Path (Get-JournalDir) 'journal.json') -AsHashtable
+    $own = Get-JournalDir
+    $j = Read-Json (Join-Path $own 'journal.json') -AsHashtable
     if (-not $j) { $j = @{ entries = @() } }
     if (-not $j.entries) { $j.entries = @() }
-    $script:JournalKeys = [Collections.Generic.HashSet[string]]::new([string[]]@($j.entries | ForEach-Object { $_.key }))
+    # What the other live journals hold counts as recorded too: recorded again here, the
+    # value by then would be winarchy's own, and uninstall would put that back.
+    $script:JournalOthers = @(Get-LiveJournalDirs | Where-Object { $_ -ne $own } | Sort-Object | ForEach-Object {
+            [pscustomobject]@{ dir = $_; entries = @((Read-Json (Join-Path $_ 'journal.json') -AsHashtable).entries | Where-Object { $_ }) }
+        })
+    $script:JournalKeys = [Collections.Generic.HashSet[string]]::new([string[]]@(@($j.entries) + @($script:JournalOthers.entries) | ForEach-Object { $_.key }))
     $script:JournalCache = $j
     $j
+}
+
+# One key's recording, from whichever live journal has it (the oldest first).
+function Get-JournalEntry([string]$key) {
+    $j = Read-Journal
+    if (-not $script:JournalKeys.Contains($key)) { return $null }
+    $e = $j.entries | Where-Object { $_.key -eq $key } | Select-Object -First 1
+    if (-not $e) { $e = $script:JournalOthers.entries | Where-Object { $_ -and $_.key -eq $key } | Select-Object -First 1 }
+    $e
 }
 
 function Add-JournalEntry([hashtable]$entry) {
@@ -57,9 +70,19 @@ function Test-Journaled([string]$key) { [void](Read-Journal); $script:JournalKey
 function Remove-JournalEntry([string]$key) {
     $j = Read-Journal
     if (-not $script:JournalKeys.Contains($key)) { return $false }
-    $j.entries = @($j.entries | Where-Object { $_.key -ne $key })
+    if (@($j.entries | Where-Object { $_.key -eq $key }).Count) {
+        $j.entries = @($j.entries | Where-Object { $_.key -ne $key })
+        Write-Json (Join-Path (Get-JournalDir) 'journal.json') $j 8
+    }
+    foreach ($o in @($script:JournalOthers | Where-Object { @($_.entries | Where-Object { $_.key -eq $key }).Count })) {
+        $file = Join-Path $o.dir 'journal.json'
+        $oj = Read-Json $file -AsHashtable
+        if (-not $oj) { continue }
+        $oj.entries = @($oj.entries | Where-Object { $_ -and $_.key -ne $key })
+        $o.entries = $oj.entries
+        Write-Json $file $oj 8
+    }
     [void]$script:JournalKeys.Remove($key)
-    Write-Json (Join-Path (Get-JournalDir) 'journal.json') $j 8
     $true
 }
 

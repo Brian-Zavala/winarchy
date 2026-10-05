@@ -585,7 +585,7 @@ function Invoke-Taskbar([string]$action) {
         'on' { Set-ConfigValue 'hideTaskbar' $true; Set-TaskbarAutoHide; Use-Lock { Invoke-Apply } }
         'off' {
             Set-ConfigValue 'hideTaskbar' $false
-            $e = @((Read-Journal).entries | Where-Object { $_.key -eq 'taskbar' })[0]
+            $e = Get-JournalEntry 'taskbar'
             if ($e) { Set-TaskbarAutoHide ([Convert]::FromBase64String($e.stuckRects3)[8]) }
             Use-Lock { Invoke-Apply }
         }

@@ -119,7 +119,7 @@ function Add-WebApp([string]$key, [string]$label, [string]$url, $p = (Get-Paths)
     $browser = Find-WebAppBrowser $p
     # Made again (a custom one renamed, or a new URL): the old one goes first. Before the
     # folder is made: taking out its last shortcut removes an empty folder.
-    $old = (Read-Journal).entries | Where-Object { $_.key -eq "webapp|$key" } | Select-Object -First 1
+    $old = Get-JournalEntry "webapp|$key"
     if ($old) { Remove-WebAppFiles $old; [void](Remove-JournalEntry "webapp|$key") }
     $dir = Get-WebAppDir
     New-Item -ItemType Directory -Force $dir | Out-Null
@@ -153,7 +153,7 @@ function Remove-WebAppFiles($entry) {
 }
 
 function Remove-WebAppByKey([string]$key) {
-    $e = (Read-Journal).entries | Where-Object { $_.key -eq "webapp|$key" } | Select-Object -First 1
+    $e = Get-JournalEntry "webapp|$key"
     if (-not $e) {
         # Made before web apps were journalled: find it by its preset's label.
         $preset = Get-WebAppPresets | Where-Object key -eq $key | Select-Object -First 1

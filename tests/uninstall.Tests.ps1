@@ -28,6 +28,7 @@ BeforeAll {
     function winget { $script:WingetCalls.Add(($args -join ' ')); $global:LASTEXITCODE = [int]$script:WingetExit }
     function Invoke-Elevated([string]$Script) { $script:ElevatedCalls.Add($Script); if ($script:ElevatedFails) { throw 'the elevated step failed (exit 1603)' } }
     function Restore-JournalEntry($e, $dir) {
+        if ($script:FailKey -and $e.key -eq $script:FailKey) { throw 'it is in use' }
         $script:Restored.Add("$($e.kind)|$($e.id)$($e.dir)")
         if ($null -ne $script:RestoredFrom) { $script:RestoredFrom.Add("$($e.key)@$(Split-Path $dir -Leaf)") }
     }
@@ -37,7 +38,7 @@ BeforeAll {
     function Get-AutostartPlaces { $script:Places }
     function Get-GameHelper { @{ task = $script:GameTask } }
     function Disable-GameHelper { $script:GameHelperRemoved++; if (-not $script:GameTaskSticks) { $script:GameTask = $null } }
-    function Test-BrowserTask { $false }
+    function Test-BrowserTask { [bool]$script:BrowserTask }
     function Disable-BrowserPolicy {}
     function Get-UserPathRaw { $script:FakePath }
     function Set-UserPathRaw([string]$value) { $script:FakePath = $value }
@@ -59,8 +60,10 @@ BeforeAll {
     function Unregister-ScheduledTask { process { $script:Unregistered.Add($_.TaskName) } }
     $script:FakeTasks = @()
 
+    # Under $BackupRoot, the only place uninstall replays, and the only journal there.
     function New-TestJournal([object[]]$entries) {
-        $script:JournalDir = Join-Path $TestDrive ([guid]::NewGuid())
+        Remove-Item $BackupRoot -Recurse -Force -ErrorAction SilentlyContinue
+        $script:JournalDir = Join-Path $BackupRoot ([guid]::NewGuid())
         $script:JournalCache = $null
         New-Item -ItemType Directory $script:JournalDir | Out-Null
         Write-Json (Join-Path $script:JournalDir 'journal.json') ([ordered]@{ entries = @($entries) }) 8
@@ -304,6 +307,50 @@ Describe 'Uninstall replays every journal not undone yet' {
             @(Get-ChildItem $d -Filter 'journal-undone-*.json').Count | Should -Be 1
         }
     }
+    It 'keeps what failed to come back recorded, in the same folder, for the next uninstall' {
+        $script:FailKey = 'file|C:\Startup\winarchy.lnk'
+        try {
+            $d = New-BackupJournal '20261002-223616' @(
+                @{ kind = 'wallpaper'; key = 'wallpaper'; path = 'C:\mine.jpg' }
+                @{ kind = 'file'; key = 'file|C:\Startup\winarchy.lnk'; path = 'C:\Startup\winarchy.lnk'; existed = $true; copy = 'winarchy.lnk' }
+            )
+            $out = Invoke-Uninstall -Yes 3>$null 6>&1 | Out-String
+            $out | Should -Not -Match 'Done\.'
+            @(Get-ChildItem $d -Filter 'journal-undone-*.json').Count | Should -Be 1
+            $left = Read-Json (Join-Path $d 'journal.json')
+            @($left.entries.key) | Should -Be @('file|C:\Startup\winarchy.lnk')
+            $left.entries[0].copy | Should -Be 'winarchy.lnk'
+        } finally { $script:FailKey = $null }
+    }
+    It 'leaves a journal that does not parse alone, and says so' {
+        $bad = Join-Path $BackupRoot '20261002-223616'
+        New-Item -ItemType Directory -Force $bad | Out-Null
+        Set-Content (Join-Path $bad 'journal.json') '{ "entries": [ { "kind": "wallp' -NoNewline
+        $good = New-BackupJournal '20261002-234822' @(@{ kind = 'lockscreen'; key = 'lockscreen'; path = $null })
+        $out = Invoke-Uninstall -Yes 3>$null 6>&1 | Out-String
+        $out | Should -Match 'could not be read'
+        Test-Path (Join-Path $bad 'journal.json') | Should -BeTrue
+        @(Get-ChildItem $bad -Filter 'journal-undone-*.json').Count | Should -Be 0
+        Test-Path (Join-Path $good 'journal.json') | Should -BeFalse
+    }
+    It 'never takes a journal folder from outside the backup folder' {
+        New-BackupJournal '20261002-223616' @() | Out-Null
+        $script:JournalDir = Join-Path $TestDrive "elsewhere-$([guid]::NewGuid())"
+        New-Item -ItemType Directory $script:JournalDir | Out-Null
+        Write-Json (Join-Path $script:JournalDir 'journal.json') ([ordered]@{ entries = @() })
+        try { @(Get-LiveJournalDirs) | Should -Be @((Join-Path $BackupRoot '20261002-223616')) }
+        finally { $script:JournalDir = $null }
+    }
+    It 'counts a key a newer live journal has as recorded, and finds it there' {
+        New-BackupJournal '20261002-223616' @(@{ kind = 'wallpaper'; key = 'wallpaper'; path = 'C:\mine.jpg' }) | Out-Null
+        $new = New-BackupJournal '20261002-234822' @(@{ kind = 'taskbar'; key = 'taskbar'; autoHide = $false; stuckRects3 = 'AA==' })
+        Test-Journaled 'taskbar' | Should -BeTrue
+        Add-JournalEntry @{ kind = 'taskbar'; key = 'taskbar'; autoHide = $true; stuckRects3 = 'AQ==' } | Should -BeFalse
+        (Get-JournalEntry 'taskbar').stuckRects3 | Should -Be 'AA=='
+        Remove-JournalEntry 'taskbar' | Should -BeTrue
+        @((Read-Json (Join-Path $new 'journal.json')).entries).Count | Should -Be 0
+        Test-Journaled 'taskbar' | Should -BeFalse
+    }
     It '-DryRun leaves every journal as it was' {
         $d = New-BackupJournal '20261002-223616' @(@{ kind = 'wallpaper'; key = 'wallpaper'; path = 'C:\mine.jpg' })
         Invoke-Uninstall -Yes -DryRun 6>$null
@@ -340,7 +387,28 @@ Describe 'Uninstall removes what starts winarchy at login, journal or not' {
         Set-ItemProperty 'TestRegistry:\Run' -Name Steam -Value '"C:\Program Files (x86)\Steam\steam.exe" -silent'
         Set-ItemProperty 'TestRegistry:\Run' -Name OwnGlazeWM -Value '"C:\Program Files\glzr.io\GlazeWM\glazewm.exe"'
         $script:GameTask = 'registered'
+        $script:BrowserTask = $false
         $script:FakePath = "C:\other;$Code\bin\"
+    }
+    AfterEach { $script:BrowserTask = $false }
+    It 'finds the PATH entry from before the rename (omarchy-win) too' {
+        $old = Join-Path $env:LOCALAPPDATA 'omarchy-win\bin'
+        $script:FakePath = "C:\other;$old"
+        @(Get-WinarchyAutostart | Where-Object kind -eq 'path').dir | Should -Be @($old)
+    }
+    It 'does not call the browser colour task a login entry' {
+        $script:BrowserTask = $true
+        function Disable-BrowserPolicy {}
+        $out = Invoke-Uninstall -Yes 3>$null 6>&1 | Out-String
+        $out | Should -Match 'browser colour task is still there'
+        $out | Should -Not -Match 'browser colour task is still there and starts winarchy at login'
+    }
+    It 'asks for admin rights once for the game task, not again after the replay tried it' {
+        $script:GameTaskSticks = $true
+        New-TestJournal @(@{ kind = 'gametask'; key = 'gametask'; dir = 'C:\x' })
+        function Restore-JournalEntry($e, $dir) { if ($e.kind -eq 'gametask') { Disable-GameHelper } }
+        Invoke-Uninstall -Yes 3>$null 6>$null
+        $script:GameHelperRemoved | Should -Be 1
     }
     It 'takes out the shortcuts, Run values, task and PATH entry that point into winarchy' {
         $out = Invoke-Uninstall -Yes 6>&1 | Out-String
@@ -372,6 +440,18 @@ Describe 'Uninstall removes what starts winarchy at login, journal or not' {
         Write-Json $ConfigFile @{ hideTaskbar = $true }
         Invoke-Uninstall -Yes 6>$null
         $script:TaskbarShown | Should -Be 1
+    }
+    It 'restarts Explorer only when it changed the taskbar' {
+        . "$root\lib\uninstall.ps1"   # the real Show-TaskbarAgain, in this test only
+        function Restore-Taskbar($t) { $script:TaskbarRestored = $t }
+        $script:TaskbarRestored = $null
+        foreach ($script:B8 in 2, 3) {
+            $script:RestartExplorer = $false
+            Mock Get-ItemProperty { [pscustomobject]@{ Settings = [byte[]](0, 0, 0, 0, 0, 0, 0, 0, $script:B8, 0) } }
+            Show-TaskbarAgain
+            $script:RestartExplorer | Should -Be ($script:B8 -eq 3)
+        }
+        [Convert]::FromBase64String($script:TaskbarRestored.stuckRects3)[8] | Should -Be 2
     }
     It 'leaves that to the journal when it recorded the taskbar' {
         Write-Json $ConfigFile @{ hideTaskbar = $true }
