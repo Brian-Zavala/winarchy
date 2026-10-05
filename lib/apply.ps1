@@ -397,7 +397,7 @@ function Get-KeybindingsText($cfg, $p) {
     $appsFile = Join-Path $Data 'keybindings-apps.txt'
     $section = if (-not $cfg.launchers -and (Test-Path $appsFile)) { Get-Content -Raw $appsFile }
         else { Add-YieldMarks (Get-Content -Raw (Join-Path $Code 'default\keybindings-apps.txt')) $userKeys }
-    $txt.Replace('{{ apps }}', $section.TrimEnd())
+    $txt.Replace('{{ apps }}', "$section".TrimEnd())   # an empty file reads as $null
 }
 
 function Write-ZebarPack($p, $cfg) {

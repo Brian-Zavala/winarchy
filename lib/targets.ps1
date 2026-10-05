@@ -4,22 +4,24 @@
 # --- VS Code ----------------------------------------------------------------------
 # settings.json is JSONC (comments allowed), so one key is edited as text.
 function Set-JsoncString([string]$file, [string]$key, [string]$value) {
-    $text = if (Test-Path $file) { Get-Content -Raw $file } else { '' }
+    $text = if (Test-Path $file) { "$(Get-Content -Raw $file)" } else { '' }
     $json = ($value | ConvertTo-Json)   # quoted + escaped
-    $pattern = '("' + [regex]::Escape($key) + '"\s*:\s*)"(?:[^"\\]|\\.)*"'
+    # Not after a // on its line: a commented-out copy of the key is left as it is.
+    $pattern = '(?m)^((?:(?!//).)*?"' + [regex]::Escape($key) + '"\s*:\s*)"(?:[^"\\]|\\.)*"'
     if ($text -match $pattern) {
         $new = [regex]::Replace($text, $pattern, { param($m) $m.Groups[1].Value + $json }, 1)
     } elseif ($text -match '^\s*\{\s*\}\s*$' -or -not $text.Trim()) {
         $new = "{`n    `"$key`": $json`n}`n"
     } else {
-        $new = [regex]::Replace($text, '^\s*\{', "{`n    `"$key`": $json,", 1)
+        # The first { that starts a line: the file may open with a comment.
+        $new = [regex]::Replace($text, '(?m)^(\s*)\{', { param($m) $m.Groups[1].Value + "{`n    `"$key`": $json," }, 1)
     }
     if ($new -ne $text) { Write-Utf8 $file $new }
 }
 
 function Get-JsoncString([string]$file, [string]$key) {
     if (-not (Test-Path $file)) { return $null }
-    $m = [regex]::Match((Get-Content -Raw $file), '"' + [regex]::Escape($key) + '"\s*:\s*"((?:[^"\\]|\\.)*)"')
+    $m = [regex]::Match("$(Get-Content -Raw $file)", '(?m)^(?:(?!//).)*?"' + [regex]::Escape($key) + '"\s*:\s*"((?:[^"\\]|\\.)*)"')
     if ($m.Success) { $m.Groups[1].Value | ForEach-Object { ('"' + $_ + '"') | ConvertFrom-Json } } else { $null }
 }
 
@@ -80,7 +82,12 @@ function Set-ClaudeTheme($c) {
     Write-Utf8 $file (Expand-Template (Get-Content -Raw $tpl) $c)
     $settings = Join-Path $dir 'settings.json'
     $s = Read-Json $settings
-    if (-not $s) { $s = [pscustomobject]@{} }
+    if (-not $s) {
+        # There but not parsing (half-written, or mid-save): left alone, since writing
+        # only the theme would drop everything else in it.
+        if ("$(Get-Content -Raw $settings -ErrorAction SilentlyContinue)".Trim()) { Log "Claude: $settings did not parse, theme left as it is"; return 'skipped' }
+        $s = [pscustomobject]@{}
+    }
     if ($s.theme -ne 'custom:omarchy') {
         Save-JsonProperty $settings 'theme'
         $s | Add-Member -Force -NotePropertyName theme -NotePropertyValue 'custom:omarchy'

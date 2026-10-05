@@ -107,6 +107,16 @@ Describe 'AutoHotkey settings' {
     }
 }
 
+Describe 'Keybindings sheet' {
+    It 'takes an empty apps list of your own (launchers off)' {
+        $Data = Join-Path $TestDrive "data-$([guid]::NewGuid())"
+        New-Item -ItemType Directory $Data | Out-Null
+        New-Item -ItemType File (Join-Path $Data 'keybindings-apps.txt') | Out-Null
+        $txt = Get-KeybindingsText @{ launchers = $false; captureKeys = 'omarchy' } @{ userHotkeys = @{ keys = @() } }
+        $txt | Should -Not -Match '\{\{ apps \}\}'
+    }
+}
+
 Describe 'Compose table' -Skip:(-not $hasAhk) {
     It 'has every one of Omarchy''s sequences, with the same text' {
         $out = Join-Path $TestDrive 'compose.txt'

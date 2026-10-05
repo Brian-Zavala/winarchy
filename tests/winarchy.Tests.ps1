@@ -114,6 +114,68 @@ Describe 'JSONC edits (VS Code settings keep their comments)' {
         Get-JsoncString $f 'workbench.colorTheme' | Should -Be 'Omarchy'
         (Get-Content -Raw $f | ConvertFrom-Json).x | Should -Be 1
     }
+    It 'adds a key to a file that opens with a comment' {
+        $f = Join-Path $TestDrive 'c.json'
+        Set-Content $f "// my settings`n`n{`n  `"x`": 1`n}"
+        Set-JsoncString $f 'workbench.colorTheme' 'Omarchy'
+        Get-JsoncString $f 'workbench.colorTheme' | Should -Be 'Omarchy'
+        $t = Get-Content -Raw $f
+        $t | Should -Match "^// my settings`r?`n`r?`n\{"
+        ($t -replace '(?m)^\s*//.*$') | ConvertFrom-Json | ForEach-Object x | Should -Be 1
+    }
+    It 'leaves a commented-out copy of the key alone' {
+        $f = Join-Path $TestDrive 'd.json'
+        Set-Content $f "{`n  // `"workbench.colorTheme`": `"Old`",`n  `"workbench.colorTheme`": `"Live`"`n}"
+        Get-JsoncString $f 'workbench.colorTheme' | Should -Be 'Live'
+        Set-JsoncString $f 'workbench.colorTheme' 'Omarchy'
+        $t = Get-Content -Raw $f
+        $t | Should -Match '// "workbench.colorTheme": "Old"'
+        $t | Should -Match '  "workbench.colorTheme": "Omarchy"'
+    }
+    It 'fills an empty file' {
+        $f = Join-Path $TestDrive 'e.json'
+        Set-Content $f '' -NoNewline
+        Set-JsoncString $f 'workbench.colorTheme' 'Omarchy'
+        Get-JsoncString $f 'workbench.colorTheme' | Should -Be 'Omarchy'
+    }
+}
+
+Describe 'Write-Json' {
+    It 'keeps a 1-item array an array, and an empty one []' {
+        $f = Join-Path $TestDrive 'arr.json'
+        Write-Json $f @([ordered]@{ a = 1 })
+        (Get-Content -Raw $f).Trim() | Should -Match '^\['
+        @(Get-Content -Raw $f | ConvertFrom-Json).Count | Should -Be 1
+        Write-Json $f @()
+        (Get-Content -Raw $f).Trim() | Should -Be '[]'
+    }
+}
+
+Describe 'Claude Code theme' {
+    BeforeEach {
+        $script:cdir = Join-Path $TestDrive "claude-$([guid]::NewGuid())"
+        New-Item -ItemType Directory $script:cdir | Out-Null
+        $env:CLAUDE_CONFIG_DIR = $script:cdir
+        $Themes = Join-Path $TestDrive 'themes'
+        New-Item -ItemType Directory -Force (Join-Path $Themes '_templates') | Out-Null
+        Set-Content (Join-Path $Themes '_templates\claude.json.tpl') '{ "name": "omarchy" }'
+    }
+    AfterEach { Remove-Item Env:CLAUDE_CONFIG_DIR -ErrorAction SilentlyContinue }
+    It 'leaves a settings.json that does not parse exactly as it is' {
+        $f = Join-Path $script:cdir 'settings.json'
+        Set-Content $f '{ "permissions": { "allow": ["Bash"' -NoNewline
+        $before = (Get-FileHash $f).Hash
+        Set-ClaudeTheme @{} | Should -Be 'skipped'
+        (Get-FileHash $f).Hash | Should -Be $before
+    }
+    It 'sets the theme and keeps the other settings' {
+        $f = Join-Path $script:cdir 'settings.json'
+        Set-Content $f '{ "permissions": { "allow": ["Bash"] } }'
+        Set-ClaudeTheme @{}
+        $s = Get-Content -Raw $f | ConvertFrom-Json
+        $s.theme | Should -Be 'custom:omarchy'
+        $s.permissions.allow | Should -Be 'Bash'
+    }
 }
 
 Describe 'Theme colour fallbacks' {

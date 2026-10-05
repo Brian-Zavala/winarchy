@@ -134,7 +134,7 @@ function Read-Json([string]$path, [switch]$AsHashtable) {
     if (-not (Test-Path -LiteralPath $path)) { return $null }
     try { Get-Content -Raw -LiteralPath $path | ConvertFrom-Json -AsHashtable:$AsHashtable } catch { $null }
 }
-function Write-Json([string]$path, $obj, [int]$Depth = 32) { Write-Utf8 $path ($obj | ConvertTo-Json -Depth $Depth) }
+function Write-Json([string]$path, $obj, [int]$Depth = 32) { Write-Utf8 $path (ConvertTo-Json -InputObject $obj -Depth $Depth) }   # not piped: a 1-item array stays an array
 
 # A build default/prebuilt.json pins (.github/workflows/prebuilt.yml publishes them), or
 # $null while it has no published url and hash yet: then the caller builds it as before.
