@@ -381,9 +381,13 @@ function Install-Extras {
     if ($url) {
         try {
             New-Item -ItemType Directory -Force (Split-Path $dest) | Out-Null
-            Invoke-WebRequest $url -OutFile $dest -TimeoutSec 120
+            # Into a .part first: a download cut off would otherwise leave a broken ttfx.exe
+            # that counts as installed (Update-Paths finds it) and is never fetched again.
+            Invoke-WebRequest $url -OutFile "$dest.part" -TimeoutSec 120 -ErrorAction Stop
+            Move-Item -Force -LiteralPath "$dest.part" $dest
             Write-Ok "ttfx: downloaded to $dest"; return
         } catch { Write-Ok "ttfx download failed ($($_.Exception.Message))" }
+        finally { Remove-Item -LiteralPath "$dest.part" -Force -ErrorAction SilentlyContinue }
     } elseif ($pin = Get-Prebuilt 'ttfx') {
         try { Install-PrebuiltTtfx $pin $dest; Write-Ok "ttfx $($pin.version): downloaded to $dest"; return }
         catch { Write-Ok "ttfx download failed ($($_.Exception.Message)): building it instead" }
@@ -648,7 +652,7 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     }
 
     if (-not (Test-Journaled 'runkeys')) {
-        [void](Add-JournalEntry @{ kind = 'runkeys'; key = 'runkeys'; names = @((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).PSObject.Properties.Name | Where-Object { $_ -notlike 'PS*' }) })
+        [void](Add-JournalEntry @{ kind = 'runkeys'; key = 'runkeys'; names = @((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).PSObject.Properties.Name | Where-Object { $_ -notin 'PSPath', 'PSParentPath', 'PSChildName', 'PSDrive', 'PSProvider' }) })
     }
     Save-Dir (Join-Path $env:USERPROFILE '.glzr')
 
@@ -673,7 +677,7 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
     $p = Update-Paths
 
     $cfg = Get-InstallAnswers $p -Restoring:$restoring
-    Write-Json $ConfigFile $cfg
+    Save-UserConfig $cfg   # stamped: winarchy.ahk must not apply it a second time
 
     Write-Step 'Configuring'
     if ((Get-Config).hideTaskbar) { Set-TaskbarAutoHide }
@@ -730,7 +734,7 @@ function Invoke-Adopt {
             $dirs = @([regex]::Matches($Matches[1], "'([^']+)'") | ForEach-Object { $_.Groups[1].Value } | Where-Object { Test-Path $_ })
             if ($dirs) { $cfg.backgroundDirs = $dirs }
         }
-        Write-Json $ConfigFile $cfg
+        Save-UserConfig $cfg
         Write-Ok "wrote $ConfigFile"
     }
     Write-Step 'Configuring from this code'
@@ -853,10 +857,15 @@ function Invoke-Update {
         Write-Step 'Omarchy themes'
         $omarchy = $pending | Where-Object name -eq 'Omarchy themes' | Select-Object -First 1
         if ($omarchy) {
-            $s = Read-State; $s.omarchyTag = $omarchy.to; Save-State $s
+            # Saved first: sync fetches the tag in the state. Put back if it fails, so the
+            # update stays offered instead of being marked done.
+            $s = Read-State; $prevTag = $s.omarchyTag; $s.omarchyTag = $omarchy.to; Save-State $s
             # A fresh process too: what gets mirrored (Get-SyncTarget) follows the new code.
             & $p.pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Code 'bin\winarchy.ps1') sync
-            if ($LASTEXITCODE) { Add-Unfinished 'Omarchy themes not fully updated; winarchy sync tries again' }
+            if ($LASTEXITCODE) {
+                $s = Read-State; $s.omarchyTag = $prevTag; Save-State $s
+                Add-Unfinished 'Omarchy themes not updated; winarchy update tries again'
+            }
         } else { Write-Ok 'up to date' }
 
         # Herdr came from its own installer, so winget cannot upgrade it: it has an updater

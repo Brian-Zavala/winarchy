@@ -166,7 +166,7 @@ function Remove-WebAppByKey([string]$key) {
 }
 
 function Test-WebApp([string]$key) {
-    [bool]((Read-Journal).entries | Where-Object { $_.key -eq "webapp|$key" -and (Test-Path -LiteralPath $_.path) })
+    [bool](Get-AllJournalEntries | Where-Object { $_.key -eq "webapp|$key" -and (Test-Path -LiteralPath $_.path) })
 }
 
 # Install > Web App (custom): any site, named by you.
@@ -181,7 +181,7 @@ function New-WebApp([string]$Name, [string]$Url) {
 }
 
 function Remove-WebApp([string]$Name) {
-    $mine = @((Read-Journal).entries | Where-Object { $_.kind -eq 'webapp' })
+    $mine = @(Get-AllJournalEntries | Where-Object { $_.kind -eq 'webapp' })
     if (-not $Name) {
         if (-not $mine) { Write-Host 'No web apps.'; return }
         $mine | ForEach-Object { Write-Host "  $($_.label)" }

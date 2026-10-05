@@ -140,6 +140,17 @@ Describe 'JSONC edits (VS Code settings keep their comments)' {
     }
 }
 
+Describe 'Scripts that run elevated' {
+    It 'quote a path with an apostrophe (C:\Users\O''Brien)' {
+        $path = "C:\Users\O'Brien\AppData\Local\winarchy"
+        Invoke-Expression (ConvertTo-PsLiteral $path) | Should -Be $path
+        $gh = @{ dir = "C:\ProgramData\it's"; path = '\winarchy\'; name = 'game' }
+        $errs = $null
+        [void][Management.Automation.Language.Parser]::ParseInput((Get-GameHelperRemoveScript $gh), [ref]$null, [ref]$errs)
+        $errs | Should -BeNullOrEmpty
+    }
+}
+
 Describe 'Write-Json' {
     It 'keeps a 1-item array an array, and an empty one []' {
         $f = Join-Path $TestDrive 'arr.json'

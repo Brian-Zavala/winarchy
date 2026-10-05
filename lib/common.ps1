@@ -512,6 +512,10 @@ function Close-AhkGracefully([int[]]$processIds) {
 
 # Base64 UTF-16 for powershell -EncodedCommand: no quoting to break on the way through
 # Start-Process -Verb RunAs.
+# A string as a PowerShell literal for a script built here and run elsewhere (elevated):
+# a path under C:\Users\O'Brien would end a bare '...' early.
+function ConvertTo-PsLiteral([string]$s) { "'" + ($s -replace "'", "''") + "'" }
+
 function ConvertTo-EncodedCommand([string]$script) {
     [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script))
 }
@@ -563,7 +567,8 @@ function Start-InteractiveProcess {
     $desk = ''
     try {
         if (-not ([System.Management.Automation.PSTypeName]'WinarchyDeskUtil').Type) {
-            Add-Type -TypeDefinition @'
+            # Compiled once (Add-NativeType): every apply starts the bar and the script through here.
+            Add-NativeType DeskUtil -TypeName WinarchyDeskUtil -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -665,7 +670,7 @@ public class WinarchyDeskUtil {
         }
     }
 }
-'@ -ErrorAction SilentlyContinue
+'@
         }
         $desk = [WinarchyDeskUtil]::GetCurrentDesktop()
     } catch {}

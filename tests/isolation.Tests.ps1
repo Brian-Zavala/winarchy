@@ -5,15 +5,17 @@
 # and the uninstall that followed left winarchy starting at every login.
 BeforeDiscovery {
     $root = Split-Path -Parent $PSScriptRoot
+    # Either way of loading it: the foreach over library names, or dot-sourcing lib\journal.ps1.
+    $loadsJournal = "foreach \(\`$f in [^)]*'journal'|(?m)^\s*\.\s+\S*lib.journal\.ps1"
     $files = @(Get-ChildItem "$root\tests" -Filter *.Tests.ps1 |
-        Where-Object { (Get-Content -Raw $_.FullName) -match "foreach \(\`$f in [^)]*'journal'" } |
+        Where-Object { (Get-Content -Raw $_.FullName) -match $loadsJournal } |
         ForEach-Object { @{ name = $_.Name; path = $_.FullName } })
 }
 
 Describe '<name>' -ForEach $files {
     It 'points $BackupRoot at the test drive after loading the libraries' {
         $text = Get-Content -Raw $path
-        $load = [regex]::Match($text, "foreach \(\`$f in [^)]*'journal'")
+        $load = [regex]::Match($text, "foreach \(\`$f in [^)]*'journal'|(?m)^\s*\.\s+\S*lib.journal\.ps1")
         $redirect = [regex]::Match($text, "(?m)^\s*\`$BackupRoot = Join-Path \`$TestDrive ")
         $redirect.Success | Should -BeTrue
         $redirect.Index | Should -BeGreaterThan $load.Index

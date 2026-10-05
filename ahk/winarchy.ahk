@@ -1092,11 +1092,19 @@ FixBarHeights() {
 RefreshEnv() {
     global OW
     static stamp := ""
-    try t := FileGetTime(EnvGet("USERPROFILE") "\.winarchy\generated\winarchy.ini", "M")
+    ini := EnvGet("USERPROFILE") "\.winarchy\generated\winarchy.ini"
+    ; With its size: the time is to the second, and two writes in one second differ in size.
+    try t := FileGetTime(ini, "M") "|" FileGetSize(ini)
     catch
         return
-    if stamp != "" && t != stamp
-        OW := LoadOmarchyEnv()
+    if stamp != "" && t != stamp {
+        ; A read that found nothing (the file being swapped in) keeps the settings there
+        ; were, and is tried again at the next look.
+        env := LoadOmarchyEnv()
+        if !env.Count
+            return
+        OW := env
+    }
     stamp := t
 }
 
@@ -2256,7 +2264,9 @@ if Env("compose", "0") = "1" {
     ; Snipping Tool's recording toolbar is a captionless XAML popup that ignores SC_MOVE
     ; (and Windows gives it no drag area), so move it by hand. It's small and stays on one
     ; monitor, so the per-tick WinMove DPI problem above doesn't bite.
-    if WinGetTitle(hwnd) = "Recording toolbar" && WinGetProcessName(hwnd) = "SnippingTool.exe" {
+    ; Found by shape, not its title ("Recording toolbar" is English only): Snipping Tool's
+    ; small window without a caption, never its main window or the full-screen overlay.
+    if SnipToolbar(hwnd) {
         CoordMode "Mouse", "Screen"
         SetWinDelay -1
         MouseGetPos &mx, &my
@@ -2869,6 +2879,18 @@ IsTerminal() {
         || WinActive("ahk_class ConsoleWindowClass")
         || WinActive("ahk_exe wezterm-gui.exe")
         || WinActive("ahk_exe alacritty.exe")
+}
+
+SnipToolbar(hwnd) {
+    try {
+        if WinGetProcessName(hwnd) != "SnippingTool.exe"
+            return false
+        if WinGetTitle(hwnd) = "Recording toolbar"
+            return true
+        WinGetPos , , &w, &h, hwnd
+        return !(WinGetStyle(hwnd) & 0xC00000) && h < 200 && w < 1200   ; no WS_CAPTION, toolbar-sized
+    }
+    return false
 }
 
 WindowUnderCursor() {

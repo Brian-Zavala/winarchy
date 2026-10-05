@@ -80,7 +80,7 @@ function Get-WinarchyAutostart {
     }
     $run = Get-ItemProperty $places.run -ErrorAction SilentlyContinue
     if ($run) {
-        foreach ($v in $run.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' -and (& $ours "$($_.Value)") }) {
+        foreach ($v in $run.PSObject.Properties | Where-Object { $_.Name -notin 'PSPath', 'PSParentPath', 'PSChildName', 'PSDrive', 'PSProvider' -and (& $ours "$($_.Value)") }) {
             [pscustomobject]@{ kind = 'run'; what = "Run\$($v.Name)"; name = $v.Name }
         }
     }
@@ -232,7 +232,13 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
     }
     # The replay removed the screenshot auto-copy shortcut unless you had one before
     # winarchy; if it's gone, stop the running copy too (it runs from the code folder).
-    if (-not (Test-Path -LiteralPath (Join-Path (Get-AutostartPlaces).startup 'Screenshot to Clipboard.lnk'))) {
+    # A dry run removed nothing: there it is whether the journal or the login check would.
+    $snipLnk = Join-Path (Get-AutostartPlaces).startup 'Screenshot to Clipboard.lnk'
+    $snipGoes = if ($DryRun) {
+        @($items | Where-Object { $_.e.kind -eq 'file' -and $_.e.path -eq $snipLnk -and -not $_.e.existed }).Count -or
+        @($leftover | Where-Object { $_.path -eq $snipLnk }).Count
+    } else { -not (Test-Path -LiteralPath $snipLnk) }
+    if ($snipGoes) {
         & $step 'Stop screenshot auto-copy' { Stop-ScreenshotWatcher }
     }
 

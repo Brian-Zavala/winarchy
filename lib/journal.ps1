@@ -53,6 +53,13 @@ function Get-JournalEntry([string]$key) {
     $e
 }
 
+# Every live journal's entries, each key once (the oldest recording).
+function Get-AllJournalEntries {
+    $j = Read-Journal
+    $seen = [Collections.Generic.HashSet[string]]::new()
+    @(@($j.entries) + @($script:JournalOthers.entries) | Where-Object { $_ -and $seen.Add("$($_.key)") })
+}
+
 function Add-JournalEntry([hashtable]$entry) {
     $j = Read-Journal
     if ($script:JournalKeys.Contains($entry.key)) { return $false }
@@ -432,7 +439,7 @@ function Restore-JournalEntry($e, [string]$dir) {
             # since then is yours. (The GlazeWM value winarchy writes is its own reg entry.)
             $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
             (Get-ItemProperty $runKey).PSObject.Properties |
-                Where-Object { $_.Name -notlike 'PS*' -and $e.names -notcontains $_.Name -and "$($_.Value)" -match $WinarchyRunPattern } |
+                Where-Object { $_.Name -notin 'PSPath', 'PSParentPath', 'PSChildName', 'PSDrive', 'PSProvider' -and $e.names -notcontains $_.Name -and "$($_.Value)" -match $WinarchyRunPattern } |
                 ForEach-Object { Write-Host "  removing Run\$($_.Name)"; Remove-ItemProperty $runKey -Name $_.Name }
         }
         'envpath' {
@@ -448,7 +455,7 @@ function Restore-JournalEntry($e, [string]$dir) {
         'browsertask' { Disable-BrowserPolicy }
         'gametask' { Disable-GameHelper }
         'defender' {
-            $list = (@($e.paths) | ForEach-Object { "'$_'" }) -join ','
+            $list = (@($e.paths) | ForEach-Object { ConvertTo-PsLiteral $_ }) -join ','
             Start-Process (Get-Paths).powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $(ConvertTo-EncodedCommand "Remove-MpPreference -ExclusionPath $list")"
         }
         'cargo' { if (Get-Command cargo -ErrorAction SilentlyContinue) { cargo uninstall $e.crate 2>&1 | Out-Host } }
@@ -467,19 +474,19 @@ function Restore-JournalEntry($e, [string]$dir) {
 }
 
 function Restore-Taskbar($e) {
-    Add-Type -Namespace OmarchyRevert -Name AppBar -MemberDefinition @'
+    Add-NativeType TaskbarAppBar @'
 [StructLayout(LayoutKind.Sequential)]
 public struct APPBARDATA { public int cbSize; public IntPtr hWnd; public uint uCallbackMessage; public uint uEdge; public RECT rc; public IntPtr lParam; }
 [StructLayout(LayoutKind.Sequential)]
 public struct RECT { public int left, top, right, bottom; }
 [DllImport("shell32.dll")] public static extern IntPtr SHAppBarMessage(uint dwMessage, ref APPBARDATA pData);
 [DllImport("user32.dll")] public static extern IntPtr FindWindow(string cls, string name);
-'@ -ErrorAction SilentlyContinue
-    $d = New-Object OmarchyRevert.AppBar+APPBARDATA
+'@
+    $d = New-Object Winarchy.TaskbarAppBar+APPBARDATA
     $d.cbSize = [Runtime.InteropServices.Marshal]::SizeOf($d)
-    $d.hWnd = [OmarchyRevert.AppBar]::FindWindow('Shell_TrayWnd', $null)
+    $d.hWnd = [Winarchy.TaskbarAppBar]::FindWindow('Shell_TrayWnd', $null)
     $d.lParam = [IntPtr]$(if ($e.autoHide) { 1 } else { 2 })    # ABS_AUTOHIDE=1, ABS_ALWAYSONTOP=2
-    [void][OmarchyRevert.AppBar]::SHAppBarMessage(10, [ref]$d)  # ABM_SETSTATE
+    [void][Winarchy.TaskbarAppBar]::SHAppBarMessage(10, [ref]$d)  # ABM_SETSTATE
     # The live call alone is not reliable on Win11: persist to the registry
     # (main + per-monitor taskbars); Explorer is restarted at the end of uninstall.
     $orig = [Convert]::FromBase64String($e.stuckRects3)

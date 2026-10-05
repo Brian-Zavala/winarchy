@@ -796,7 +796,9 @@ function Get-OmarchyAhk {
 
 function Restart-OmarchyAhk($p) {
     # Force-stop: the new instance takes over hiding the taskbar without it flashing.
-    Get-OmarchyAhk | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    # Not the menu.ahk that Restart-Bar just started: killed, it would leave no bar.
+    Get-OmarchyAhk | Where-Object { $_.CommandLine -notmatch 'menu\.ahk"?\s+bar-start' } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     Start-InteractiveProcess -FilePath $p.ahk -ArgumentList "`"$Code\ahk\winarchy.ahk`"" -WorkingDirectory "$Code\ahk"
 }
 
@@ -833,7 +835,7 @@ function Restart-Bar($p) {
 # scales them: truncated), where they are. The page fills its window, so it follows.
 function Resize-BarWindows([int]$height) {
     if (-not ('Winarchy.BarWindows' -as [type])) {
-        Add-Type -Namespace Winarchy -Name BarWindows -MemberDefinition @'
+        Add-NativeType BarWindows @'
 delegate bool EnumProc(IntPtr h, IntPtr l);
 [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
 [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, System.Text.StringBuilder s, int n);

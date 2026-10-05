@@ -142,10 +142,10 @@ function Enable-BrowserPolicy {
     $bt = Get-BrowserTask
     $script = @"
 `$ErrorActionPreference = 'Stop'
-`$dir = '$($bt.dir)'
+`$dir = $(ConvertTo-PsLiteral $bt.dir)
 New-Item -ItemType Directory -Force `$dir | Out-Null
 icacls `$dir /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null
-Copy-Item -Force '$src' (Join-Path `$dir 'browser-policy.ps1')
+Copy-Item -Force $(ConvertTo-PsLiteral $src) (Join-Path `$dir 'browser-policy.ps1')
 icacls (Join-Path `$dir 'browser-policy.ps1') /reset | Out-Null
 `$ps = Join-Path `$env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 `$action = New-ScheduledTaskAction -Execute `$ps -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path `$dir 'browser-policy.ps1') + '"')
@@ -171,8 +171,9 @@ function Disable-BrowserPolicy {
     if (Test-BrowserTask) {
         $bt = Get-BrowserTask
         try { Invoke-BrowserTask 'none'; Start-Sleep -Seconds 3 } catch {}
-        $script = "Unregister-ScheduledTask -TaskPath '$($bt.path)' -TaskName '$($bt.name)' -Confirm:`$false; Remove-Item -Recurse -Force '$($bt.dir)' -ErrorAction SilentlyContinue"
-        Start-Process (Get-Paths).powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$script`""
+        $script = "Unregister-ScheduledTask -TaskPath '$($bt.path)' -TaskName '$($bt.name)' -Confirm:`$false; Remove-Item -Recurse -Force $(ConvertTo-PsLiteral $bt.dir) -ErrorAction SilentlyContinue"
+        # -EncodedCommand, as Disable-GameHelper: quotes in a -Command "..." don't survive RunAs.
+        Start-Process (Get-Paths).powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $(ConvertTo-EncodedCommand $script)"
         $script:BrowserTaskInfo = $null
     }
 }
@@ -208,12 +209,12 @@ function Enable-GameHelper {
     $gh = Get-GameHelper
     $script = @"
 `$ErrorActionPreference = 'Stop'
-`$dir = '$($gh.dir)'
+`$dir = $(ConvertTo-PsLiteral $gh.dir)
 Get-CimInstance Win32_Process -Filter "Name like 'AutoHotkey%'" | Where-Object { `$_.CommandLine -like "*`$dir*" } | ForEach-Object { Stop-Process -Id `$_.ProcessId -Force }
 New-Item -ItemType Directory -Force `$dir | Out-Null
 icacls `$dir /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null
-Copy-Item -Force '$($p.ahk)' (Join-Path `$dir 'AutoHotkey64.exe')
-Copy-Item -Force '$($gh.source)' (Join-Path `$dir 'game-helper.ahk')
+Copy-Item -Force $(ConvertTo-PsLiteral $p.ahk) (Join-Path `$dir 'AutoHotkey64.exe')
+Copy-Item -Force $(ConvertTo-PsLiteral $gh.source) (Join-Path `$dir 'game-helper.ahk')
 foreach (`$f in 'AutoHotkey64.exe', 'game-helper.ahk') { icacls (Join-Path `$dir `$f) /reset | Out-Null }
 `$action = New-ScheduledTaskAction -Execute (Join-Path `$dir 'AutoHotkey64.exe') -Argument ('"' + (Join-Path `$dir 'game-helper.ahk') + '"')
 `$trigger = New-ScheduledTaskTrigger -AtLogOn -User '$sid'
@@ -249,10 +250,10 @@ function Disable-GameHelper {
 # readable, unlike another process's command line.
 function Get-GameHelperRemoveScript($gh) {
     @"
-Get-CimInstance Win32_Process -Filter "Name like 'AutoHotkey%'" | Where-Object { `$_.ExecutablePath -like '$($gh.dir)\*' } | ForEach-Object { Stop-Process -Id `$_.ProcessId -Force }
+Get-CimInstance Win32_Process -Filter "Name like 'AutoHotkey%'" | Where-Object { `$_.ExecutablePath -like $(ConvertTo-PsLiteral "$($gh.dir)\*") } | ForEach-Object { Stop-Process -Id `$_.ProcessId -Force }
 Start-Sleep -Milliseconds 500
 Unregister-ScheduledTask -TaskPath '$($gh.path)' -TaskName '$($gh.name)' -Confirm:`$false -ErrorAction SilentlyContinue
-Remove-Item -Recurse -Force '$($gh.dir)' -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force $(ConvertTo-PsLiteral $gh.dir) -ErrorAction SilentlyContinue
 "@
 }
 

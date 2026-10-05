@@ -396,6 +396,14 @@ Describe 'Uninstall removes what starts winarchy at login, journal or not' {
         $script:FakePath = "C:\other;$old"
         @(Get-WinarchyAutostart | Where-Object kind -eq 'path').dir | Should -Be @($old)
     }
+    It 'finds a Run value of winarchy''s whose name starts with PS' {
+        Set-ItemProperty 'TestRegistry:\Run' -Name PSWinarchy -Value "`"$Code\bin\winarchy.cmd`""
+        @(Get-WinarchyAutostart | Where-Object kind -eq 'run').name | Should -Contain 'PSWinarchy'
+    }
+    It '-DryRun lists stopping the screenshot auto-copy the run would take out' {
+        $out = Invoke-Uninstall -Yes -DryRun 6>&1 | Out-String
+        $out | Should -Match '\[dry-run\] Stop screenshot auto-copy'
+    }
     It 'does not call the browser colour task a login entry' {
         $script:BrowserTask = $true
         function Disable-BrowserPolicy {}

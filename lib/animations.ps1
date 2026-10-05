@@ -171,7 +171,7 @@ function Test-AnimationExclusionNeeded { (Test-DefenderActive) -and -not (Test-J
 # files are copied, Defender never gets a look at them.
 function Add-AnimationExclusion {
     $paths = @($AnimFiles.Values | ForEach-Object { Join-Path $AnimDir $_ })
-    $list = ($paths | ForEach-Object { "'$_'" }) -join ','
+    $list = ($paths | ForEach-Object { ConvertTo-PsLiteral $_ }) -join ','
     Write-Host 'Windows will ask for admin permission (Defender exclusions are admin-only).'
     Start-Process (Get-Paths).powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $(ConvertTo-EncodedCommand "Add-MpPreference -ExclusionPath $list")"
     [void](Add-JournalEntry @{ kind = 'defender'; key = 'defender|animations'; paths = $paths })
