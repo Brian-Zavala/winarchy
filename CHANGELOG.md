@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.53 — 2026-10-05
+
 - Fixed: after `winarchy uninstall`, Winarchy could start again at the next login, with the taskbar's tray left half restored. Uninstall undoes what the backup journal recorded, and the journal that recorded the install had been marked as undone without being undone (by a run of Winarchy's own test suite, which reached the real `~/.winarchy/backup`). The uninstall then replayed only a later journal, which had none of the login entries. Uninstall now replays every journal not undone yet, then removes whatever would still start Winarchy at login: Startup shortcuts and Run values pointing into Winarchy's folders, its admin tasks and its PATH entry. It shows the taskbar again when no journal recorded it, and reports anything still left instead of saying "Done.". The tests can no longer reach the real journal.
 
 ## 0.1.51 — 2026-10-03
