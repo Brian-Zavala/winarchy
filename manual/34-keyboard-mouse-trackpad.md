@@ -10,7 +10,7 @@ Add a layout under _Setup > Input_ in the Omarchy menu.
 
 ### Mouse
 
-Focus follows the mouse, as Hyprland's does: point at a window and it's the one you type into. It waits for the pointer to settle, so sweeping across the screen doesn't focus everything on the way, and it never moves focus while you're typing. `"focusFollowsCursor": false` in your settings turns it off.
+Focus follows the mouse, as Hyprland's does: point at a window and it's the one you type into. It waits for the pointer to settle, so sweeping across the screen doesn't focus everything on the way, and it never moves focus while you're typing. Moving onto another monitor focuses that monitor even where there's no window under the pointer (an empty workspace, the bar), so the next app you open lands there. `"focusFollowsCursor": false` in your settings turns it off.
 
 `Super + drag` moves a window from anywhere inside it, and `Super + right drag` resizes it. `Super + scroll wheel` goes to the next or previous workspace.
 

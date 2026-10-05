@@ -1001,6 +1001,48 @@ Describe 'Paths with an apostrophe' {
     }
 }
 
+Describe 'Auto-tiling: split direction and full-size windows' {
+    BeforeAll {
+        . "$root\lib\autotile.ps1"
+        $win = { param($state = 'tiling') [pscustomobject]@{ type = 'window'; id = [guid]::NewGuid().ToString(); state = [pscustomobject]@{ type = $state } } }
+        $split = { [pscustomobject]@{ type = 'split'; id = 's'; children = @((& $win), (& $win)) } }
+        $ws = { param($id, $dir, $kids) [pscustomobject]@{ type = 'workspace'; id = $id; tilingDirection = $dir; children = @($kids) } }
+        $mon = { param($w, $h, $wss) [pscustomobject]@{ type = 'monitor'; width = $w; height = $h; children = @($wss) } }
+    }
+    It 'sets a landscape workspace with one window or none back to horizontal' {
+        $mons = @(& $mon 3840 2160 @(
+            (& $ws 'empty' 'vertical' @()),
+            (& $ws 'one' 'vertical' @((& $win))),
+            (& $ws 'two' 'vertical' @((& $win), (& $win))),
+            (& $ws 'ok' 'horizontal' @((& $win))),
+            (& $ws 'lone-split' 'vertical' @((& $split)))))
+        @(Get-DirectionFixes $mons) | Should -Be @('empty', 'one')
+    }
+    It 'wants vertical on a portrait monitor' {
+        $mons = @(& $mon 1440 2560 @((& $ws 'p' 'horizontal' @((& $win))), (& $ws 'q' 'vertical' @())))
+        @(Get-DirectionFixes $mons) | Should -Be @('p')
+    }
+    It 'counts only tiling windows' {
+        $mons = @(& $mon 2560 1440 @((& $ws 'f' 'vertical' @((& $win), (& $win 'floating'), (& $win 'minimized')))))
+        @(Get-DirectionFixes $mons) | Should -Be @('f')
+    }
+    It 'tiles a full-size window with a resizing frame, not real fullscreen' {
+        $full = [pscustomobject]@{ state = [pscustomobject]@{ type = 'fullscreen'; maximized = $false } }
+        Test-TileFullSize $full 0x16CF0000 | Should -BeTrue     # WS_OVERLAPPEDWINDOW-ish: has WS_THICKFRAME
+        Test-TileFullSize $full 0x96000000 | Should -BeFalse    # WS_POPUP, borderless
+        $max = [pscustomobject]@{ state = [pscustomobject]@{ type = 'fullscreen'; maximized = $true } }
+        Test-TileFullSize $max 0x16CF0000 | Should -BeFalse
+        Test-TileFullSize ([pscustomobject]@{ state = [pscustomobject]@{ type = 'tiling' } }) 0x16CF0000 | Should -BeFalse
+    }
+}
+
+Describe 'Terminal paste' {
+    BeforeAll { $wm = Get-Content -Raw (Join-Path $root 'ahk\winarchy.ahk') }
+    It 'sends a picture or file through Windows Terminal''s own paste on Ctrl+V' {
+        $wm | Should -Match '(?s)TerminalPaste\(keys\) \{.*?keys = "\^v" && WinActive\("ahk_exe WindowsTerminal\.exe"\).*?keys := "\^\+v"'
+    }
+}
+
 Describe 'Doctor: Windows Terminal' {
     BeforeAll { . "$root\lib\doctor.ps1" }
     It 'names elevation in the defaults or the default profile, and nothing otherwise' {

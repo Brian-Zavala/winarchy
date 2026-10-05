@@ -25,9 +25,14 @@
   make them all act on the same, by-then-most-recent window instead of their own --
   repeatedly re-toggling it and leaving earlier windows unwrapped (this was the first cut
   of this script's bug, surfacing as focus/cursor seeming to "stick" to the last window
-  created during a burst). Only window_managed is subscribed to, not focus_changed --
-  reacting to a later refocus of an already-wrapped window would nest it again on every
-  alt-tab.
+  created during a burst). Only window_managed and window_unmanaged are subscribed to, not
+  focus_changed -- reacting to a later refocus of an already-wrapped window would nest it
+  again on every alt-tab. After either event, a workspace left with one window or none
+  goes back to its monitor's split direction (Repair-Directions): closing the window next
+  to a dwindle split makes GlazeWM hand the split's direction to the workspace itself.
+
+  A window GlazeWM starts as fullscreen only because it reopened at full-screen size (no
+  taskbar, so apps save that size) is tiled first, or it would sit behind the bar.
 
   Started by GlazeWM's own general.startup_commands (templates/glazewm.yaml.tpl), the
   same way Zebar is, and passed the currently-selected CLI path (official install, or the
@@ -39,6 +44,7 @@
 param([Parameter(Mandatory)][string]$Cli)
 
 . "$PSScriptRoot\common.ps1"
+. "$PSScriptRoot\autotile.ps1"
 
 if (-not (Test-Path $Cli)) {
     Log "autotile: GlazeWM CLI not found at $Cli, exiting"
@@ -49,6 +55,12 @@ if (-not (Test-Path $Cli)) {
 # reach for it, and two of them would each wrap every new window (two wraps = no wrap).
 $mutex = [Threading.Mutex]::new($false, 'Global\winarchy-autotile')
 if (-not $mutex.WaitOne(0)) { exit 0 }
+
+Add-Type -Namespace WinarchyAutotile -Name Native -MemberDefinition '[DllImport("user32.dll")] public static extern IntPtr GetWindowLongPtrW(IntPtr hwnd, int index);'
+
+function Get-WindowStyle($handle) {
+    try { [WinarchyAutotile.Native]::GetWindowLongPtrW([IntPtr][long]$handle, -16).ToInt64() } catch { 0 }   # GWL_STYLE
+}
 
 function Test-TilingSibling($node) { $node.type -eq 'split' -or ($node.type -eq 'window' -and $node.state.type -eq 'tiling') }
 
@@ -91,6 +103,13 @@ function Invoke-DwindleWrap($win) {
         if ($attempt -eq 1) { Start-Sleep -Milliseconds 80 }
     }
     if (-not $live) { Log "autotile: $short never appeared in the tree"; return }
+    if (Test-TileFullSize $live (Get-WindowStyle $live.handle)) {
+        # Opened at full-screen size, not as real fullscreen: tile it under the bar.
+        & $Cli command --id $win.id set-tiling 2>$null | Out-Null
+        Log "autotile: $short opened full-size ($($live.processName)), tiled"
+        $workspaces = try { (& $Cli query workspaces | ConvertFrom-Json).data.workspaces } catch { $null }
+        if (-not $workspaces -or -not ($live = Find-Container $workspaces $win.id)) { return }
+    }
     if ($live.state.type -ne 'tiling') { Log "autotile: $short is $($live.state.type), left alone"; return }
     $parent = Find-Parent $workspaces $win.id
     if (-not $parent) { Log "autotile: $short has no parent container"; return }
@@ -100,14 +119,28 @@ function Invoke-DwindleWrap($win) {
     Log "autotile: $short wrapped ($($sibs.Count) sibling(s), $($parent.type) was $($parent.tilingDirection))"
 }
 
+# Workspaces with one window or none back to their monitor's split direction
+# (Get-DirectionFixes in lib/autotile.ps1 says why they drift).
+function Repair-Directions {
+    $monitors = try { (& $Cli query monitors | ConvertFrom-Json).data.monitors } catch { $null }
+    foreach ($id in @(Get-DirectionFixes $monitors)) {
+        & $Cli command --id $id toggle-tiling-direction 2>$null | Out-Null
+        Log "autotile: workspace $($id.Substring(0, 8)) set back to its monitor's direction"
+    }
+}
+
 Log "autotile: watching (cli: $Cli)"
+Repair-Directions
 # Anything that ends this process should say why: it has been seen to disappear while
 # GlazeWM kept running, and a dead watcher silently stops new windows dwindling.
 try {
-    & $Cli sub -e window_managed | ForEach-Object {
+    & $Cli sub -e window_managed window_unmanaged | ForEach-Object {
         try {
             $evt = $_ | ConvertFrom-Json
-            if ($evt.success -ne $false) { Invoke-DwindleWrap $evt.data.managedWindow }
+            if ($evt.success -ne $false) {
+                if ($evt.data.managedWindow) { Invoke-DwindleWrap $evt.data.managedWindow }
+                Repair-Directions
+            }
         } catch { Log "autotile: event handling failed: $_" }
     }
     Log 'autotile: subscribe stream ended, exiting'

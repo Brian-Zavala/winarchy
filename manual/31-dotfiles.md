@@ -35,7 +35,7 @@ It's JSON, so a `\` in a path is written `\\`. A file with a mistake in it is le
 | `minimizeAllowed` | `[]` | Process names allowed to minimize anyway, e.g. `["Spotify"]` |
 | `openOnHoveredMonitor` | `true` | A new window opens on the monitor under the mouse instead of the primary display. See [monitors](33-monitors.md) |
 | `focusFollowsCursor` | `true` | Focus follows the mouse, like Hyprland's `follow_mouse`. It waits for the pointer to settle, only follows real movement (never while you type), and stands down during games and while `Super` is held. `false` leaves focus to GlazeWM |
-| `autoTiling.enabled` | `true` | Hyprland-style dwindle tiling: each new window splits the space of the one it lands next to, so windows spiral outward instead of piling into one row. `winarchy autotile on\|off\|toggle\|status` |
+| `autoTiling.enabled` | `true` | Hyprland-style dwindle tiling: each new window splits the space of the one it lands next to, so windows spiral outward instead of piling into one row. The first split is always side by side (stacked on a portrait monitor), and an app that opens at full-screen size is tiled instead of covering the bar. `winarchy autotile on\|off\|toggle\|status` |
 | `glazewmManaged` | `true` | `false` stops Winarchy writing GlazeWM's `config.yaml`, so you can edit it yourself |
 
 ### Apps

@@ -194,11 +194,13 @@ HoverHold := 0                    ; > 0 while a placement is in flight: sampling
 HoverHoldUntil := 0               ; absolute backstop for the hold
 PrePlaceTarget := Map()          ; new window -> monitor point it belongs on (see PrePlaceOnShow)
 PrePlaceHook := 0
+; Every new window also gets checked for opening full-size over the bar (HoverPlaceWindow),
+; so the shell hook is there even with openOnHoveredMonitor off.
+DllCall("RegisterShellHookWindow", "ptr", A_ScriptHwnd)
+OnMessage DllCall("RegisterWindowMessage", "Str", "SHELLHOOK", "UInt"), OnShellHook
 if HoverPlace {
     HoverSample()
     SetTimer HoverSample, 120
-    DllCall("RegisterShellHookWindow", "ptr", A_ScriptHwnd)
-    OnMessage DllCall("RegisterWindowMessage", "Str", "SHELLHOOK", "UInt"), OnShellHook
     ; Moves the window onto that monitor the instant it is shown (see PrePlaceOnShow), so
     ; it is never painted on the wrong one first.
     PrePlaceHook := DllCall("SetWinEventHook", "uint", 0x8002, "uint", 0x8002, "ptr", 0
@@ -2352,8 +2354,9 @@ if Env("compose", "0") = "1" {
 
 ; Universal clipboard (Omarchy v4): Super + C/V/X/A
 #c::Send IsTerminal() ? "^+c" : "^c"
-; In a terminal a picture goes through Ctrl+V like a hand-pressed paste; text keeps Ctrl+Shift+V.
-#v::IsTerminal() ? TerminalPaste(ClipHasImage() ? "^v" : "^+v") : Send("^v")
+; In a terminal: Ctrl+Shift+V (the terminal's own paste), which TerminalPaste turns into a
+; file path for a picture.
+#v::IsTerminal() ? TerminalPaste("^+v") : Send("^v")
 #x::Send "^x"
 #a::Send "^a"
 
@@ -2367,8 +2370,16 @@ $^v::TerminalPaste("^v")
 $^+v::TerminalPaste("^+v")
 #HotIf
 
+; Windows Terminal leaves Ctrl+V unbound (its paste is Ctrl+Shift+V), so the app gets a raw
+; ^V - and Claude Code on Windows takes images on Alt+V, not Ctrl+V. A picture or a copied
+; file therefore goes through Terminal's paste, which types the file's path; a path to an
+; image is how Claude Code and co. take one. Text keeps the key that was pressed.
 TerminalPaste(keys) {
     try ClipImageAsFile()
+    if keys = "^v" && WinActive("ahk_exe WindowsTerminal.exe")
+        && DllCall("IsClipboardFormatAvailable", "uint", 15)        ; CF_HDROP
+        && !DllCall("IsClipboardFormatAvailable", "uint", 13)       ; CF_UNICODETEXT
+        keys := "^+v"
     Send keys
 }
 
@@ -2419,11 +2430,6 @@ ClipImageAsFile() {
                 DllCall("GlobalFree", "ptr", h)
         }
     } finally DllCall("CloseClipboard")
-}
-
-ClipHasImage() {
-    return DllCall("IsClipboardFormatAvailable", "uint", 8)    ; CF_DIB
-        || DllCall("IsClipboardFormatAvailable", "uint", 15)   ; CF_HDROP (a screenshot file)
 }
 
 ClipOpen() {
@@ -2937,7 +2943,14 @@ GlazeWindowInfo(hwnd, json := "") {
     while p := RegExMatch(head, '"type":"workspace","id":"([^"]+)"', &m, p)
         ws := m[1], p += m.Len
     state := RegExMatch(head, '"state":\{"type":"(\w+)"', &m, wpos) ? m[1] : ""
-    return id ? {id: id, state: state, workspace: ws} : 0
+    if !id
+        return 0
+    info := {id: id, state: state, workspace: ws, x: 0, y: 0, w: 0, h: 0}
+    ; Where GlazeWM lays the window out (physical px), which can differ from where it is
+    ; this instant: a new window is moved there a moment after it is managed.
+    if RegExMatch(json, '"width":(-?\d+),"height":(-?\d+),"x":(-?\d+),"y":(-?\d+)', &m, wpos)
+        info.w := Integer(m[1]), info.h := Integer(m[2]), info.x := Integer(m[3]), info.y := Integer(m[4])
+    return info
 }
 
 ; --- New windows open on the hovered monitor ---------------------------------------
@@ -3053,10 +3066,15 @@ FocusFollowWatch() {
     lastX := x, lastY := y
     ; Focus may only follow real movement: never take focus off the window being typed
     ; in because the pointer happens to be resting somewhere else.
-    if !moved || !hwnd
+    if !moved
         return
-    hwnd := DllCall("GetAncestor", "ptr", hwnd, "uint", 2, "ptr")      ; GA_ROOT
-    if !hwnd || hwnd = WinExist("A")
+    if hwnd
+        hwnd := DllCall("GetAncestor", "ptr", hwnd, "uint", 2, "ptr")  ; GA_ROOT
+    if !hwnd {
+        FocusHoveredMonitor(x, y)
+        return
+    }
+    if hwnd = WinExist("A")
         return
     ; Activation can fail to take (foreground lock, GlazeWM re-asserting its focus):
     ; retry, but not on every tick.
@@ -3064,14 +3082,17 @@ FocusFollowWatch() {
         return
     ; A window focus can't follow into (the bar, the desktop, a game) is looked at once, not
     ; again on every tick while the pointer moves across it.
-    if hwnd = skip && A_TickCount - skipAt < 500
+    if hwnd = skip && A_TickCount - skipAt < 500 {
+        FocusHoveredMonitor(x, y)
         return
+    }
     ; A game or fullscreen window owns its own focus; Super is held while dragging or
     ; resizing, where the pointer is carrying a window rather than choosing one.
     if GetKeyState("LWin", "P")
         return
     if !FocusFollowEligible(hwnd) {
         skip := hwnd, skipAt := A_TickCount
+        FocusHoveredMonitor(x, y)
         return
     }
     if Busy()
@@ -3079,6 +3100,40 @@ FocusFollowWatch() {
     tried := hwnd, triedAt := A_TickCount
     SetWinDelay -1                  ; no 100 ms nap after it: the pointer may be moving on
     try WinActivate "ahk_id " hwnd
+}
+
+; Hyprland focuses the monitor the pointer moves onto, even with no window under it, and
+; GlazeWM opens new windows on its focused workspace. So when the pointer crosses onto
+; another monitor and lands on something focus can't follow into (the desktop of an empty
+; workspace, the bar, a gap), focus that monitor itself. Once per crossing: for 2 s it
+; waits out Busy() or a placement in flight, then gives up until the next crossing.
+FocusHoveredMonitor(x, y) {
+    global HoverHold
+    static lastMon := 0, pending := 0, pendingAt := 0
+    mon := MonitorFromPoint(x, y)
+    if mon != lastMon {
+        lastMon := mon, pending := mon, pendingAt := A_TickCount
+    }
+    if !pending || mon != pending || MonitorGetCount() < 2
+        return
+    if A_TickCount - pendingAt > 2000 {
+        pending := 0
+        return
+    }
+    if GetKeyState("LWin", "P") || HoverHold > 0
+        return
+    fg := WinExist("A"), fgCls := "", fgExe := ""
+    try fgCls := WinGetClass(fg), fgExe := WinGetProcessName(fg)
+    ; An open menu, picker or launcher keeps its focus.
+    if fgExe ~= "i)^(zebar|Flow\.Launcher|PickerHost|consent)\.exe$"
+        return
+    if Busy()
+        return
+    focused := fg && !(fgCls ~= "^(Progman|WorkerW)$") ? MonitorOfWindow(fg) : GlazeFocusedMonitor()
+    pending := 0
+    if focused = mon
+        return
+    Glaze("focus --monitor " MonitorPosition(mon))
 }
 
 ; --- Auto-tiling watcher guard -------------------------------------------------
@@ -3211,16 +3266,14 @@ HoverTarget() {
     return {x: HoverPoint.x, y: HoverPoint.y}
 }
 
-; Moves a just-created window to the workspace on the monitor at `pt` (HoverTarget). Runs
-; off a timer (not the hook) so nothing blocks the shell, and retries while GlazeWM has
-; yet to take the window under management - the shell hook fires before it does, so the
-; first GlazeWindowInfo always misses.
+; Every just-created window, once GlazeWM manages it: a window that opened full-size is
+; brought under the bar (see FitUnderBar), and the window moves to the workspace on the
+; monitor at `pt` (HoverTarget) when openOnHoveredMonitor is on. Runs off a timer (not the
+; hook) so nothing blocks the shell, and retries while GlazeWM has yet to take the window
+; under management - the shell hook fires before it does, so the first GlazeWindowInfo
+; always misses.
 HoverPlaceWindow(hwnd, attempt, pt) {
     global HoverPlace, GlazeCli
-    if !HoverPlace || MonitorGetCount() < 2 {
-        HoverRelease()
-        return
-    }
     PerMonitorDpi()
     again := false                           ; too early to tell: look again in a moment
     try {
@@ -3232,17 +3285,38 @@ HoverPlaceWindow(hwnd, attempt, pt) {
         }
         ; Owned windows and tool windows keep their parent's monitor: a Save/Print
         ; dialog belongs next to the window that opened it, not under the mouse.
-        if !IsRestorableWindow(hwnd) || IsGame(hwnd) || IsFullscreenWindow(hwnd)
+        if !IsRestorableWindow(hwnd) || IsGame(hwnd)
             throw Error("skip")
-        target := MonitorFromPoint(pt.x, pt.y)
-        if !target || target = MonitorOfWindow(hwnd)
-            throw Error("already there")     ; no pointless move (and no move animation)
         ; GlazeWM takes the window under management a moment after it appears, so the
         ; first look always misses; one that it ignores never turns up at all.
         if !(info := GlazeWindowInfo(hwnd)) {
+            if attempt >= 8                  ; never managed (~1.3 s): keep it off the bar at least
+                FitUnderBar(hwnd, "maximized, not tiled by GlazeWM")
             again := true
             throw Error("not managed yet")
         }
+        ; Started as fullscreen only because it opened at full-screen size (real fullscreen
+        ; is borderless). lib/autotile-watch.ps1 tiles these when auto-tiling is on.
+        if info.state = "fullscreen" && (WinGetStyle(hwnd) & 0x40000) && !AutoTileRunning() {
+            Glaze("--id " info.id " set-tiling")
+            WmLog("full-size window fixed: " WindowProcessName(hwnd) " [" WinGetClass(hwnd) "] (opened fullscreen, tiled)")
+            again := true                    ; place it once GlazeWM has tiled it
+            throw Error("tiling it")
+        }
+        if info.state = "fullscreen"
+            throw Error("skip")
+        ; Tiled, but the window stayed maximized over GlazeWM's layout (seen with Store
+        ; app frames such as Settings): looked at again once GlazeWM had its go.
+        if info.state = "tiling" && WinGetMinMax(hwnd) = 1
+            SetTimer FixMaximizedTile.Bind(hwnd), -400
+        if !HoverPlace || MonitorGetCount() < 2
+            throw Error("placement off")
+        ; Where GlazeWM lays it out, not where it is this instant: PrePlaceOnShow may have
+        ; moved it to the target already, and GlazeWM then pulls it to its focused monitor.
+        target := MonitorFromPoint(pt.x, pt.y)
+        current := info.w ? MonitorFromPoint(info.x + info.w // 2, info.y + info.h // 2) : MonitorOfWindow(hwnd)
+        if !target || target = current
+            throw Error("already there")     ; no pointless move (and no move animation)
     } catch {
         if again && attempt < 8              ; ~1.3 s, then give up
             SetTimer HoverPlaceWindow.Bind(hwnd, attempt + 1, pt), -150
@@ -3255,4 +3329,50 @@ HoverPlaceWindow(hwnd, attempt, pt) {
         . ' -X ' pt.x ' -Y ' pt.y ' -Cli "' GlazeCli '" -WorkspaceOnly', , "Hide")
     try WmLog("opened on the working monitor: " WindowProcessName(hwnd))
     HoverRelease()
+}
+
+; A tiled window still maximized (GlazeWM's restore didn't take): restore it and let
+; GlazeWM lay it out again, or it covers the whole monitor, bar strip included.
+FixMaximizedTile(hwnd) {
+    try {
+        if !DllCall("IsWindow", "ptr", hwnd) || WinGetMinMax(hwnd) != 1
+            return
+        if !(info := GlazeWindowInfo(hwnd)) || info.state != "tiling"
+            return
+        WinRestore hwnd
+        Glaze("wm-redraw")
+        WmLog("full-size window fixed: " WindowProcessName(hwnd) " [" WinGetClass(hwnd) "] (tiled but maximized, restored)")
+    }
+}
+
+; A maximized window GlazeWM never manages: with the taskbar hidden the work area is the
+; whole monitor, so it sits under the bar strip. Restore it, then bring its top edge below
+; the bar. Only maximized resizable windows: GlazeWM leaves some alone on purpose (the
+; screensaver, live wallpapers, picture-in-picture, game launchers), and none of those
+; are maximized.
+FitUnderBar(hwnd, why) {
+    global BarEnabled
+    try {
+        if !BarEnabled || WinGetMinMax(hwnd) != 1 || !(WinGetStyle(hwnd) & 0x40000)
+            || IsGame(hwnd) || !IsRestorableWindow(hwnd)
+            || WinGetProcessName(hwnd) ~= "i)^(zebar|glazewm|Flow\.Launcher|PickerHost|consent|AutoHotkey64)\.exe$"
+            return
+        WinRestore hwnd
+        MonitorGet MonitorOfWindow(hwnd), &l, &t, &r, &b
+        dpi := DllCall("GetDpiForWindow", "ptr", hwnd, "uint") || 96
+        gap := GapsOn() ? Integer(Env("gap", 10)) : 0
+        strip := t + Round((Integer(Env("barHeight", 26)) + gap) * dpi / 96)
+        ; The visible frame: the window rect also holds invisible resize borders.
+        frame := Buffer(16, 0)
+        if DllCall("dwmapi\DwmGetWindowAttribute", "ptr", hwnd, "uint", 9, "ptr", frame, "uint", 16)   ; DWMWA_EXTENDED_FRAME_BOUNDS
+            return
+        top := NumGet(frame, 4, "int")
+        if top >= strip
+            return
+        WinGetPos &x, &y, &w, &h, hwnd
+        down := strip - top
+        DllCall("SetWindowPos", "ptr", hwnd, "ptr", 0, "int", x, "int", y + down, "int", w, "int", Max(h - down, 200)
+            , "uint", 0x0014)                ; SWP_NOZORDER | SWP_NOACTIVATE
+        WmLog("full-size window fixed: " WindowProcessName(hwnd) " [" WinGetClass(hwnd) "] (" why ", moved under the bar)")
+    }
 }

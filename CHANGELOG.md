@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed: apps that remember a full-screen size (Chrome, Explorer, Settings…) opened over the whole monitor, behind the top bar, instead of tiling. With the taskbar hidden they save that size, and GlazeWM took it for fullscreen. A new window with an ordinary resizable frame is now tiled; real fullscreen (borderless: videos, F11, game launchers) is left as it is. A maximized window that GlazeWM leaves untiled is restored and moved below the bar.
+- Fixed: after a window closed, the next one could open below the others instead of beside them. GlazeWM hands the workspace the direction of the dwindle split that was left, so it stayed stacked. A workspace with one window or none now goes back to side by side (stacked on a portrait monitor).
+- Fixed: `Ctrl + V` didn't paste a picture into Windows Terminal (Claude Code and other CLIs), only `Ctrl + Shift + V` did. A copied picture or file now goes through Terminal's paste on `Ctrl + V` too, as a file path; text still pastes as before.
+- Pointing at another monitor now focuses it even where there is no window under the pointer (an empty workspace, the bar, a gap), as in Hyprland. New windows open on that monitor. New windows also land on the monitor you're working on more reliably: the check that skipped "already there" windows looked at where the window was for a moment, not where GlazeWM was putting it.
+
 ## 0.1.53 — 2026-10-05
 
 - Fixed: after `winarchy uninstall`, Winarchy could start again at the next login, with the taskbar's tray left half restored. Uninstall undoes what the backup journal recorded, and the journal that recorded the install had been marked as undone without being undone (by a run of Winarchy's own test suite, which reached the real `~/.winarchy/backup`). The uninstall then replayed only a later journal, which had none of the login entries. Uninstall now replays every journal not undone yet, then removes whatever would still start Winarchy at login: Startup shortcuts and Run values pointing into Winarchy's folders, its admin tasks and its PATH entry. It shows the taskbar again when no journal recorded it, and reports anything still left instead of saying "Done.". The tests can no longer reach the real journal.
