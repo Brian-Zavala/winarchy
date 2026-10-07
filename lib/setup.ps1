@@ -671,6 +671,8 @@ function Invoke-Install([switch]$Yes, [switch]$Adopt) {
         Write-Ok "Downloading Omarchy's 22 themes and ~100 backgrounds (about 110 MB)$(if ($themeDownload) { ' in the background, while the apps install' })."
     }
 
+    # Before anything writes GlazeWM's Run key or paths.json.
+    Suspend-AnimationsUntilAllowed
     Install-Dependencies
     Install-HerdrStep
     Install-TailscaleStep -Restoring:$restoring

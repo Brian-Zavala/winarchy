@@ -54,6 +54,62 @@ function Install-BuildTools {
     $env:Path += ';' + (Join-Path $env:USERPROFILE '.cargo\bin')
 }
 
+$AnimBuildLog = Join-Path $Data 'logs\glazewm-build.log'
+
+# Installed already, asked without the network (`rustup run` may install a missing one).
+# Listed with the host: "nightly-x86_64-pc-windows-msvc", which a dated
+# "nightly-2026-07-20-x86_64-pc-windows-msvc" must not pass for.
+function Test-RustToolchain([string]$name) {
+    $list = @(rustup toolchain list 2>$null)
+    [bool]($list -match "^$([regex]::Escape($name))-[a-z0-9_]+-pc-windows-")
+}
+
+# Text of a file another process is still writing.
+function Read-SharedText([string]$path) {
+    try {
+        $fs = [IO.File]::Open($path, 'Open', 'Read', 'ReadWrite')
+        try { [IO.StreamReader]::new($fs).ReadToEnd() } finally { $fs.Dispose() }
+    } catch { '' }
+}
+
+# How far cargo is, from its output so far: crates started, and the latest one.
+function Get-BuildProgress([string]$text) {
+    $m = [regex]::Matches($text, '(?m)^\s*Compiling (\S+)')
+    @{ done = $m.Count; crate = $(if ($m.Count) { $m[$m.Count - 1].Groups[1].Value } else { '' }) }
+}
+
+# Runs rustup or cargo in $AnimSrc with its output added to the build log instead of the
+# console (nightly cargo prints screens of manifest warnings about the fork's crates). With
+# a $total, cargo's "Compiling" lines drive a progress bar meanwhile.
+function Invoke-BuildTool([string]$tool, [string[]]$arguments, [int]$total = 0) {
+    $exe = (Get-Command $tool -ErrorAction Stop).Source
+    $out = "$AnimBuildLog.out"; $err = "$AnimBuildLog.err"
+    Add-Content -LiteralPath $AnimBuildLog -Value "`n> $tool $($arguments -join ' ')"
+    $proc = Start-Process -FilePath $exe -ArgumentList (ConvertTo-ArgString $arguments) -WorkingDirectory $AnimSrc `
+        -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+    $shown = -1
+    while (-not $proc.WaitForExit(500)) {
+        if ($total -le 0) { continue }
+        $s = Get-BuildProgress (Read-SharedText $err)
+        if ($s.done -ne $shown) { $shown = $s.done; Write-UiProgress 'compiling' ([Math]::Min($s.done, $total - 1)) $total $s.crate }
+    }
+    $ok = $proc.ExitCode -eq 0
+    if ($total -gt 0 -and -not [Console]::IsOutputRedirected) {
+        if ($ok) { Write-UiProgress 'compiling' $total $total 'done' } elseif ($shown -ge 0) { Write-Host '' }
+    }
+    foreach ($f in $out, $err) {
+        if (Test-Path -LiteralPath $f) { Get-Content -LiteralPath $f | Add-Content -LiteralPath $AnimBuildLog; Remove-Item -LiteralPath $f -Force }
+    }
+    $ok
+}
+
+# glazewm + cli + watcher. Cargo.lock's package count stands in for the crates to compile
+# (it lists other platforms' too, so the bar ends with a jump).
+function Invoke-CargoBuild([string]$toolchain) {
+    $total = @(Select-String -LiteralPath (Join-Path $AnimSrc 'Cargo.lock') -Pattern '^\[\[package\]\]' -ErrorAction SilentlyContinue).Count
+    Invoke-BuildTool cargo @("+$toolchain", 'build', '--release', '--locked', '--color', 'never', '-p', 'wm', '-p', 'wm-cli', '-p', 'wm-watcher') ([Math]::Max($total, 1))
+}
+
 # The build of the pinned commit is installed (built here or downloaded).
 function Test-AnimationBuildInPlace {
     $b = Get-AnimationBuild
@@ -82,21 +138,35 @@ function Invoke-AnimationBuild {
     Push-Location $AnimSrc
     try {
         if (-not (Test-Path '.git')) { git init --quiet; git remote add origin "https://github.com/$($src.repo).git" }
-        git fetch --depth 1 origin $src.commit
+        git fetch --quiet --depth 1 origin $src.commit
         if ($LASTEXITCODE) { throw "git fetch of $($src.commit) failed" }
         git checkout --quiet --force FETCH_HEAD
         # build.rs embeds the version: keep it in step with the official GlazeWM it is based on.
         $env:VERSION_NUMBER = $src.version
+        New-Item -ItemType Directory -Force (Split-Path $AnimBuildLog) | Out-Null
+        Set-Content -LiteralPath $AnimBuildLog -Value "GlazeWM animation build, $($src.repo)@$($src.commit), $(Get-Date -Format s)"
         $built = $false
         foreach ($toolchain in @('nightly', $src.fallbackToolchain) | Where-Object { $_ }) {
-            Log "toolchain $toolchain"
-            rustup toolchain install $toolchain --profile minimal --no-self-update
-            if ($LASTEXITCODE) { continue }
-            cargo "+$toolchain" build --release --locked -p wm -p wm-cli -p wm-watcher
-            if (-not $LASTEXITCODE) { $built = $true; break }
+            # A toolchain already here is used as it is: updating nightly is ~100 MB every build.
+            # Only when it can't build the pinned commit is it updated, and tried once more.
+            $had = Test-RustToolchain $toolchain
+            if (-not $had) {
+                Log "installing Rust $toolchain"
+                if (-not (Invoke-BuildTool rustup @('toolchain', 'install', $toolchain, '--profile', 'minimal', '--no-self-update'))) { continue }
+            }
+            Log "compiling with Rust $toolchain (log: $AnimBuildLog)"
+            if (Invoke-CargoBuild $toolchain) { $built = $true; break }
+            if ($had) {
+                Log "updating Rust $toolchain and trying again"
+                if ((Invoke-BuildTool rustup @('toolchain', 'install', $toolchain, '--profile', 'minimal', '--no-self-update')) -and (Invoke-CargoBuild $toolchain)) { $built = $true; break }
+            }
             Log "build with $toolchain failed"
         }
-        if (-not $built) { throw 'the GlazeWM animation build failed (see the output above)' }
+        if (-not $built) {
+            Write-Host "    last lines of $($AnimBuildLog):" -ForegroundColor Yellow
+            Get-Content -LiteralPath $AnimBuildLog -Tail 25 | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
+            throw "the GlazeWM animation build failed (log: $AnimBuildLog)"
+        }
         Install-AnimationFiles
         Write-Json (Join-Path $AnimDir 'build.json') ([ordered]@{ repo = $src.repo; commit = $src.commit; built = (Get-Date).ToString('s') })
         Log "animation build ready: $AnimDir"
@@ -129,22 +199,31 @@ function Get-AnimationPrebuilt {
 }
 
 # Downloads the published build (its zip holds the installed layout: glazewm.exe,
-# glazewm-watcher.exe, cli\glazewm.exe) and puts it in place, no compiler needed.
+# glazewm-watcher.exe, cli\glazewm.exe) and puts it in place, no compiler needed. Each file
+# goes from the zip straight to its excluded path: unpacked anywhere else (%TEMP%), Defender
+# scans it and, once it has flagged the build, blocks it there.
 function Install-AnimationPrebuilt($pin) {
     Assert-AnimationBuildStopped
-    $tmp = Join-Path ([IO.Path]::GetTempPath()) "winarchy-glazewm-$([guid]::NewGuid().ToString('N'))"
+    $zipFile = Join-Path ([IO.Path]::GetTempPath()) "winarchy-glazewm-$([guid]::NewGuid().ToString('N')).zip"
+    $zip = $null
     try {
         Log "downloading the GlazeWM animation build ($($pin.commit.Substring(0, 12)))"
-        Save-PinnedFile $pin.url $pin.sha256 "$tmp.zip"
-        Expand-Archive -LiteralPath "$tmp.zip" -DestinationPath $tmp -Force
-        foreach ($f in $AnimFiles.Values) {
-            if (-not (Test-Path -LiteralPath (Join-Path $tmp $f))) { throw "the download has no $f" }
-        }
+        Save-PinnedFile $pin.url $pin.sha256 $zipFile
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $zip = [IO.Compression.ZipFile]::OpenRead($zipFile)
+        $entries = @{}
+        foreach ($e in $zip.Entries) { $entries[$e.FullName -replace '/', '\'] = $e }
+        foreach ($f in $AnimFiles.Values) { if (-not $entries[$f]) { throw "the download has no $f" } }
+        # Gone until all three are in: a half-replaced set must not pass for the pinned build.
+        Remove-Item -LiteralPath (Join-Path $AnimDir 'build.json') -Force -ErrorAction SilentlyContinue
         New-Item -ItemType Directory -Force (Join-Path $AnimDir 'cli') | Out-Null
-        foreach ($f in $AnimFiles.Values) { Copy-Item -Force -LiteralPath (Join-Path $tmp $f) (Join-Path $AnimDir $f) }
+        foreach ($f in $AnimFiles.Values) { [IO.Compression.ZipFileExtensions]::ExtractToFile($entries[$f], (Join-Path $AnimDir $f), $true) }
         Write-Json (Join-Path $AnimDir 'build.json') ([ordered]@{ repo = $pin.source; commit = $pin.commit; built = (Get-Date).ToString('s'); prebuilt = $pin.url })
         Log "animation build ready: $AnimDir (downloaded)"
-    } finally { Remove-Item -LiteralPath $tmp, "$tmp.zip" -Recurse -Force -ErrorAction SilentlyContinue }
+    } finally {
+        if ($zip) { $zip.Dispose() }
+        Remove-Item -LiteralPath $zipFile -Force -ErrorAction SilentlyContinue
+    }
 }
 
 # Puts back a build that is gone (Defender took it): the one built here, else the download.
@@ -184,6 +263,16 @@ function Request-AnimationExclusion {
     Write-Host 'Windows Defender may remove this build: it is unsigned and made on this PC.' -ForegroundColor Yellow
     if (Read-YesNo 'Exclude its three files from Defender scanning (one admin prompt)?' $true) { Add-AnimationExclusion }
     else { Write-Host '    If it disappears later: winarchy animations allow' }
+}
+
+# A reinstall that kept animations on: uninstall took the exclusion back out, and Defender
+# flags the Run key pointing at the unsigned build (Persistence.A) and removes the build.
+# So the install starts the official GlazeWM; its last step (Invoke-AnimationOffer) asks to
+# turn them back on, exclusion first.
+function Suspend-AnimationsUntilAllowed {
+    if (-not (Get-Config).animations.enabled -or -not (Get-AnimationBuild) -or -not (Test-AnimationExclusionNeeded)) { return }
+    Set-Animations $false
+    Log 'window animations: off until the end of the install (Defender exclusion first)'
 }
 
 # Everything window animations need, in one go: build tools, the build (or the one on disk),

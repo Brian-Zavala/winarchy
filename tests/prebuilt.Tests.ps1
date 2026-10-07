@@ -172,6 +172,26 @@ Describe 'Animation build download' {
         { Install-AnimationPrebuilt $pin } | Should -Throw '*glazewm-watcher.exe*'
         Test-Path (Join-Path $AnimDir 'glazewm.exe') | Should -BeFalse
     }
+    It 'unpacks the exes only into their excluded paths, never into %TEMP%' {
+        $script:testZip = New-TestZip @{ 'glazewm.exe' = 'wm'; 'glazewm-watcher.exe' = 'watcher'; 'cli/glazewm.exe' = 'cli' }
+        Mock Save-PinnedFile { $script:zipAt = $dest; Copy-Item $script:testZip $dest }
+        Mock Expand-Archive {}
+        Install-AnimationPrebuilt $pin
+        Should -Invoke Expand-Archive -Times 0
+        Get-Content (Join-Path $AnimDir 'glazewm.exe') | Should -Be 'wm'
+        Test-Path -LiteralPath $script:zipAt | Should -BeFalse
+        Test-Path -LiteralPath ($script:zipAt -replace '\.zip$') | Should -BeFalse
+    }
+    It 'leaves the installed build as it was when the download is missing a file' {
+        New-Item -ItemType Directory -Force $AnimDir | Out-Null
+        Set-Content (Join-Path $AnimDir 'glazewm.exe') 'old'
+        Write-Json (Join-Path $AnimDir 'build.json') @{ commit = 'old' }
+        $script:testZip = New-TestZip @{ 'glazewm.exe' = 'wm'; 'cli/glazewm.exe' = 'cli' }
+        Mock Save-PinnedFile { Copy-Item $script:testZip $dest }
+        { Install-AnimationPrebuilt $pin } | Should -Throw '*glazewm-watcher.exe*'
+        Get-Content (Join-Path $AnimDir 'glazewm.exe') | Should -Be 'old'
+        (Read-Json (Join-Path $AnimDir 'build.json')).commit | Should -Be 'old'
+    }
     It 'puts back the downloaded build when nothing was built here' {
         Mock Get-AnimationPrebuilt { $pin }
         Mock Install-AnimationPrebuilt {}

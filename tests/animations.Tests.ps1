@@ -67,6 +67,28 @@ Describe 'Animation build and Defender' {
     It 'says to build when there is no build output' {
         { Install-AnimationFiles } | Should -Throw '*winarchy animations build*'
     }
+    It 'holds animations off on a reinstall until the exclusion is back' {
+        Mock Set-Animations {}
+        Mock Get-Config { @{ animations = @{ enabled = $true } } }
+        Mock Get-AnimationBuild { @{ exe = 'x' } }
+        Mock Test-AnimationExclusionNeeded { $true }
+        Suspend-AnimationsUntilAllowed
+        Should -Invoke Set-Animations -Times 1 -ParameterFilter { $on -eq $false }
+    }
+    It 'leaves animations alone when off, not built, or already excluded' {
+        Mock Set-Animations {}
+        Mock Get-Config { @{ animations = @{ enabled = $false } } }
+        Mock Get-AnimationBuild { @{ exe = 'x' } }
+        Mock Test-AnimationExclusionNeeded { $true }
+        Suspend-AnimationsUntilAllowed
+        Mock Get-Config { @{ animations = @{ enabled = $true } } }
+        Mock Get-AnimationBuild { $null }
+        Suspend-AnimationsUntilAllowed
+        Mock Get-AnimationBuild { @{ exe = 'x' } }
+        Mock Test-AnimationExclusionNeeded { $false }
+        Suspend-AnimationsUntilAllowed
+        Should -Invoke Set-Animations -Times 0
+    }
     It 'never adds the exclusion unattended' {
         function Test-Journaled {}
         Mock Test-DefenderActive { $true }
@@ -75,6 +97,65 @@ Describe 'Animation build and Defender' {
         $script:AssumeYes = $true
         try { Request-AnimationExclusion } finally { $script:AssumeYes = $false }
         Should -Invoke Add-AnimationExclusion -Times 0
+    }
+}
+
+Describe 'Animation build output' {
+    It 'tells an installed toolchain from a dated one of the same channel' {
+        function rustup { 'nightly-2026-07-20-x86_64-pc-windows-msvc'; 'stable-x86_64-pc-windows-msvc (default)' }
+        Test-RustToolchain 'nightly' | Should -BeFalse
+        Test-RustToolchain 'nightly-2026-07-20' | Should -BeTrue
+        Test-RustToolchain 'stable' | Should -BeTrue
+    }
+    It 'counts the crates cargo started and names the latest' {
+        $s = Get-BuildProgress "warning: missing ``[lints]```n   Compiling serde v1.0.0`n   Compiling wm-common v0.0.0 (C:\x)`n    Finished"
+        $s.done | Should -Be 2
+        $s.crate | Should -Be 'wm-common'
+        (Get-BuildProgress '').done | Should -Be 0
+    }
+}
+
+Describe 'Animation build toolchains' {
+    BeforeAll {
+        # Stand-in for git: Invoke-AnimationBuild only looks at its exit code.
+        function git { $global:LASTEXITCODE = 0 }
+    }
+    BeforeEach {
+        $AnimSrc = Join-Path $TestDrive 'src'
+        $AnimDir = Join-Path $TestDrive 'anim'
+        $AnimBuildLog = Join-Path $TestDrive 'logs\glazewm-build.log'
+        New-Item -ItemType Directory -Force $AnimDir | Out-Null
+        Mock Get-Config { @{ animations = @{ source = @{ repo = 'r/g'; commit = 'd76641418f9642837b63817a8eeed7fbed4aadb5'; version = '3.10.1'; fallbackToolchain = 'nightly-2026-07-20' } } } }
+        Mock Test-BuildTools { @() }
+        Mock Install-AnimationFiles {}
+        $script:calls = [Collections.Generic.List[string]]::new()
+        Mock Invoke-BuildTool { $script:calls.Add("update $($arguments[2])"); $true }
+        Mock Invoke-CargoBuild { $script:calls.Add("cargo $toolchain"); $true }
+    }
+    It 'uses an installed nightly as it is (no ~100 MB update every build)' {
+        Mock Test-RustToolchain { $true }
+        Invoke-AnimationBuild
+        $script:calls -join ',' | Should -Be 'cargo nightly'
+    }
+    It 'installs a missing toolchain first' {
+        Mock Test-RustToolchain { $false }
+        Invoke-AnimationBuild
+        $script:calls -join ',' | Should -Be 'update nightly,cargo nightly'
+    }
+    It 'updates an installed nightly once when it can''t build, before the fallback' {
+        Mock Test-RustToolchain { $true }
+        $script:tries = 0
+        Mock Invoke-CargoBuild { $script:calls.Add("cargo $toolchain"); (++$script:tries) -gt 1 }
+        Invoke-AnimationBuild
+        $script:calls -join ',' | Should -Be 'cargo nightly,update nightly,cargo nightly'
+    }
+    It 'shows the end of the log and fails when no toolchain builds it' {
+        Mock Test-RustToolchain { $true }
+        Mock Invoke-CargoBuild { $script:calls.Add("cargo $toolchain"); $false }
+        Mock Write-Host {}
+        { Invoke-AnimationBuild } | Should -Throw '*glazewm-build.log*'
+        $script:calls -join ',' | Should -Be 'cargo nightly,update nightly,cargo nightly,cargo nightly-2026-07-20,update nightly-2026-07-20,cargo nightly-2026-07-20'
+        Should -Invoke Install-AnimationFiles -Times 0
     }
 }
 

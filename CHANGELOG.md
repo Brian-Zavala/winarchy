@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixed: the ready-made window-animation build failed to download ("the file contains a virus or potentially unwanted software") and was compiled instead, even right after Defender was told to leave it alone. The zip was unpacked into a temporary folder first, which the exclusion doesn't cover. Its files now go straight from the zip into the excluded paths.
+- Fixed: reinstalling with your settings kept, Defender removed the window-animation build before the install had set its exclusion again (uninstall takes it out). The install now starts the normal GlazeWM and asks at the end to turn animations back on, exclusion first.
+- Changed: building the window-animation GlazeWM shows one progress bar instead of screens of Rust output; the full output goes to `logs\glazewm-build.log` and its last lines are shown when the build fails. A Rust toolchain already installed is used as it is (updated only if it can't build), so nightly is no longer re-downloaded on every build.
+
 ## 0.1.55 — 2026-10-05
 
 - Fixed: apps that remember a full-screen size (Chrome, Explorer, Settings…) opened over the whole monitor, behind the top bar, instead of tiling. With the taskbar hidden they save that size, and GlazeWM took it for fullscreen. A new window with an ordinary resizable frame is now tiled; real fullscreen (borderless: videos, F11, game launchers) is left as it is. A maximized window that GlazeWM leaves untiled is restored and moved below the bar.
