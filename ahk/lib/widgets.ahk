@@ -37,6 +37,20 @@ HiddenWidget(title, mon) {
     return found
 }
 
+; This widget is being opened now. Zebar also closes and rebuilds every widget it has on any
+; monitor change (a game switching display mode), hidden spares included: a page that comes
+; up (or gets focus while hidden) without a fresh one of these closes itself instead of
+; showing (menu.js, panel.js). Otherwise each rebuilt menu popped up over the game and took
+; its focus, which minimized it, switched the mode back - and round it went.
+MarkOpenRequest(name) {
+    ms := DateDiff(A_NowUTC, "19700101000000", "Seconds") * 1000 + A_MSec
+    try {
+        f := FileOpen(Env("pack") "\" name "-open.json", "w", "UTF-8-RAW")
+        f.Write('{"at":' ms '}')
+        f.Close()
+    }
+}
+
 ; Show the hidden spare on monitor `mon` (the page starts itself over when it gets focus).
 ShowHiddenWidget(title, mon) {
     if !(hwnd := HiddenWidget(title, mon))
@@ -73,6 +87,7 @@ OpenMenuWarm(route, &mon := 0) {
     }
     PerMonitorDpi()
     mon := WorkingMonitor()
+    MarkOpenRequest("menu")              ; also covers menu.ahk's new widget when this fails
     f := FileOpen(Env("pack") "\route.json", "w", "UTF-8-RAW")
     f.Write('{"route":"' route '"}')
     f.Close()

@@ -141,6 +141,25 @@ Describe 'Zebar pack' {
             $menuAhk | Should -Match "OpenPanel\(`"$name`", `"$($panels[$name])`"" -Because "menu.ahk shows a hidden $name"
         }
     }
+    # Zebar closes and rebuilds every widget on a monitor change (a game switching display
+    # mode): a rebuilt menu or panel that took focus knocked the game out, round and round.
+    It 'never lets a widget take focus as Zebar creates it' {
+        $cfg = @{ barHeight = 26 }
+        $z = Get-ZpackJson @{ ahk = 'C:\ahk.exe' } | ConvertFrom-Json
+        foreach ($w in $z.widgets) { $w.focused | Should -BeFalse -Because $w.name }
+    }
+    It 'opens a menu or panel only when winarchy just asked for it' {
+        $widgets = Get-Content -Raw "$root\ahk\lib\widgets.ahk"
+        $widgets | Should -Match '(?s)OpenMenuWarm\(.*MarkOpenRequest\("menu"\).*ShowHiddenWidget'
+        $widgets | Should -Match '-open\.json'
+        $menuAhk | Should -Match '(?s)OpenPanel\(name.*MarkOpenRequest\(name\).*ShowHiddenWidget'
+        $menuJs = Get-Content -Raw "$root\zebar\omarchy\menu.js"
+        $menuJs | Should -Match "get\('menu-open\.json'\)"
+        $menuJs | Should -Match '(?m)^if \(await asked\(\)\) await open\(\);'
+        $panelJs = Get-Content -Raw "$root\zebar\omarchy\panel.js"
+        $panelJs | Should -Match 'getJson\(`\$\{name\}-open\.json`\)'
+        $panelJs | Should -Match 'asked\(\)\.then\(ok => \(ok \? start\(false\) : quit\(\)\)\)'
+    }
 }
 
 Describe 'Bar icons' {

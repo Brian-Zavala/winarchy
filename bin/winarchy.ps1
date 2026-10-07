@@ -54,8 +54,10 @@
   winarchy game-setup [remove]         the admin game helper (the install sets it up): Super+W / the bar
                                           close, minimize and restore games that run as administrator
                                           (one admin prompt: a small helper that runs as admin)
-  winarchy game-add <name>             add a game process name to config.json (Super+Ctrl+G does
-                                          this for the focused window, then applies it)
+  winarchy game-add <name> [-NoRestart]
+                                          add a game process name to config.json (Super+Ctrl+G does
+                                          this for the focused window, then applies it);
+                                          -NoRestart: leave GlazeWM alone until the next apply
   winarchy weather | update-check      refresh the bar's weather / update indicator
   winarchy bar [on|off|toggle]         the top bar (Super+Shift+Space); off stays off
   winarchy taskbar [on|off|toggle|status]
@@ -167,7 +169,7 @@ switch ($Verb) {
     }
     'game-add' {
         if (-not $Arg) { throw 'usage: winarchy game-add <process name>' }
-        Use-Lock { Add-ConfigGame $Arg; Invoke-Apply -MonitorsOnly }
+        Use-Lock { Register-Game $Arg -NoGlaze:$NoRestart }
     }
     'extras' { Install-Extras; Use-Lock { Invoke-Apply } }
     # Install whatever winarchy needs and is missing (update and doctor -Fix run this).

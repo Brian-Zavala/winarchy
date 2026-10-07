@@ -67,6 +67,39 @@ Describe 'Add-ConfigGame (Super+Ctrl+G / winarchy game-add)' {
     }
 }
 
+Describe 'Register-Game (winarchy game-add)' {
+    BeforeAll {
+        Mock Log {}
+        Mock Get-Paths { @{} }
+        Mock Write-AhkIni {}
+        Mock Invoke-Apply {}
+    }
+    BeforeEach {
+        $ConfigFile = Join-Path $TestDrive ([guid]::NewGuid())
+        $Generated = Join-Path $TestDrive ([guid]::NewGuid())
+    }
+    It 'rewrites winarchy.ini at once: the admin helper only closes games listed there' {
+        Register-Game 'CollegeFB27.exe' -NoGlaze
+        (Read-Json $ConfigFile -AsHashtable).games | Should -Be @('CollegeFB27')
+        Should -Invoke Write-AhkIni -Times 1
+        Should -Invoke Invoke-Apply -Times 0
+    }
+    It 'reloads GlazeWM''s rules without -NoGlaze' {
+        Register-Game 'Game'
+        Should -Invoke Invoke-Apply -Times 1 -ParameterFilter { $MonitorsOnly }
+    }
+}
+
+Describe 'Games found by winarchy.ahk' {
+    BeforeAll { $wm = Get-Content -Raw "$root\ahk\winarchy.ahk" }
+    It 'clears hidden menus and panels, and lists admin games for the helper, once found' {
+        $wm | Should -Match '(?s)IsGame\(hwnd\) \{.*SetTimer CloseHiddenWidgets, -10.*OmarchyCmd\("game-add", name, "-NoRestart"\).*\n\}'
+    }
+    It 'says so when the admin helper refuses to close a game' {
+        $wm | Should -Match '(?s)CloseGame\(.*SendMessage\(0x5556'
+    }
+}
+
 Describe 'config.json with a JSON error' {
     BeforeAll { Mock Log {}; Mock Write-Warning {} }
     BeforeEach {

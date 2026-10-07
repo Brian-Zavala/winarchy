@@ -147,7 +147,24 @@ async function open(again = false) {
   await focused();
   requestAnimationFrame(() => document.body.classList.add('shown'));
 }
-window.addEventListener('focus', () => { if (idle) open(true); else if (closing) wakeLater = true; });
+// Opened on purpose: menu.ahk / winarchy.ahk stamp menu-open.json just before showing or
+// starting this window (MarkOpenRequest). Zebar also closes and rebuilds every widget on any
+// monitor change - a game switching display mode - and a rebuilt menu that opened itself
+// took the game's focus, so the game minimized, the mode switched back, and round it went.
+const asked = async () => {
+  const r = await get('menu-open.json');
+  return !!r && Math.abs(Date.now() - r.at) < 15e3;
+};
+let waking = false;
+window.addEventListener('focus', async () => {
+  if (closing) { wakeLater = true; return; }
+  if (!idle || waking) return;
+  waking = true;
+  try {
+    if (await asked()) { if (idle) open(true); }
+    else Promise.resolve(win().hide()).catch(() => {});   // focus nobody asked for: stay hidden
+  } finally { waking = false; }
+});
 // menu.ahk's toggle (and anything else closing the window) fades and hides it instead. A
 // close while hidden is meant (menu.ahk: this spare no longer fits its monitor): let it
 // through by dropping this handler, as Tauri then closes the window itself.
@@ -961,4 +978,6 @@ $('search').addEventListener('input', () => {
 });
 $('search').addEventListener('blur', () => setTimeout(() => !closing && $('search').focus(), 0));
 
-await open();
+// A copy Zebar rebuilt by itself (see asked) closes for real while still blank.
+if (await asked()) await open();
+else { idle = true; quit(); }

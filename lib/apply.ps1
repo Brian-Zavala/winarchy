@@ -162,6 +162,16 @@ function Add-ConfigGame([string]$name) {
     Log "games: added '$name' to config.json"
 }
 
+# `winarchy game-add`: the game goes into config.json and winarchy.ini at once - the admin
+# game helper reads the ini's games line (every 60 s), and refuses to close a game it
+# doesn't find there. -NoGlaze (winarchy.ahk, with the game running): leave GlazeWM's
+# reload and workspace repair to the next apply, rather than doing them over the game.
+function Register-Game([string]$name, [switch]$NoGlaze) {
+    Add-ConfigGame $name
+    Write-AhkIni (Get-Paths) (Get-Config)
+    if (-not $NoGlaze) { Invoke-Apply -MonitorsOnly }
+}
+
 function ConvertTo-GamesYaml([string[]]$names) {
     if (-not $names) { return '      # (none yet)' }
     ($names | ForEach-Object { "      - window_process: { equals: '$($_ -replace "'", "''")' }" }) -join "`n"
@@ -291,6 +301,12 @@ function Get-ZpackJson($p) {
     # regex is Rust's, which rejects .NET's escaped spaces, so only the metacharacters are.
     $menuPath = (Join-Path $Code 'ahk\menu.ahk') -replace '([\\.+*?()|\[\]{}^$])', '\$1'
     $menuPrivilege = [ordered]@{ program = $ahk; argsRegex = "(?i).*$menuPath.*" }
+    # focused is false for every widget, the menu and panels too: Zebar closes and rebuilds
+    # every widget it has on any monitor change (a game switching display mode), hidden
+    # spares included, and a focused one took the foreground off the game each time - which
+    # minimized it, switched the mode back, and went round again. menu.ahk / widgets.ahk
+    # activate a widget they open themselves, and a rebuilt page that nobody asked to open
+    # closes itself (<name>-open.json, see MarkOpenRequest).
     $widget = {
         param($name, $html, $zOrder, $focused, $transparent, $include, $privileges, $presets)
         [ordered]@{
@@ -321,7 +337,7 @@ function Get-ZpackJson($p) {
             monitorSelection = [ordered]@{ type = 'index'; match = $i }
         }
     }
-    $menu = & $widget 'menu' './menu.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf', '*.txt', 'thumbs/**/*') @($menuPrivilege) @($menuPresets)
+    $menu = & $widget 'menu' './menu.html' 'top_most' $false $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf', '*.txt', 'thumbs/**/*') @($menuPrivilege) @($menuPresets)
     # The clock's calendar: the same per-monitor presets (c0..c7), transparent, and a click
     # outside the panel closes it. Every panel reads status.json (zebar/omarchy/style.js: a
     # theme change while it was hidden), so *.json is in each one's files.
@@ -331,7 +347,7 @@ function Get-ZpackJson($p) {
             monitorSelection = [ordered]@{ type = 'index'; match = $i }
         }
     }
-    $calendar = & $widget 'calendar' './calendar.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @($calPresets)
+    $calendar = & $widget 'calendar' './calendar.html' 'top_most' $false $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @($calPresets)
     # The bar's agent usage panel: the calendar's per-monitor presets (u0..u7). Unlike the
     # calendar it reads data files (agents.json, usage-anchor.json), so *.json is included.
     $usagePresets = foreach ($i in 0..7) {
@@ -340,7 +356,7 @@ function Get-ZpackJson($p) {
             monitorSelection = [ordered]@{ type = 'index'; match = $i }
         }
     }
-    $usage = & $widget 'usage' './usage.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @($usagePresets)
+    $usage = & $widget 'usage' './usage.html' 'top_most' $false $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @($usagePresets)
     # The bar's Display and Tailscale panels (Quattro's omarchy.monitor / omarchy.tailscale):
     # the same per-monitor presets, d0..d7 and t0..t7. Both read state files (display.json,
     # tailscale*.json) that menu.ahk / winarchy.ahk write.
@@ -350,17 +366,17 @@ function Get-ZpackJson($p) {
                 monitorSelection = [ordered]@{ type = 'index'; match = $i }
             }
         } }
-    $display = & $widget 'display' './display.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'd')
-    $tailscale = & $widget 'tailscale' './tailscale.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.txt', '*.ttf') @($menuPrivilege) @(& $panelPresets 't')
+    $display = & $widget 'display' './display.html' 'top_most' $false $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'd')
+    $tailscale = & $widget 'tailscale' './tailscale.html' 'top_most' $false $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.txt', '*.ttf') @($menuPrivilege) @(& $panelPresets 't')
     # The world clock (Omarchy's omarchy.elsewhen): w0..w7. It keeps its cities in localStorage.
-    $worldclock = & $widget 'worldclock' './worldclock.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'w')
+    $worldclock = & $widget 'worldclock' './worldclock.html' 'top_most' $false $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'w')
     # The bar's Network, Audio and Bluetooth panels (Quattro's omarchy.network / audio /
     # bluetooth): n0..n7, a0..a7, b0..b7. They read state files that winarchy writes.
-    $network = & $widget 'network' './network.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'n')
-    $audio = & $widget 'audio' './audio.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'a')
-    $bluetooth = & $widget 'bluetooth' './bluetooth.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'b')
+    $network = & $widget 'network' './network.html' 'top_most' $false $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'n')
+    $audio = & $widget 'audio' './audio.html' 'top_most' $false $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'a')
+    $bluetooth = & $widget 'bluetooth' './bluetooth.html' 'top_most' $false $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'b')
     # The bar's battery icon on a laptop (Quattro's omarchy.power): p0..p7, reads power.json.
-    $power = & $widget 'power' './power.html' 'top_most' $true $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'p')
+    $power = & $widget 'power' './power.html' 'top_most' $false $true @('*.html', '*.css', '*.mjs', '*.js', '*.json', '*.ttf') @($menuPrivilege) @(& $panelPresets 'p')
     [ordered]@{
         '$schema' = 'https://github.com/glzr-io/zebar/raw/v3.0.0/resources/zpack-schema.json'
         name = 'omarchy'; version = '3.0.0'; description = 'Omarchy style top bar, menu and pickers for GlazeWM (winarchy)'

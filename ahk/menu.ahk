@@ -531,6 +531,7 @@ OpenPanel(name, prefix, prepare := 0, keepAnchor := false, pick := 0) {
         PostMessage 0x10, 0, 0, , hwnd   ; the page fades and hides it for next time
         return
     }
+    MarkOpenRequest(name)                ; a page Zebar rebuilt on its own stays closed
     PerMonitorDpi()
     n := pick ? pick() : MonitorUnderMouse()      ; the calendar: the monitor you work on
     if !keepAnchor {

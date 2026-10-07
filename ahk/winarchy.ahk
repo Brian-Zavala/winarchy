@@ -1659,6 +1659,19 @@ IsGame(hwnd) {
         . (admin ? "; runs as administrator" (GameHelper() ? "" : ": run 'winarchy game-setup' once so Super+W and the bar can close it") : ""))
     if info
         try Run('"' GlazeCli '" command --id ' info.id ' ignore', , "Hide")
+    ; Zebar closes and rebuilds every widget it has on each monitor change, and a game that
+    ; switches display mode makes one every time it gains or loses focus: no hidden menu or
+    ; panel left for it to rebuild over the game (the next open starts a fresh one).
+    SetTimer CloseHiddenWidgets, -10
+    ; The admin helper closes only games on its own list (Game Bar's + config "games"): one
+    ; found here by its folder or by Playnite goes on that list, or the bar and Super+W
+    ; could never close it. -NoRestart: GlazeWM picks the rule up at the next apply.
+    static learned := Map()
+    if admin && !GameNames().Has(name) && !learned.Has(name) {
+        learned[name] := true
+        OmarchyCmd("game-add", name, "-NoRestart")
+        WmLog("game: added " name " to your games (so the admin helper can close it)")
+    }
     WriteIndicatorsSoon(10)                     ; the game icon in the bar
     return true
 }
@@ -1992,7 +2005,16 @@ CloseGame(hwnd := 0) {
             Osd(title " runs as administrator: run 'winarchy game-setup' once so Winarchy can close it", 6000)
             return
         }
-        PostMessage 0x5556, force ? 2 : 1, hwnd, , helper
+        ; Sent, not posted: the helper answers 0 for a game it doesn't know, which would
+        ; otherwise fail without a word (IsGame adds such games; it re-reads them each minute).
+        ok := 0
+        try ok := SendMessage(0x5556, force ? 2 : 1, hwnd, , helper, , , , 2000)
+        if !ok {
+            WmLog("game close: " title " - the admin helper refused (not on its games list yet)")
+            Osd(title " isn't on the admin helper's list yet: try again in a minute, or End task in Task Manager (Ctrl+Shift+Esc)", 6000)
+            asked := 0, askedPid := 0
+            return
+        }
     } else if force {
         ProcessClose pid
     } else {

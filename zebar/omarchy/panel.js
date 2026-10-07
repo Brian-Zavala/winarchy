@@ -81,9 +81,23 @@ export function panel({ name, open, onHidden, anchor = true, stayOnBlur = () => 
     Promise.resolve(win().close()).catch(() => {});
   }
 
-  const wake = () => {
-    if (state === 'hidden') start(true);
-    else if (state === 'closing') wakeLater = true;
+  // Opened on purpose: menu.ahk stamps <name>-open.json just before showing or starting this
+  // window (MarkOpenRequest). Zebar also closes and rebuilds every widget on any monitor
+  // change - a game switching display mode - and a rebuilt panel that opened itself took
+  // the game's focus, so the game minimized, the mode switched back, and round it went.
+  const asked = async () => {
+    const r = await getJson(`${name}-open.json`);
+    return !!r && Math.abs(Date.now() - r.at) < 15e3;
+  };
+  let waking = false;
+  const wake = async () => {
+    if (state === 'closing') { wakeLater = true; return; }
+    if (state !== 'hidden' || waking) return;
+    waking = true;
+    try {
+      if (await asked()) { if (state === 'hidden') start(true); }
+      else Promise.resolve(win().hide()).catch(() => {});   // nobody asked: stay hidden
+    } finally { waking = false; }
   };
   addEventListener('focus', wake);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
@@ -95,7 +109,8 @@ export function panel({ name, open, onHidden, anchor = true, stayOnBlur = () => 
     if (!document.getElementById(root).contains(e.target)) close();
   });
 
-  start(false);
+  // A copy Zebar rebuilt by itself (see asked) closes for real while still blank.
+  asked().then(ok => (ok ? start(false) : quit()));
   return {
     close,
     get open() { return state === 'open' || state === 'opening'; },
