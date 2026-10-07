@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.57 — 2026-10-07
+
 - Fixed: the ready-made window-animation build failed to download ("the file contains a virus or potentially unwanted software") and was compiled instead, even right after Defender was told to leave it alone. The zip was unpacked into a temporary folder first, which the exclusion doesn't cover. Its files now go straight from the zip into the excluded paths.
 - Fixed: reinstalling with your settings kept, Defender removed the window-animation build before the install had set its exclusion again (uninstall takes it out). The install now starts the normal GlazeWM and asks at the end to turn animations back on, exclusion first.
 - Changed: building the window-animation GlazeWM shows one progress bar instead of screens of Rust output; the full output goes to `logs\glazewm-build.log` and its last lines are shown when the build fails. A Rust toolchain already installed is used as it is (updated only if it can't build), so nightly is no longer re-downloaded on every build.
