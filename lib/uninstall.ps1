@@ -207,6 +207,7 @@ function Invoke-Uninstall([switch]$KeepApps, [switch]$DryRun, [switch]$Purge, [s
             'json' { "$([IO.Path]::GetFileName($e.path)): $($e.pointer)" }
             'jsonItem' { "$([IO.Path]::GetFileName($e.path)): remove $($e.array) '$($e.name)'" }
             'envpath' { "PATH: remove $($e.dir)" }
+            'snap' { 'Windows Snap' }
             default { $e.kind }
         }
         & $step "Restore $what" { Restore-JournalEntry $e $dir } $it

@@ -733,6 +733,23 @@ function Set-MinimizeAnimationPolicy($cfg) {
     Log 'minimize/maximize animation turned off (blockMinimize)'
 }
 
+# disableSnap (default on): Windows Snap off. Dragging a window to the top edge otherwise
+# opens Windows' snap layouts bar over the status bar, and a snapped window fights the
+# tiling; GlazeWM owns window placement. What the PC had is kept in the journal; turning
+# it off here, or uninstalling, puts that back.
+function Set-SnapPolicy($cfg) {
+    $cur = Get-SnapState
+    $e = Get-JournalEntry 'snap'
+    if ($cfg.disableSnap -eq $false) {
+        if ($e -and (Test-SnapOff $cur) -and -not (Test-SnapOff $e)) { Set-SnapState $e; Log 'Windows Snap put back (disableSnap off)' }
+        return
+    }
+    if (Test-SnapOff $cur) { return }
+    if (-not $e) { [void](Add-JournalEntry @{ kind = 'snap'; key = 'snap'; arrange = $cur.arrange; bar = $cur.bar; flyout = $cur.flyout }) }
+    Set-SnapState @{ arrange = '0'; bar = 0; flyout = 0 }
+    Log 'Windows Snap turned off (disableSnap)'
+}
+
 # Show or hide the desktop icons right now, the way right-click > View > Show desktop icons
 # does: that menu item is WM_COMMAND 0x7402 to the desktop's SHELLDLL_DefView, and it only
 # toggles, so look at whether the icon list is visible first.
@@ -935,6 +952,7 @@ function Invoke-Apply([switch]$MonitorsOnly, [switch]$NoRestart, [switch]$Respli
     try { Set-DisallowShaking $cfg } catch { Log "Aero Shake setting FAILED: $($_.Exception.Message)" }
     try { Set-MinimizeAnimationPolicy $cfg } catch { Log "minimize animation setting FAILED: $($_.Exception.Message)" }
     try { Set-DesktopIconsPolicy $cfg } catch { Log "desktop icons setting FAILED: $($_.Exception.Message)" }
+    try { Set-SnapPolicy $cfg } catch { Log "Windows Snap setting FAILED: $($_.Exception.Message)" }
     if (-not (Test-Path (Join-Path $Pack 'font.css'))) { Write-FontCss }
     try { [void](Update-FontList) } catch { Log "font list FAILED: $($_.Exception.Message)" }
     # Terminal apps' Start entries first, so the Apps list below has them.

@@ -36,6 +36,14 @@ Nothing minimizes by default, since the taskbar is hidden and a minimized window
 { "minimizeAllowed": ["Spotify"] }
 ```
 
+### Keep Windows Snap
+
+Windows' own snapping (the layouts bar when you drag a window to the top edge, and the flyout on the maximize button) is off by default, since GlazeWM places windows. To have it back:
+
+```json
+{ "disableSnap": false }
+```
+
 ### Turn off auto-tiling
 
 New windows spiral into Hyprland's dwindle splits by default. `winarchy autotile off` puts them in one row, the way GlazeWM does on its own.

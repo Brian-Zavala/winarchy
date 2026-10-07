@@ -42,6 +42,7 @@
   "games": [],
   "gameDirs": [],
   "blockMinimize": true,
+  "disableSnap": true,
   "minimizeAllowed": [],
   "gameFocusGuard": true,
   "gameHelper": true,

@@ -405,6 +405,32 @@ function Set-MinimizeAnimation([int]$on) {
     } finally { [Runtime.InteropServices.Marshal]::FreeHGlobal($buf) }
 }
 
+# Windows Snap: "Snap windows" (Desktop\WindowArrangementActive, a string), the snap
+# layouts bar shown when a window is dragged to the top edge (EnableSnapBar) and the
+# layouts flyout on the maximize button (EnableSnapAssistFlyout). $null = not set (on).
+$SnapDesktopKey = 'HKCU:\Control Panel\Desktop'
+$SnapAdvancedKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+function Get-SnapState {
+    $d = Get-ItemProperty $SnapDesktopKey -ErrorAction SilentlyContinue
+    $a = Get-ItemProperty $SnapAdvancedKey -ErrorAction SilentlyContinue
+    @{ arrange = $d.WindowArrangementActive; bar = $a.EnableSnapBar; flyout = $a.EnableSnapAssistFlyout }
+}
+
+function Set-SnapState($s) {
+    foreach ($v in @(@($SnapAdvancedKey, 'EnableSnapBar', $s.bar), @($SnapAdvancedKey, 'EnableSnapAssistFlyout', $s.flyout))) {
+        if ($null -eq $v[2]) { Remove-ItemProperty $v[0] -Name $v[1] -ErrorAction SilentlyContinue }
+        else { Set-ItemProperty $v[0] -Name $v[1] -Value ([int]$v[2]) -Type DWord }
+    }
+    if ($null -eq $s.arrange) { Remove-ItemProperty $SnapDesktopKey -Name WindowArrangementActive -ErrorAction SilentlyContinue }
+    else { Set-ItemProperty $SnapDesktopKey -Name WindowArrangementActive -Value "$($s.arrange)" }
+    # SPI_SETWINARRANGING, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE: takes effect at once,
+    # no sign-out or Explorer restart.
+    Initialize-Native
+    [void][Winarchy.Native]::SystemParametersInfoInt(0x83, [uint32]("$($s.arrange)" -ne '0'), [IntPtr]::Zero, 3)
+}
+
+function Test-SnapOff($s) { "$($s.arrange)" -eq '0' -and "$($s.bar)" -eq '0' -and "$($s.flyout)" -eq '0' }
+
 # winarchy.ahk's blockMinimize takes WS_MINIMIZEBOX off windows and tags each one with the
 # property "winarchy.nomin"; its OnExit puts the buttons back. A force-stopped or crashed
 # daemon never runs OnExit, so these find and undo the leftovers from here.

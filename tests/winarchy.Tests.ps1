@@ -356,6 +356,40 @@ Describe 'Minimize animation (blockMinimize)' {
     }
 }
 
+Describe 'Windows Snap (disableSnap)' {
+    BeforeEach {
+        $script:JournalDir = Join-Path $TestDrive ([guid]::NewGuid())
+        New-Item -ItemType Directory $script:JournalDir | Out-Null
+        Set-Content (Join-Path $script:JournalDir 'journal.json') '{"entries":[]}'
+        $script:JournalCache = $null
+        $script:snap = @{ arrange = '1'; bar = $null; flyout = $null }
+        $script:snapSets = 0
+        Mock Get-SnapState { $script:snap.Clone() }
+        Mock Set-SnapState { $script:snap = @{ arrange = $s.arrange; bar = $s.bar; flyout = $s.flyout }; $script:snapSets++ }
+        Mock Log {}
+    }
+    It 'turns it off, and uninstall puts the original back' {
+        Set-SnapPolicy @{}
+        Test-SnapOff $script:snap | Should -BeTrue
+        foreach ($e in (Read-Journal).entries) { Restore-JournalEntry $e $script:JournalDir }
+        $script:snap.arrange | Should -Be '1'
+        $script:snap.bar | Should -BeNullOrEmpty
+        $script:snap.flyout | Should -BeNullOrEmpty
+    }
+    It 'puts the original back when disableSnap is turned off' {
+        Set-SnapPolicy @{ disableSnap = $true }
+        Set-SnapPolicy @{ disableSnap = $false }
+        $script:snap.arrange | Should -Be '1'
+    }
+    It 'leaves Snap that was already off alone, and records nothing' {
+        $script:snap = @{ arrange = '0'; bar = 0; flyout = 0 }
+        Set-SnapPolicy @{ disableSnap = $true }
+        Set-SnapPolicy @{ disableSnap = $false }
+        $script:snapSets | Should -Be 0
+        (Read-Journal).entries.Count | Should -Be 0
+    }
+}
+
 Describe 'Bar restart' {
     # Zebar attaches to its parent's console: from `winarchy update` it would log into
     # that terminal and die with it. It must be started through (console-less) AutoHotkey.
