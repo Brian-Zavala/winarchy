@@ -75,7 +75,7 @@
   "screenshotAutoCopy": true,
   "syncAtLogin": true,
   "omarchyRepo": "omacom/omarchy",
-  "omarchyTag": "v4.0.4",
+  "omarchyTag": "v4.0.6",
   "zebarClientVersion": "3.0.3",
   "ttfxUrl": null
 }
